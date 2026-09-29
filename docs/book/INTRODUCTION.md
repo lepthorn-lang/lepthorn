@@ -192,6 +192,8 @@ lepthornc build --release --target x86_64-linux-musl
 
 ## Next
 
+- [../USAGE.md](../USAGE.md) lists every command and option.
+- [../PROJECTS.md](../PROJECTS.md) explains projects, tests and libraries.
 - [../SPEC.md](../SPEC.md) describes the whole language.
 - [../DATATYPES.md](../DATATYPES.md) describes values and units.
 - The `examples/` directory has a program for each feature.

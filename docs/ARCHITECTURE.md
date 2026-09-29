@@ -92,37 +92,10 @@ and compiled programs give the same output.
 
 ## Building the compiler
 
-The compiler is built by `bin/lepthornc`. There is no seed file and no
-separate bootstrap compiler.
+The compiler is built by `bin/lepthornc`. How to build, check and
+install it, and how it finds Clang and the libc, is in
+[BUILDING.md](BUILDING.md).
 
-- `bin/lepthornc build --release` writes `build/release/bin/lepthornc`.
-- When a compiler would write over its own file, it writes
-  `build/<profile>/rebuild/bin/lepthornc` instead. So after
-  `build/release/bin/lepthornc build --release`, `cmp` can compare the
-  two. They must be the same, byte for byte.
-- `lepthornc promote --release` copies the release build to
-  `bin/lepthornc`, but only if it rebuilds itself exactly. If it was
-  built by an older compiler, promote rebuilds it with itself first and
-  promotes that rebuild once it reproduces itself.
-- The IR always says `source_filename = "lepthorn"`, so the program does
-  not depend on the directory it was built in.
-- `--target <triple>` writes to `build/<profile>/<triple>/`. The target
-  comes from the manifest's `[Target_Platform]` sections, or one of the
-  two built-in ones. The system's own libc is found from
-  `clang -print-target-triple`. For the other libc, the compiler looks
-  for its files in `LEPTHORN_SYSROOT`, or next to clang
-  (`<clang's dir>/../<triple>`), and checks for `crt1.o`.
-- The profile (`--release`, `--profile <name>`, default `debug`) sets the
-  optimisation level: a `[Profile]` section, or the built-in debug
-  (`-O0`) and release (`-O2`).
-- Clang is `--cc`, else `LEPTHORN_CLANG`, else `LEPTHORN_CC`, else
-  `clang` on `PATH`. Programs are linked with `-lm` plus the target's
-  `libraries`.
-- The tests `compiler_self_build` and `rebuild_fixed_point` do the same
-  rebuild checks inside `lepthornc test`. They find the compiler under
-  test through the `LEPTHORNC` environment variable.
-
-Adding a built-in function that the compiler's own source uses takes
-two builds. The running compiler does not know the new function yet, so
-first build a copy of the source where those uses are replaced, then
-use that compiler to build the real source.
+The generated IR always says `source_filename = "lepthorn"`, so a
+compiled program does not depend on the directory it was built in.
+This is what lets the compiler rebuild itself byte for byte.
