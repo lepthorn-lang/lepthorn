@@ -1,0 +1,6 @@
+stop_at_top eval: 1 check: 1
+LEC3001: `stop` used outside a loop
+next_in_function eval: 1 check: 1
+LEC3001: `next` used outside a loop
+open_comment eval: 1 check: 1
+LEC1001: unterminated comment

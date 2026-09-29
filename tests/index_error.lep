@@ -1,0 +1,5 @@
+(* a runtime error prints the same message under eval and compiled *)
+ensure a = [1, 2, 3]
+show "before"
+show a[5]
+show "not reached"

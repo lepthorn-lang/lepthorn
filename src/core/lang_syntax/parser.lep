@@ -699,6 +699,12 @@ make parse_statement(tok_buf, cur, arena)
     suppose expr_idx = 0
     suppose body_idx = none_idx()
     suppose alt_idx = none_idx()
+    (* the lexer already reported it; an empty message keeps it from
+       being reported again as LEC2001 *)
+    when kind == "LEX_ERROR"
+        cur_take(tok_buf, cur)
+        done(arena_add(arena, mk_node("PARSE_ERROR", 0, false, "", 0, 0)))
+    done()
     when kind == "ENSURE"
         cur_take(tok_buf, cur)
         name_tok = cur_take(tok_buf, cur)
@@ -1201,19 +1207,8 @@ done()
    also recognizes `make` (top-level only, registers into funcs
    directly rather than becoming an executable statement). *)
 
-(* shape: declaration only. Construction (`Name(field = val, ...)`) is
-   NOT implemented - real Lepthorn's grammar tells `Name(x = 1)` (a
-   shape) apart from `add(x, y)` (a call) using lookahead a hand-
-   written recursive-descent parser can't get from a plain Queue
-   (front-peek-and-consume only, no pushback). Fixing that for real
-   means replacing the token Queue with a RingBuffer + a mutable
-   `Cursor` shape (indexed peek, cursor advanced by field mutation -
-   the same shared-mutable-state trick Queue already relies on) - a
-   real, identified fix, not attempted here; it touches every parsing
-   function that reads `tokens`. `mk_instance_2f` below is a bootstrap-
-   internal test helper standing in for real construction syntax, nothing
-   more. Fields are capped at 4, Number/Boolean only, single-level
-   `IDENT.field` access (no `a.b.c` chains) - v1 boundaries, not bugs. *)
+(* shape Name, then `field: Type` lines, then done(). The type name is
+   read but not checked. *)
 
 make parse_shape(tok_buf, cur)
     cur_take(tok_buf, cur)
@@ -1224,7 +1219,7 @@ make parse_shape(tok_buf, cur)
     suppose keep_going = true
     repeat
         when keep_going
-            when token_kind(tok_buf, cur) == "DONE_EMPTY"
+            when token_kind(tok_buf, cur) == "DONE_EMPTY" or token_kind(tok_buf, cur) == "EOF" or token_kind(tok_buf, cur) == "LEX_ERROR"
                 keep_going = false
             otherwise when token_kind(tok_buf, cur) == "NEWLINE"
                 cur_take(tok_buf, cur)
@@ -1247,14 +1242,18 @@ make parse_shape(tok_buf, cur)
     done(ShapeDef(name = name_tok.value, field_names = names, field_count = fcount))
 done()
 
-(* bootstrap-internal only, see the note above - not real construction
-   syntax. Builds a 2-field instance (Number or Boolean each) and
-   returns the arena index of its first FIELD node. *)
-
 make parse_program(tok_buf, cur, arena, funcs, shapes)
     suppose first = none_idx()
     suppose prev = none_idx()
     suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    (* a lexer error is always the last token; the lexer already printed
+       it, so the node's empty message only marks the program as failed *)
+    when ring::size(tok_buf) > 0
+        ensure last_tok = ring::peek(tok_buf, ring::size(tok_buf) - 1)
+        when last_tok.kind == "LEX_ERROR"
+            arena_add(arena, mk_node("PARSE_ERROR", 0, false, "", 0, 0))
+        done()
+    done()
     repeat
         when cur_is_empty(tok_buf, cur)
             stop

@@ -48,7 +48,7 @@ COMMENT     = '(*' { any text or COMMENT } '*)'
 ```
 
 Comments nest: `(* a (* b *) c *)` is one comment. A comment that is
-never closed gives `LEC1001`.
+never closed gives `LEC1001`, and the program does not run.
 
 `//` is not a comment in Lepthorn. The lexer prints `LEC1002`, skips to
 the end of the line, and goes on.

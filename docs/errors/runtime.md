@@ -62,9 +62,6 @@ show a[5]
 lepthorn: runtime error: LEC8013: index 5 is out of bounds for an array of length 3
 ```
 
-Under `lepthornc eval` the message has an extra `LEC8028: ` before
-`LEC8013`. This difference is a known bug.
-
 ### LEC8014: collection is full
 
 `queue::enqueue` on a full Queue, or `stack::push` on a full Stack.
@@ -119,10 +116,10 @@ LEC8025: runtime error: dimension mismatch in +
 
 A number literal with a unit that is not in the unit table. The
 compiler reports this before running (`LEC7001`); `lepthornc eval`
-stops with this (the extra `LEC8028: ` is a known bug):
+stops with:
 
 ```text
-lepthorn: runtime error: LEC8028: LEC8026: unknown unit suffix 'furlong'
+lepthorn: runtime error: LEC8026: unknown unit suffix 'furlong'
 ```
 
 When `take` reads an unknown unit, the program stops with
@@ -148,6 +145,10 @@ sys::fail("sensor not found")
 ```text
 lepthorn: runtime error: LEC8028: sensor not found
 ```
+
+To stop with your own message and no code, use `sys::error(message)`:
+it prints `lepthorn: runtime error: message`, like the errors in the
+table below.
 
 ## Errors without a code
 

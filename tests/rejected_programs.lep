@@ -1,0 +1,28 @@
+(* programs that must be rejected before anything runs, by eval and
+   by check alike *)
+ensure lc = sys::getenv("LEPTHORNC")
+when lc == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+sys::mkdir("build/test/rejected")
+ensure nl = text::from_code(10)
+
+make try(lc, name, source)
+    ensure q = text::from_code(34)
+    ensure path = "build/test/rejected/" + name + ".lep"
+    ensure log = "build/test/rejected/" + name + ".txt"
+    ensure h = file::open(path, "w")
+    file::write(h, source)
+    file::close(h)
+    ensure eval_status = sys::run(q + lc + q + " eval " + path + " > " + log + " 2>&1")
+    ensure check_status = sys::run(q + lc + q + " check " + path + " > " + log + ".check 2>&1")
+    ensure lh = file::open(log, "r")
+    ensure out = file::load(lh, sys::file_size(log))
+    file::close(lh)
+    show name "eval:" eval_status "check:" check_status
+    show text::slice(out, 0, text::length(out) - 1)
+done()
+
+try(lc, "stop_at_top", "show 1" + nl + "stop" + nl)
+try(lc, "next_in_function", "make f()" + nl + "    next" + nl + "done()" + nl + "f()" + nl)
+try(lc, "open_comment", "show 1" + nl + "(* never closed" + nl + "show 2" + nl)

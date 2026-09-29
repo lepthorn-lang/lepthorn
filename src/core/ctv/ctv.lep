@@ -297,7 +297,7 @@ done()
    `make` function, or inside `atomic`) never carries this - matches
    the design's own "sequential use: allowed" rule exactly. *)
 
-make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomic)
+make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomic, in_loop)
     suppose idx = start
     repeat
         when idx == none_idx()
@@ -335,45 +335,45 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
         otherwise when node.kind == "SHARED_SUPPOSE_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "DECL_BLOCK_STMT"
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
         otherwise when node.kind == "WHEN_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
             when node.alt != none_idx()
-                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic)
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic, in_loop)
             done()
         otherwise when node.kind == "REPEAT_UNTIL_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "REPEAT_FOREVER_STMT"
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "REPEAT_COUNT_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "PARALLEL_STMT"
-            ctv_check_tasks(arena, decls, shared_decls, sink, funcs, node.right)
+            ctv_check_tasks(arena, decls, shared_decls, sink, funcs, node.right, in_loop)
         otherwise when node.kind == "ATOMIC_STMT"
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, false)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, false, in_loop)
         otherwise when node.kind == "SYNC_STMT"
         otherwise when node.kind == "WAIT_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "LOOP_HZ_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "DEADLINE_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
         otherwise when node.kind == "TIMEOUT_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
         otherwise when node.kind == "WATCH_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
         otherwise when node.kind == "INTERRUPT_STMT"
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, in_loop)
         otherwise when node.kind == "EVERY_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
-            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "CHOOSE_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
             suppose cidx = node.right
@@ -382,15 +382,21 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
                     stop
                 done()
                 ensure cnode = arena_get(arena, cidx)
-                ctv_check_block(arena, decls, shared_decls, sink, funcs, cnode.right, needs_atomic)
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, cnode.right, needs_atomic, in_loop)
                 cidx = cnode.sibling
             done()
             when node.alt != none_idx()
-                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic)
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic, in_loop)
             done()
         otherwise when node.kind == "TAKE_STMT" or node.kind == "READ_STMT"
         otherwise when node.kind == "STOP_STMT"
+            when not in_loop
+                ctv_error(sink, "`stop` used outside a loop")
+            done()
         otherwise when node.kind == "NEXT_STMT"
+            when not in_loop
+                ctv_error(sink, "`next` used outside a loop")
+            done()
         otherwise
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         done()
@@ -403,7 +409,7 @@ done()
    is an ordinary nested block - entered with needs_atomic = true,
    the one place it ever becomes true. *)
 
-make ctv_check_tasks(arena, decls, shared_decls, sink, funcs, start)
+make ctv_check_tasks(arena, decls, shared_decls, sink, funcs, start, in_loop)
     suppose idx = start
     repeat
         when idx == none_idx()
@@ -411,7 +417,7 @@ make ctv_check_tasks(arena, decls, shared_decls, sink, funcs, start)
         done()
         ensure node = arena_get(arena, idx)
         ctv_check_expr(arena, decls, sink, funcs, node.left)
-        ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, true)
+        ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, true, in_loop)
         idx = node.sibling
     done()
 done()
@@ -437,7 +443,7 @@ make ctv_check_program(arena, program_start, funcs, sink)
         i = i + 1
     done()
     ctv_merge_shared(top_decls, shared_decls)
-    ctv_check_block(arena, top_decls, shared_decls, sink, funcs, program_start, false)
+    ctv_check_block(arena, top_decls, shared_decls, sink, funcs, program_start, false, false)
     suppose j = 0
     repeat
         when j >= fn_count
@@ -456,7 +462,7 @@ make ctv_check_program(arena, program_start, funcs, sink)
         done()
         ctv_collect_block(arena, fn_decls, shared_decls, f2.body)
         ctv_merge_shared(fn_decls, shared_decls)
-        ctv_check_block(arena, fn_decls, shared_decls, sink, funcs, f2.body, false)
+        ctv_check_block(arena, fn_decls, shared_decls, sink, funcs, f2.body, false, false)
         j = j + 1
     done()
 done()

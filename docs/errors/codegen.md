@@ -9,8 +9,9 @@ Most of these are also caught earlier by the verifier (`LEC3001`).
 
 ## LEC7001: unsupported construct
 
-An unknown unit on a number, `stop` or `next` outside a loop, or an
-unknown operator or node (only possible through a parser bug).
+An unknown unit on a number, `stop` or `next` outside a loop (normally
+caught first by the verifier), or an unknown operator or node (only
+possible through a parser bug).
 
 ```lepthorn
 ensure d = 5furlong
@@ -22,9 +23,6 @@ LEC7001: codegen error: unknown unit suffix 'furlong'
 
 **Fix:** use a unit from the table in [../DATATYPES.md](../DATATYPES.md),
 or move `stop`/`next` into a loop.
-
-Note: `lepthornc eval` does not report `stop` or `next` outside a loop;
-it ignores them. This difference is a known bug.
 
 ## LEC7002: unknown builtin
 

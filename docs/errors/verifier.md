@@ -14,6 +14,8 @@ All verifier errors use the code `LEC3001`:
 | `call to undefined function 'f'` | there is no `make f(...)` |
 | `wrong number of arguments in call to 'f'` | the call does not pass one argument per parameter |
 | `'x' is a shared suppose value, reassigned inside parallel without atomic` | wrap the change in `atomic` |
+| `` `stop` used outside a loop `` | `stop` is not inside `repeat`, `every` or `loop_hz` |
+| `` `next` used outside a loop `` | the same for `next` |
 
 Example:
 
@@ -25,6 +27,9 @@ x = 6
 ```text
 LEC3001: cannot reassign 'x' - declared with ensure (immutable)
 ```
+
+A loop in the caller does not count for `stop` and `next` inside a
+function: the function's own body must have the loop.
 
 A function can only see its own parameters, its own variables and
 `shared` variables. Using a top-level variable inside a function gives

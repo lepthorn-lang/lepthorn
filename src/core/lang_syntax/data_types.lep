@@ -122,9 +122,10 @@ make skip_comment(source, j, n)
         when depth == 0
             stop
         done()
+        (* past the end: lex_all turns n + 1 into an error token *)
         when k >= n
             show "LEC1001: unterminated comment"
-            stop
+            done(n + 1)
         done()
         ensure c = text::char_at(source, k)
         when c == "("
@@ -525,6 +526,10 @@ make lex_all(source)
     suppose r = LexResult(next_index = 0, kind = "", value = "")
     repeat
         i = skip_trivia(source, i, n)
+        when i > n
+            ring::write(tok_buf, LexResult(next_index = n, kind = "LEX_ERROR", value = ""))
+            stop
+        done()
         when i >= n
             stop
         done()

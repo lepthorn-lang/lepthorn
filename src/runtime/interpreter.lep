@@ -88,8 +88,9 @@ make cell_value(c)
     done(c.value)
 done()
 
+(* stops the program the way a runtime error in compiled code does *)
 make ifail(msg)
-    sys::fail(msg)
+    sys::error(msg)
 done()
 
 (* -- environments: a ring of Var, one per distinct name; redeclaring a
@@ -810,6 +811,9 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::fail"
         done(sys::fail(a1))
     done()
+    when op == "sys::error"
+        done(sys::error(a1))
+    done()
     when op == "sys::capture"
         done(sys::capture(a1))
     done()
@@ -1155,7 +1159,7 @@ make report_parse_errors(arena)
             stop
         done()
         ensure node = ring::peek(arena, i)
-        when node.kind == "PARSE_ERROR"
+        when node.kind == "PARSE_ERROR" and node.op != ""
             show "LEC2001: " + node.op
         done()
         i = i + 1

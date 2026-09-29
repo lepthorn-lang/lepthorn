@@ -38,7 +38,8 @@ runner checks this.
 - One statement per line. A line break ends a statement. There are no
   semicolons.
 - Inside `( )` and `[ ]` a line break does not end the statement.
-- Comments are `(* ... *)` and can nest.
+- Comments are `(* ... *)` and can nest. A comment that is never
+  closed is an error (`LEC1001`) and the program does not run.
 - `//` is not a comment. The lexer prints `LEC1002`, skips the rest of
   the line and goes on.
 - Indentation does not matter to the compiler. Blocks end with
@@ -113,6 +114,9 @@ These mistakes stop the program before it runs (`LEC3001`):
 - using a name that was never declared,
 - assigning to a name that was never declared,
 - assigning to an `ensure` variable.
+
+The full list of checks made before running is in
+[errors/verifier.md](errors/verifier.md).
 
 ### Block declarations
 
@@ -332,8 +336,9 @@ done()
   `repeat 2.5` runs twice.
 - `stop` leaves the innermost loop.
 - `next` skips to the next round of the innermost loop.
-- `stop` or `next` outside a loop is an error when compiling
-  (`LEC7001`). `eval` ignores it; that difference is a known bug.
+- `stop` or `next` outside a loop is an error before the program runs
+  (`LEC3001`). A function body is not inside the caller's loop, so a
+  function cannot `stop` the loop that called it.
 
 ### every and loop_hz
 
@@ -494,6 +499,7 @@ The file functions do not stop the program when they fail. Check
 | `sys::capture(command)` | runs a shell command, returns what it printed |
 | `sys::exit(code)` | ends the program with that exit status |
 | `sys::fail(reason)` | ends the program with `LEC8028: reason`, status 1 |
+| `sys::error(message)` | ends the program like any runtime error: `lepthorn: runtime error: message`, status 1 |
 | `sys::cwd()`, `sys::chdir(path)` | current directory; change it (`true` if it worked) |
 | `sys::is_dir(path)`, `sys::mkdir(path)` | Booleans |
 | `sys::file_size(path)` | size in bytes, or -1 |
@@ -551,7 +557,8 @@ are not done yet.
 
 | Code | When | What happens |
 |---|---|---|
-| `LEC1001`, `LEC1002` | reading the source | message; see [errors/lexer.md](errors/lexer.md) |
+| `LEC1001` | reading the source | the program does not run |
+| `LEC1002` | reading the source | a message; the line is skipped and the program still runs |
 | `LEC2001` | parsing | the program does not run |
 | `LEC3001` | checking, before running | the program does not run |
 | `LEC7xxx` | making native code | no program is written |
