@@ -1,0 +1,9 @@
+(* 07_arithmetic_basic.lep - the four basic arithmetic operators. *)
+
+ensure a = 20
+ensure b = 6
+
+show "a + b:" (a + b)
+show "a - b:" (a - b)
+show "a * b:" (a * b)
+show "a / b:" (a / b)

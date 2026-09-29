@@ -1,0 +1,11 @@
+(* 12_comparisons.lep - the six comparison operators, all producing Boolean. *)
+
+ensure a = 10kg
+ensure b = 7kg
+
+show "a == b:" (a == b)
+show "a != b:" (a != b)
+show "a > b:" (a > b)
+show "a < b:" (a < b)
+show "a >= b:" (a >= b)
+show "a <= b:" (a <= b)

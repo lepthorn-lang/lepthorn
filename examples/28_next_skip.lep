@@ -1,0 +1,11 @@
+(* 28_next_skip.lep - `next` skips the rest of the current iteration and
+   moves straight to the next one. *)
+
+suppose n = 0
+repeat 6
+    n += 1
+    when n == 3
+        next
+    done()
+    show "processing:" n
+done()

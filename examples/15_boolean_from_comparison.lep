@@ -1,0 +1,11 @@
+(* 15_boolean_from_comparison.lep - Boolean values, direct or from a
+   comparison, feeding directly into `when`. *)
+
+ensure speed = 120
+suppose overspeed = speed > 100
+
+when overspeed
+    show "Slow down!"
+otherwise
+    show "Speed OK"
+done()

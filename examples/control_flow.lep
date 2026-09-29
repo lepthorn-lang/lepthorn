@@ -1,0 +1,68 @@
+(* control_flow.lep - when/otherwise, the three repeat forms, every,
+   choose/case, and stop/next. *)
+
+ensure battery = 45
+
+when battery > 80
+    show "Excellent"
+otherwise when battery > 40
+    show "Good"
+otherwise when battery > 10
+    show "Low"
+otherwise
+    show "Critical"
+done()
+
+(* repeat N (counted) *)
+repeat 3
+    show "Hello"
+done()
+
+(* repeat forever, exited with stop *)
+suppose count = 0
+repeat
+    count += 1
+    show "count:" count
+    when count >= 3
+        stop
+    done()
+done()
+
+(* repeat...until (do-until: body runs first, then the condition is checked) *)
+suppose x = 0
+repeat
+    x += 1
+until x == 3
+done()
+show "x after repeat-until:" x
+
+(* next skips an iteration *)
+suppose i = 0
+repeat 5
+    i += 1
+    when i == 3
+        next
+    done()
+    show "processing:" i
+done()
+
+(* choose/case - quoted Text labels *)
+ensure mode = "AUTO"
+choose mode
+case "AUTO"
+    show "Autonomous"
+case "MANUAL"
+    show "Manual"
+otherwise
+    show "Unknown"
+done()
+
+(* every - real-time loop (time or frequency quantity), exited with stop *)
+suppose ticks = 0
+every 5ms
+    ticks += 1
+    when ticks >= 3
+        stop
+    done()
+done()
+show "ticks:" ticks

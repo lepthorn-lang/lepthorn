@@ -1,0 +1,40 @@
+(* 35_queue_stack_ringbuffer.lep - the three collections: Queue (first
+   in, first out), Stack (last in, first out) and RingBuffer (when full,
+   a write drops the oldest item). They are used through functions, not
+   methods: `queue::enqueue(q, item)`, not `q.enqueue(item)`. *)
+
+(* --- Queue: first in, first out --- *)
+suppose sensor_queue = queue::create(3)
+
+queue::enqueue(sensor_queue, 10)
+queue::enqueue(sensor_queue, 20)
+queue::enqueue(sensor_queue, 30)
+
+show "Queue size:" queue::size(sensor_queue)
+show "Oldest reading (peek):" queue::front(sensor_queue)
+show "Removed reading:" queue::dequeue(sensor_queue)
+show "Queue size after removing one:" queue::size(sensor_queue)
+
+(* --- Stack: last in, first out --- *)
+suppose command_stack = stack::create(10)
+
+stack::push(command_stack, "move_forward")
+stack::push(command_stack, "rotate")
+stack::push(command_stack, "move_forward")
+
+show "Last command (peek):" stack::peek(command_stack)
+show "Undo last command:" stack::pop(command_stack)
+show "Next command to undo:" stack::peek(command_stack)
+
+(* --- RingBuffer: always keep the latest, drop the oldest when full --- *)
+suppose imu_buffer = ring::create(4)
+
+ring::write(imu_buffer, 1)
+ring::write(imu_buffer, 2)
+ring::write(imu_buffer, 3)
+ring::write(imu_buffer, 4)
+ring::write(imu_buffer, 5) (* buffer was full (4/4) - oldest (1) is dropped *)
+
+show "RingBuffer size (still capped at capacity):" ring::size(imu_buffer)
+show "Oldest surviving reading:" ring::peek(imu_buffer, 0)
+show "Newest reading:" ring::peek(imu_buffer, 3)

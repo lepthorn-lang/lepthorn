@@ -1,0 +1,22 @@
+suppose ticks = 0
+loop_hz(200)
+    ticks += 1
+    when ticks >= 3
+        stop
+    done()
+done()
+suppose beats = 0
+every 5ms
+    beats += 1
+    when beats >= 2
+        stop
+    done()
+done()
+wait 1ms
+shared suppose ready = true
+timeout 50ms
+    wait ready
+done()
+deadline 1s
+    show "ticks:" ticks "beats:" beats "ready:" ready
+done()

@@ -1,0 +1,7 @@
+p: Point(x = 13, y = 4)
+p == Point(13, 4): true
+Probe(name = alpha, at = Point(x = 13, y = 4), mass = 2 kg)
+probe x: 13 mass: 2 kg
+nums: [10, 25, 30] len: 3
+total mass: 39 kg
+grid: [[1, 2], [3, 4]]

@@ -1,0 +1,5 @@
+(* 25_repeat_counted.lep - `repeat N` runs the body exactly N times. *)
+
+repeat 5
+    show "Hello"
+done()

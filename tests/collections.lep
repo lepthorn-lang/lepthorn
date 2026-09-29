@@ -1,0 +1,21 @@
+ensure q = queue::create(3)
+queue::enqueue(q, "a")
+queue::enqueue(q, "b")
+show "queue front:" queue::front(q) "size:" queue::size(q)
+show "dequeued:" queue::dequeue(q) queue::dequeue(q)
+show "queue empty:" queue::is_empty(q)
+
+ensure s = stack::create(2)
+stack::push(s, 1m)
+stack::push(s, 2m)
+show "stack full:" stack::is_full(s) "top:" stack::peek(s)
+show "popped:" stack::pop(s) stack::pop(s)
+
+ensure r = ring::create(3)
+repeat 5
+    ring::write(r, ring::size(r) * 10 + 1)
+done()
+show "ring:" r "oldest:" ring::peek(r, 0) "newest:" ring::peek(r, 2)
+show "got:" ring::get(r) "left:" ring::size(r)
+ring::clear(r)
+show "cleared:" ring::is_empty(r)

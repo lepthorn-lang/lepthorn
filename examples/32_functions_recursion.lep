@@ -1,0 +1,29 @@
+(* 32_functions_recursion.lep - recursion, and done(value) unwinding
+   through a nested `when` block to leave the whole function. *)
+
+make factorial(n)
+    when n <= 1
+        done(1)
+    done()
+    done(n * factorial(n - 1))
+done()
+
+show "factorial(5):" factorial(5)
+show "factorial(0):" factorial(0)
+
+make is_even(n)
+    when n == 0
+        done(true)
+    done()
+    done(is_odd(n - 1))
+done()
+
+make is_odd(n)
+    when n == 0
+        done(false)
+    done()
+    done(is_even(n - 1))
+done()
+
+show "is_even(10):" is_even(10)
+show "is_odd(7):" is_odd(7)

@@ -1,0 +1,13 @@
+(* 30_every_realtime.lep - `every` runs its body once per time period
+   or frequency. The start times stay on a fixed grid, even when one
+   round takes longer. *)
+
+suppose ticks = 0
+
+every 10ms
+    ticks += 1
+    show "tick:" ticks
+    when ticks >= 4
+        stop
+    done()
+done()

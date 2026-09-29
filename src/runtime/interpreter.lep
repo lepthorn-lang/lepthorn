@@ -1,0 +1,1226 @@
+(* interpreter.lep - `lepthornc eval`: a tree-walking interpreter over
+   the same AST codegen compiles.
+
+   A target program's values are the real runtime values of this
+   program itself: a target Number IS a Number (units included), Text
+   is Text, and `a + b` in a target program is evaluated with this
+   file's own `+` - so eval and compiled code agree by construction,
+   including dimension checks and error messages. Only what has no
+   direct counterpart is modelled: target shapes (TShape: shape name +
+   ring of TField) and arrays (TArray: ring of TCell), since their
+   fields/elements are mutable in place.
+
+   Real-time statements (loop_hz/every/wait/deadline/timeout) are run
+   with this language's own real-time statements, not re-implemented. *)
+
+use core::ast::ast
+use core::units::quantity
+use core::lang_syntax::data_types
+use core::lang_syntax::parser
+use core::ctv::ctv
+use runtime::primitives
+use codegen::cg_core
+
+(* collection-valued and dynamically-typed fields are declared Number -
+   a field accepts any value at runtime *)
+
+shape IState
+    arena: Number
+    funcs: Number
+    shapes: Number
+    shared: Number
+    units: Number
+    normal: Number
+    stop_sig: Number
+    next_sig: Number
+    depth: Number
+done()
+
+shape Sig
+    kind: Text
+    value: Number
+done()
+
+shape Var
+    name: Text
+    value: Number
+done()
+
+shape TShape
+    sname: Text
+    fields: Number
+done()
+
+shape TField
+    name: Text
+    value: Number
+done()
+
+shape TArray
+    cells: Number
+done()
+
+shape TCell
+    value: Number
+done()
+
+shape PTask
+    prio: Number
+    body: Number
+    used: Boolean
+done()
+
+(* field reads of dynamically-typed slots go through these, so every
+   caller sees an untyped value *)
+make var_value(v)
+    done(v.value)
+done()
+
+make sig_value(s)
+    done(s.value)
+done()
+
+make field_value(f)
+    done(f.value)
+done()
+
+make cell_value(c)
+    done(c.value)
+done()
+
+make ifail(msg)
+    sys::fail(msg)
+done()
+
+(* -- environments: a ring of Var, one per distinct name; redeclaring a
+   name (a loop body re-running its `ensure`) overwrites in place -- *)
+
+make env_find(env, name)
+    suppose i = ring::size(env) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure v = ring::peek(env, i)
+        when v.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make env_declare(env, name, value)
+    ensure i = env_find(env, name)
+    when i >= 0
+        suppose v = ring::peek(env, i)
+        v.value = value
+        done(true)
+    done()
+    ring::write(env, Var(name = name, value = value))
+done()
+
+make env_get(st, env, name)
+    ensure i = env_find(env, name)
+    when i >= 0
+        done(var_value(ring::peek(env, i)))
+    done()
+    ensure j = env_find(st.shared, name)
+    when j >= 0
+        done(var_value(ring::peek(st.shared, j)))
+    done()
+    ifail("undefined variable '" + name + "'")
+    done(0)
+done()
+
+make env_assign(st, env, name, value)
+    ensure i = env_find(env, name)
+    when i >= 0
+        suppose v = ring::peek(env, i)
+        v.value = value
+        done(true)
+    done()
+    ensure j = env_find(st.shared, name)
+    when j >= 0
+        suppose sv = ring::peek(st.shared, j)
+        sv.value = value
+        done(true)
+    done()
+    ifail("assignment to undeclared variable '" + name + "'")
+done()
+
+(* a number with the given dimension, built with the language's own
+   unit arithmetic (A/K/mol/cd never occur in the unit table) *)
+make make_qty(mag, d)
+    when dim_equal(d, dim_zero())
+        done(mag)
+    done()
+    done(mag * (1kg ** d.kg) * (1m ** d.m) * (1s ** d.s) * (1rad ** d.rad))
+done()
+
+(* -- target shapes and arrays -- *)
+
+make shape_def(st, name)
+    suppose i = ring::size(st.shapes) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure sd = ring::peek(st.shapes, i)
+        when sd.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make tshape_field(st, base, fname)
+    when sys::kind(base) != "TShape"
+        ifail("field '" + fname + "': expected a shape value, got " + sys::kind(base))
+    done()
+    ensure fields = base.fields
+    ensure n = ring::size(fields)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure f = ring::peek(fields, i)
+        when f.name == fname
+            done(f)
+        done()
+        i = i + 1
+    done()
+    ifail(base.sname + ": no field '" + fname + "'")
+    done(0)
+done()
+
+make tarray_cell(base, idxv)
+    when sys::kind(base) != "TArray"
+        ifail("expected an Array, got " + sys::kind(base))
+    done()
+    when sys::kind(idxv) != "Number"
+        ifail("an array index must be a dimensionless Number")
+    done()
+    ensure cells = base.cells
+    ensure n = ring::size(cells)
+    when idxv < 0 or idxv >= n
+        ifail("LEC8013: index " + text::from_number(idxv) + " is out of bounds for an array of length " + text::from_number(n))
+    done()
+    done(ring::peek(cells, idxv))
+done()
+
+make construct_shape(st, env, node)
+    ensure si = shape_def(st, node.op)
+    when si < 0
+        ifail("unknown shape '" + node.op + "'")
+    done()
+    ensure sd = ring::peek(st.shapes, si)
+    ensure fields = ring::create(sd.field_count + 1)
+    suppose j = 0
+    repeat
+        when j >= sd.field_count
+            stop
+        done()
+        ensure fname = param_at(sd.field_names, j)
+        ensure finit = find_field_init(st.arena, node.left, fname)
+        when finit == none_idx()
+            ifail("shape '" + node.op + "' construction is missing field '" + fname + "'")
+        done()
+        ensure finode = arena_get(st.arena, finit)
+        ring::write(fields, TField(name = fname, value = eval_node(st, env, finode.left)))
+        j = j + 1
+    done()
+    done(TShape(sname = node.op, fields = fields))
+done()
+
+make find_field_init(arena, start, fname)
+    suppose fidx = start
+    repeat
+        when fidx == none_idx()
+            stop
+        done()
+        ensure fnode = arena_get(arena, fidx)
+        when fnode.op == fname
+            done(fidx)
+        done()
+        fidx = fnode.sibling
+    done()
+    done(none_idx())
+done()
+
+make construct_array(st, env, node)
+    ensure n = chain_len(st.arena, node.left)
+    ensure cells = ring::create(n + 1)
+    suppose eidx = node.left
+    repeat
+        when eidx == none_idx()
+            stop
+        done()
+        ensure enode = arena_get(st.arena, eidx)
+        ring::write(cells, TCell(value = eval_node(st, env, enode.left)))
+        eidx = enode.sibling
+    done()
+    done(TArray(cells = cells))
+done()
+
+make chain_len(arena, start)
+    suppose n = 0
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        n = n + 1
+        idx = node.sibling
+    done()
+    done(n)
+done()
+
+(* == between target shapes is structural, as in the host; everything
+   else is this language's own == *)
+make values_equal(st, a, b)
+    ensure ka = sys::kind(a)
+    ensure kb = sys::kind(b)
+    when ka == "TShape" and kb == "TShape"
+        when a.sname != b.sname
+            ifail("`==` requires both operands to be the same shape; got " + a.sname + " and " + b.sname)
+        done()
+        ensure fa = a.fields
+        ensure fb = b.fields
+        ensure n = ring::size(fa)
+        suppose i = 0
+        repeat
+            when i >= n
+                stop
+            done()
+            when not values_equal(st, field_value(ring::peek(fa, i)), field_value(ring::peek(fb, i)))
+                done(false)
+            done()
+            i = i + 1
+        done()
+        done(true)
+    done()
+    when ka == "TShape" or kb == "TShape" or ka == "TArray" or kb == "TArray"
+        ifail("`==` requires both operands to be the same kind of value (both quantities of the same dimension, both Text, both Boolean, or both the same shape)")
+    done()
+    done(a == b)
+done()
+
+(* the text `show` prints for a value *)
+make format_value(st, v)
+    ensure k = sys::kind(v)
+    when k == "TShape"
+        ensure fields = v.fields
+        ensure n = ring::size(fields)
+        suppose outs = v.sname + "("
+        suppose i = 0
+        repeat
+            when i >= n
+                stop
+            done()
+            ensure f = ring::peek(fields, i)
+            when i > 0
+                outs = outs + ", "
+            done()
+            outs = outs + f.name + " = " + format_value(st, field_value(f))
+            i = i + 1
+        done()
+        done(outs + ")")
+    done()
+    when k == "TArray"
+        ensure cells = v.cells
+        ensure m = ring::size(cells)
+        suppose outa = "["
+        suppose j = 0
+        repeat
+            when j >= m
+                stop
+            done()
+            when j > 0
+                outa = outa + ", "
+            done()
+            outa = outa + format_value(st, cell_value(ring::peek(cells, j)))
+            j = j + 1
+        done()
+        done(outa + "]")
+    done()
+    done(text::format(v))
+done()
+
+(* -- expressions -- *)
+
+make eval_node(st, env, idx)
+    ensure node = arena_get(st.arena, idx)
+    ensure k = node.kind
+    when k == "NUM"
+        ensure ue = lookup_unit(st.units, node.op)
+        when node.op != "" and ue.suffix == ""
+            ifail("LEC8026: unknown unit suffix '" + node.op + "'")
+        done()
+        done(make_qty(node.num_value * ue.scale, ue.dim))
+    done()
+    when k == "BOOL"
+        done(node.bool_value)
+    done()
+    when k == "TEXT"
+        done(node.text_value)
+    done()
+    when k == "VAR"
+        done(env_get(st, env, node.op))
+    done()
+    when k == "FIELD_ACCESS"
+        done(field_value(tshape_field(st, env_get(st, env, node.op), node.params)))
+    done()
+    when k == "INDEX_ACCESS"
+        ensure abase = env_get(st, env, node.op)
+        done(cell_value(tarray_cell(abase, eval_node(st, env, node.left))))
+    done()
+    when k == "SHAPE_CONSTRUCT"
+        done(construct_shape(st, env, node))
+    done()
+    when k == "ARRAY_LITERAL"
+        done(construct_array(st, env, node))
+    done()
+    when k == "CALL"
+        ensure csig = eval_call(st, env, node)
+        when csig.kind != "RETURN"
+            ifail(node.op + ": this function never reaches done(value) - it cannot be used as a value (call it as a bare statement instead)")
+        done()
+        done(sig_value(csig))
+    done()
+    when k == "UNARY"
+        ensure uv = eval_node(st, env, node.left)
+        when node.op == "~"
+            done(~uv)
+        done()
+        done(not uv)
+    done()
+    when k == "BINOP"
+        done(eval_binop(st, env, node))
+    done()
+    ifail("unsupported expression kind '" + k + "'")
+    done(0)
+done()
+
+make eval_binop(st, env, node)
+    ensure l = eval_node(st, env, node.left)
+    ensure r = eval_node(st, env, node.right)
+    ensure op = node.op
+    when op == "+"
+        done(l + r)
+    done()
+    when op == "-"
+        done(l - r)
+    done()
+    when op == "*"
+        done(l * r)
+    done()
+    when op == "/"
+        done(l / r)
+    done()
+    when op == "%"
+        done(l % r)
+    done()
+    when op == "**"
+        done(l ** r)
+    done()
+    when op == "=="
+        done(values_equal(st, l, r))
+    done()
+    when op == "!="
+        done(not values_equal(st, l, r))
+    done()
+    when op == "<"
+        done(l < r)
+    done()
+    when op == ">"
+        done(l > r)
+    done()
+    when op == "<="
+        done(l <= r)
+    done()
+    when op == ">="
+        done(l >= r)
+    done()
+    when op == "and"
+        done(l and r)
+    done()
+    when op == "or"
+        done(l or r)
+    done()
+    when op == "&"
+        done(l & r)
+    done()
+    when op == "|"
+        done(l | r)
+    done()
+    when op == "^"
+        done(l ^ r)
+    done()
+    when op == "<<"
+        done(l << r)
+    done()
+    when op == ">>"
+        done(l >> r)
+    done()
+    ifail("unsupported operator '" + op + "'")
+    done(0)
+done()
+
+(* a call as a Sig: RETURN (with its value) or NORMAL (fell off the
+   end) - only an expression context requires RETURN *)
+make eval_call(st, env, node)
+    ensure op = node.op
+    ensure fi = cg_func_index_in(st.funcs, op)
+    when op_is_namespaced(op)
+        done(Sig(kind = "RETURN", value = eval_builtin(st, env, node)))
+    done()
+    when fi < 0
+        when op == "length"
+            ensure larr = eval_node(st, env, node.left)
+            when sys::kind(larr) != "TArray"
+                ifail("length: expected an Array, got " + sys::kind(larr))
+            done()
+            done(Sig(kind = "RETURN", value = ring::size(larr.cells)))
+        done()
+        when op == "vector"
+            ensure vx = eval_node(st, env, node.left)
+            ensure vnode = arena_get(st.arena, node.left)
+            ensure vy = eval_node(st, env, vnode.sibling)
+            ensure vnode2 = arena_get(st.arena, vnode.sibling)
+            ensure vz = eval_node(st, env, vnode2.sibling)
+            done(Sig(kind = "RETURN", value = vector(vx, vy, vz)))
+        done()
+        ifail("unknown function " + op)
+    done()
+    done(call_function(st, env, ring::peek(st.funcs, fi), node.left))
+done()
+
+make cg_func_index_in(funcs, name)
+    suppose i = ring::size(funcs) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure f = ring::peek(funcs, i)
+        when f.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make call_function(st, env, f, arg_start)
+    ensure pc = param_count(f.params)
+    ensure argc = chain_len(st.arena, arg_start)
+    when pc != argc
+        ifail(f.name + ": expected " + text::from_number(pc) + " argument(s), got " + text::from_number(argc))
+    done()
+    ensure fenv = ring::create(pc + count_decls(st.arena, f.body) + 2)
+    suppose aidx = arg_start
+    suppose pi = 0
+    repeat
+        when aidx == none_idx()
+            stop
+        done()
+        ensure anode = arena_get(st.arena, aidx)
+        ring::write(fenv, Var(name = param_at(f.params, pi), value = eval_node(st, env, aidx)))
+        pi = pi + 1
+        aidx = anode.sibling
+    done()
+    st.depth = st.depth + 1
+    when st.depth > 10000
+        ifail(f.name + ": maximum recursion depth (10000) exceeded")
+    done()
+    ensure sig = exec_block(st, fenv, f.body)
+    st.depth = st.depth - 1
+    when sig.kind == "RETURN"
+        done(sig)
+    done()
+    done(st.normal)
+done()
+
+(* distinct-name upper bound for a body: one slot per declaring
+   statement, recursively *)
+make has_body(k)
+    done(k == "DECL_BLOCK_STMT" or k == "REPEAT_FOREVER_STMT" or k == "REPEAT_UNTIL_STMT" or k == "REPEAT_COUNT_STMT" or k == "ATOMIC_STMT" or k == "LOOP_HZ_STMT" or k == "DEADLINE_STMT" or k == "TIMEOUT_STMT" or k == "WATCH_STMT" or k == "INTERRUPT_STMT" or k == "EVERY_STMT")
+done()
+
+make count_decls(arena, start)
+    suppose n = 0
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ensure k = node.kind
+        when k == "ENSURE_STMT" or k == "SUPPOSE_STMT" or k == "TAKE_STMT" or k == "READ_STMT"
+            n = n + 1
+        otherwise when k == "WHEN_STMT"
+            n = n + count_decls(arena, node.right)
+            when node.alt != none_idx()
+                n = n + count_decls(arena, node.alt)
+            done()
+        otherwise when k == "CHOOSE_STMT"
+            suppose cidx = node.right
+            repeat
+                when cidx == none_idx()
+                    stop
+                done()
+                ensure cnode = arena_get(arena, cidx)
+                n = n + count_decls(arena, cnode.right)
+                cidx = cnode.sibling
+            done()
+            when node.alt != none_idx()
+                n = n + count_decls(arena, node.alt)
+            done()
+        otherwise when k == "PARALLEL_STMT"
+            suppose tidx = node.right
+            repeat
+                when tidx == none_idx()
+                    stop
+                done()
+                ensure tnode = arena_get(arena, tidx)
+                n = n + count_decls(arena, tnode.right)
+                tidx = tnode.sibling
+            done()
+        otherwise when has_body(k)
+            n = n + count_decls(arena, node.right)
+        done()
+        idx = node.sibling
+    done()
+    done(n)
+done()
+
+(* builtins: arguments evaluated left to right, then the real builtin -
+   so eval behaves exactly like compiled code *)
+make eval_builtin(st, env, node)
+    ensure op = node.op
+    ensure ar = cg_builtin_arity(op)
+    ensure argc = chain_len(st.arena, node.left)
+    when ar < 0
+        ifail("unknown namespace call " + op)
+    done()
+    when ar != argc
+        ifail(op + ": expected " + text::from_number(ar) + " argument(s), got " + text::from_number(argc))
+    done()
+    suppose a1 = 0
+    suppose a2 = 0
+    suppose a3 = 0
+    when argc >= 1
+        a1 = eval_node(st, env, node.left)
+        ensure n1 = arena_get(st.arena, node.left)
+        when argc >= 2
+            a2 = eval_node(st, env, n1.sibling)
+            ensure n2 = arena_get(st.arena, n1.sibling)
+            when argc >= 3
+                a3 = eval_node(st, env, n2.sibling)
+            done()
+        done()
+    done()
+    done(builtin_apply(st, op, a1, a2, a3))
+done()
+
+(* sys::kind and text::format see through this interpreter's own
+   representation of target shapes/arrays, answering exactly as compiled
+   code would - so a program that is itself an interpreter (the test
+   suite runs one) behaves the same under eval *)
+make builtin_apply(st, op, a1, a2, a3)
+    when op == "text::length"
+        done(text::length(a1))
+    done()
+    when op == "text::char_at"
+        done(text::char_at(a1, a2))
+    done()
+    when op == "text::slice"
+        done(text::slice(a1, a2, a3))
+    done()
+    when op == "text::to_number"
+        done(text::to_number(a1))
+    done()
+    when op == "text::from_code"
+        done(text::from_code(a1))
+    done()
+    when op == "text::from_number"
+        done(text::from_number(a1))
+    done()
+    when op == "text::format"
+        done(format_value(st, a1))
+    done()
+    when op == "ring::create"
+        done(ring::create(a1))
+    done()
+    when op == "ring::write"
+        done(ring::write(a1, a2))
+    done()
+    when op == "ring::get"
+        done(ring::get(a1))
+    done()
+    when op == "ring::peek"
+        done(ring::peek(a1, a2))
+    done()
+    when op == "ring::size"
+        done(ring::size(a1))
+    done()
+    when op == "ring::is_empty"
+        done(ring::is_empty(a1))
+    done()
+    when op == "ring::is_full"
+        done(ring::is_full(a1))
+    done()
+    when op == "ring::clear"
+        done(ring::clear(a1))
+    done()
+    when op == "queue::create"
+        done(queue::create(a1))
+    done()
+    when op == "queue::enqueue"
+        done(queue::enqueue(a1, a2))
+    done()
+    when op == "queue::dequeue"
+        done(queue::dequeue(a1))
+    done()
+    when op == "queue::front"
+        done(queue::front(a1))
+    done()
+    when op == "queue::size"
+        done(queue::size(a1))
+    done()
+    when op == "queue::is_empty"
+        done(queue::is_empty(a1))
+    done()
+    when op == "queue::is_full"
+        done(queue::is_full(a1))
+    done()
+    when op == "stack::create"
+        done(stack::create(a1))
+    done()
+    when op == "stack::push"
+        done(stack::push(a1, a2))
+    done()
+    when op == "stack::pop"
+        done(stack::pop(a1))
+    done()
+    when op == "stack::peek"
+        done(stack::peek(a1))
+    done()
+    when op == "stack::size"
+        done(stack::size(a1))
+    done()
+    when op == "stack::is_empty"
+        done(stack::is_empty(a1))
+    done()
+    when op == "stack::is_full"
+        done(stack::is_full(a1))
+    done()
+    when op == "file::open"
+        done(file::open(a1, a2))
+    done()
+    when op == "file::load"
+        done(file::load(a1, a2))
+    done()
+    when op == "file::write"
+        done(file::write(a1, a2))
+    done()
+    when op == "file::close"
+        done(file::close(a1))
+    done()
+    when op == "file::exists"
+        done(file::exists(a1))
+    done()
+    when op == "file::delete"
+        done(file::delete(a1))
+    done()
+    when op == "file::error"
+        done(file::error())
+    done()
+    when op == "force::gravity"
+        done(force::gravity(a1))
+    done()
+    when op == "force::acceleration"
+        done(force::acceleration(a1, a2))
+    done()
+    when op == "motion::velocity"
+        done(motion::velocity(a1, a2))
+    done()
+    when op == "matrix::rotationZ"
+        done(matrix::rotationZ(a1))
+    done()
+    done(builtin_apply_sys(op, a1, a2))
+done()
+
+make builtin_apply_sys(op, a1, a2)
+    when op == "sys::arg_count"
+        done(sys::arg_count())
+    done()
+    when op == "sys::arg"
+        done(sys::arg(a1))
+    done()
+    when op == "sys::run"
+        done(sys::run(a1))
+    done()
+    when op == "sys::exit"
+        done(sys::exit(a1))
+    done()
+    when op == "sys::cwd"
+        done(sys::cwd())
+    done()
+    when op == "sys::getenv"
+        done(sys::getenv(a1))
+    done()
+    when op == "sys::is_dir"
+        done(sys::is_dir(a1))
+    done()
+    when op == "sys::mkdir"
+        done(sys::mkdir(a1))
+    done()
+    when op == "sys::file_size"
+        done(sys::file_size(a1))
+    done()
+    when op == "sys::realpath"
+        done(sys::realpath(a1))
+    done()
+    when op == "sys::kind"
+        ensure kk = sys::kind(a1)
+        when kk == "TShape"
+            done(a1.sname)
+        done()
+        when kk == "TArray"
+            done("Array")
+        done()
+        done(kk)
+    done()
+    when op == "sys::now"
+        done(sys::now())
+    done()
+    when op == "sys::take"
+        done(sys::take(a1))
+    done()
+    when op == "sys::read"
+        done(sys::read(a1))
+    done()
+    when op == "sys::list_dir"
+        done(sys::list_dir(a1))
+    done()
+    when op == "sys::fail"
+        done(sys::fail(a1))
+    done()
+    when op == "sys::capture"
+        done(sys::capture(a1))
+    done()
+    when op == "sys::chdir"
+        done(sys::chdir(a1))
+    done()
+    when op == "sys::setenv"
+        done(sys::setenv(a1, a2))
+    done()
+    ifail("unknown namespace call " + op)
+    done(0)
+done()
+
+(* -- statements -- *)
+
+make exec_block(st, env, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(st.arena, idx)
+        ensure sig = exec_stmt(st, env, node)
+        when sig.kind != "NORMAL"
+            done(sig)
+        done()
+        idx = node.sibling
+    done()
+    done(st.normal)
+done()
+
+(* loops absorb STOP and NEXT; only RETURN escapes them *)
+make loop_exit(st, sig)
+    when sig.kind == "RETURN"
+        done(sig)
+    done()
+    done(st.normal)
+done()
+
+make exec_stmt(st, env, node)
+    ensure k = node.kind
+    when k == "ENSURE_STMT" or k == "SUPPOSE_STMT"
+        env_declare(env, node.op, eval_node(st, env, node.left))
+        done(st.normal)
+    done()
+    when k == "ASSIGN_STMT"
+        env_assign(st, env, node.op, eval_node(st, env, node.left))
+        done(st.normal)
+    done()
+    when k == "SHARED_ENSURE_STMT" or k == "SHARED_SUPPOSE_STMT"
+        env_declare(st.shared, node.op, eval_node(st, env, node.left))
+        done(st.normal)
+    done()
+    when k == "SHOW_STMT"
+        exec_show(st, env, node)
+        done(st.normal)
+    done()
+    when k == "EXPR_STMT"
+        ensure enode = arena_get(st.arena, node.left)
+        when enode.kind == "CALL"
+            eval_call(st, env, enode)
+        otherwise
+            eval_node(st, env, node.left)
+        done()
+        done(st.normal)
+    done()
+    when k == "RETURN_STMT"
+        done(Sig(kind = "RETURN", value = eval_node(st, env, node.left)))
+    done()
+    when k == "STOP_STMT"
+        done(st.stop_sig)
+    done()
+    when k == "NEXT_STMT"
+        done(st.next_sig)
+    done()
+    when k == "FIELD_ASSIGN_STMT"
+        ensure fval = eval_node(st, env, node.left)
+        suppose tf = tshape_field(st, env_get(st, env, node.op), node.params)
+        tf.value = fval
+        done(st.normal)
+    done()
+    when k == "INDEX_ASSIGN_STMT"
+        ensure ibase = env_get(st, env, node.op)
+        ensure iidx = eval_node(st, env, node.left)
+        ensure ival = eval_node(st, env, node.right)
+        suppose tc = tarray_cell(ibase, iidx)
+        tc.value = ival
+        done(st.normal)
+    done()
+    when k == "WHEN_STMT"
+        when eval_node(st, env, node.left)
+            done(exec_block(st, env, node.right))
+        done()
+        when node.alt != none_idx()
+            done(exec_block(st, env, node.alt))
+        done()
+        done(st.normal)
+    done()
+    when k == "REPEAT_FOREVER_STMT"
+        repeat
+            ensure fsig = exec_block(st, env, node.right)
+            when fsig.kind == "STOP" or fsig.kind == "RETURN"
+                done(loop_exit(st, fsig))
+            done()
+        done()
+    done()
+    when k == "REPEAT_UNTIL_STMT"
+        repeat
+            ensure usig = exec_block(st, env, node.right)
+            when usig.kind == "STOP" or usig.kind == "RETURN"
+                done(loop_exit(st, usig))
+            done()
+            when eval_node(st, env, node.left)
+                done(st.normal)
+            done()
+        done()
+    done()
+    when k == "REPEAT_COUNT_STMT"
+        ensure count = eval_node(st, env, node.left)
+        repeat count
+            ensure csig = exec_block(st, env, node.right)
+            when csig.kind == "STOP" or csig.kind == "RETURN"
+                done(loop_exit(st, csig))
+            done()
+        done()
+        done(st.normal)
+    done()
+    done(exec_stmt2(st, env, node))
+done()
+
+make exec_stmt2(st, env, node)
+    ensure k = node.kind
+    when k == "DECL_BLOCK_STMT" or k == "ATOMIC_STMT" or k == "INTERRUPT_STMT"
+        done(exec_block(st, env, node.right))
+    done()
+    when k == "SYNC_STMT"
+        done(st.normal)
+    done()
+    when k == "WATCH_STMT"
+        eval_node(st, env, node.left)
+        done(exec_block(st, env, node.right))
+    done()
+    when k == "WAIT_STMT"
+        exec_wait(st, env, node.left)
+        done(st.normal)
+    done()
+    when k == "LOOP_HZ_STMT"
+        suppose lsig = st.normal
+        loop_hz(eval_node(st, env, node.left))
+            lsig = exec_block(st, env, node.right)
+            when lsig.kind == "STOP" or lsig.kind == "RETURN"
+                stop
+            done()
+        done()
+        done(loop_exit(st, lsig))
+    done()
+    when k == "EVERY_STMT"
+        suppose esig = st.normal
+        every eval_node(st, env, node.left)
+            esig = exec_block(st, env, node.right)
+            when esig.kind == "STOP" or esig.kind == "RETURN"
+                stop
+            done()
+        done()
+        done(loop_exit(st, esig))
+    done()
+    when k == "DEADLINE_STMT"
+        suppose dsig = st.normal
+        deadline eval_node(st, env, node.left)
+            dsig = exec_block(st, env, node.right)
+        done()
+        done(dsig)
+    done()
+    when k == "TIMEOUT_STMT"
+        done(exec_timeout(st, env, node))
+    done()
+    when k == "PARALLEL_STMT"
+        done(exec_parallel(st, env, node))
+    done()
+    when k == "TAKE_STMT"
+        env_declare(env, node.op, sys::take(node.op))
+        done(st.normal)
+    done()
+    when k == "READ_STMT"
+        env_declare(env, node.op, sys::read(node.op))
+        done(st.normal)
+    done()
+    when k == "CHOOSE_STMT"
+        ensure subject = eval_node(st, env, node.left)
+        when sys::kind(subject) != "Text"
+            ifail("`choose` subject must be Text")
+        done()
+        suppose cidx = node.right
+        repeat
+            when cidx == none_idx()
+                stop
+            done()
+            ensure cnode = arena_get(st.arena, cidx)
+            when cnode.op == subject
+                done(exec_block(st, env, cnode.right))
+            done()
+            cidx = cnode.sibling
+        done()
+        when node.alt != none_idx()
+            done(exec_block(st, env, node.alt))
+        done()
+        done(st.normal)
+    done()
+    ifail("unsupported statement kind '" + k + "'")
+    done(st.normal)
+done()
+
+(* every argument evaluated first, then one space-joined line *)
+make exec_show(st, env, node)
+    suppose line = ""
+    suppose sidx = node.left
+    suppose first = true
+    repeat
+        when sidx == none_idx()
+            stop
+        done()
+        ensure snode = arena_get(st.arena, sidx)
+        ensure piece = format_value(st, eval_node(st, env, sidx))
+        when first
+            line = piece
+            first = false
+        otherwise
+            line = line + " " + piece
+        done()
+        sidx = snode.sibling
+    done()
+    show line
+done()
+
+(* `wait <Boolean>` polls the condition; `wait <duration>` sleeps -
+   exactly what this language's own `wait` does *)
+make exec_wait(st, env, expr_idx)
+    ensure w = eval_node(st, env, expr_idx)
+    when sys::kind(w) == "Boolean"
+        suppose now_ok = w
+        repeat
+            when now_ok
+                stop
+            done()
+            wait 1ms
+            now_ok = eval_node(st, env, expr_idx)
+        done()
+    otherwise
+        wait w
+    done()
+done()
+
+make exec_timeout(st, env, node)
+    ensure budget = eval_node(st, env, node.left)
+    when node.right != none_idx()
+        ensure only = arena_get(st.arena, node.right)
+        when only.kind == "WAIT_STMT" and only.sibling == none_idx()
+            ensure w0 = eval_node(st, env, only.left)
+            when sys::kind(w0) == "Boolean"
+                timeout budget
+                    wait eval_node(st, env, only.left)
+                done()
+                done(st.normal)
+            done()
+        done()
+    done()
+    suppose tsig = st.normal
+    timeout budget
+        tsig = exec_block(st, env, node.right)
+    done()
+    done(tsig)
+done()
+
+(* tasks run one after another, highest priority first (ties in source
+   order); priorities are all evaluated before any task runs *)
+make exec_parallel(st, env, node)
+    ensure n = chain_len(st.arena, node.right)
+    ensure tasks = ring::create(n + 1)
+    suppose tidx = node.right
+    repeat
+        when tidx == none_idx()
+            stop
+        done()
+        ensure tnode = arena_get(st.arena, tidx)
+        ring::write(tasks, PTask(prio = eval_node(st, env, tnode.left), body = tnode.right, used = false))
+        tidx = tnode.sibling
+    done()
+    suppose ran = 0
+    repeat
+        when ran >= n
+            stop
+        done()
+        suppose best = 0 - 1
+        suppose best_p = 0
+        suppose j = 0
+        repeat
+            when j >= n
+                stop
+            done()
+            ensure pt = ring::peek(tasks, j)
+            when not pt.used
+                when best < 0 or pt.prio > best_p
+                    best = j
+                    best_p = pt.prio
+                done()
+            done()
+            j = j + 1
+        done()
+        suppose chosen = ring::peek(tasks, best)
+        chosen.used = true
+        ensure psig = exec_block(st, env, chosen.body)
+        when psig.kind != "NORMAL"
+            done(psig)
+        done()
+        ran = ran + 1
+    done()
+    done(st.normal)
+done()
+
+(* -- entry points -- *)
+
+make has_parse_error(arena)
+    ensure n = ring::size(arena)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure node = ring::peek(arena, i)
+        when node.kind == "PARSE_ERROR"
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make report_parse_errors(arena)
+    ensure n = ring::size(arena)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure node = ring::peek(arena, i)
+        when node.kind == "PARSE_ERROR"
+            show "LEC2001: " + node.op
+        done()
+        i = i + 1
+    done()
+done()
+
+make new_state(arena, funcs, shapes)
+    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0))
+done()
+
+(* lex -> parse -> CTV -> run *)
+make run_program(source)
+    ensure tok_buf = lex_all(source)
+    ensure cur = Cursor(pos = 0)
+    ensure cap = text::length(source) + 1
+    ensure arena = ring::create(cap)
+    ensure funcs = ring::create(cap)
+    ensure shapes = ring::create(cap)
+    ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
+    when has_parse_error(arena)
+        report_parse_errors(arena)
+        done(false)
+    done()
+    ensure ctv_sink = ring::create(cap)
+    ctv_check_program(arena, first, funcs, ctv_sink)
+    when not ring::is_empty(ctv_sink)
+        report_ctv_errors(ctv_sink)
+        done(false)
+    done()
+    ensure st = new_state(arena, funcs, shapes)
+    ensure top = ring::create(count_decls(arena, first) + 2)
+    exec_block(st, top, first)
+    done(true)
+done()
+
+(* one expression, evaluated with no variables in scope *)
+make eval_source(source)
+    ensure tok_buf = lex_all(source)
+    ensure cur = Cursor(pos = 0)
+    ensure arena = ring::create(text::length(source) + 1)
+    ensure funcs = ring::create(1)
+    ensure shapes = ring::create(1)
+    ensure root = parse_or(tok_buf, cur, arena)
+    ensure st = new_state(arena, funcs, shapes)
+    done(eval_node(st, ring::create(1), root))
+done()
+
+(* lex + parse + CTV only - `lepthornc check` *)
+make validate_compiler_source(source)
+    ensure tok_buf = lex_all(source)
+    ensure cur = Cursor(pos = 0)
+    ensure cap = text::length(source) + 1
+    ensure arena = ring::create(cap)
+    ensure funcs = ring::create(cap)
+    ensure shapes = ring::create(cap)
+    ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
+    when has_parse_error(arena)
+        report_parse_errors(arena)
+        done(false)
+    done()
+    ensure ctv_sink = ring::create(cap)
+    ctv_check_program(arena, first, funcs, ctv_sink)
+    when not ring::is_empty(ctv_sink)
+        report_ctv_errors(ctv_sink)
+        done(false)
+    done()
+    done(true)
+done()

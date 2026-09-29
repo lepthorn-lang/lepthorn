@@ -1,0 +1,10 @@
+use runtime::interpreter
+
+ensure newline = text::from_code(10)
+show "-- parser: expressions, control flow, functions, shapes, arrays --"
+show eval_source("2 + 3 * 4")
+show eval_source("(2 + 3) * 4")
+run_program("suppose i = 0" + newline + "repeat" + newline + "    i = i + 1" + newline + "    show i" + newline + "until i >= 3" + newline + "done()")
+run_program("make fact(n)" + newline + "    when n <= 1" + newline + "        done(1)" + newline + "    done()" + newline + "    done(n * fact(n - 1))" + newline + "done()" + newline + "show fact(5)")
+run_program("shape Point" + newline + "    x: Number" + newline + "    y: Number" + newline + "done()" + newline + "ensure p = Point(x = 3, y = 4)" + newline + "show p.x" + newline + "show p.y")
+run_program("suppose nums = [10, 20, 30]" + newline + "show nums[1]")

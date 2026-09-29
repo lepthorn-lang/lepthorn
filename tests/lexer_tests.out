@@ -1,0 +1,8 @@
+-- lexer: token stream for a small real program --
+ENSURE : ensure
+IDENT : mass
+OP : =
+NUMBER : 25kg
+NEWLINE : 
+SHOW : show
+IDENT : mass

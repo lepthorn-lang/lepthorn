@@ -1,0 +1,15 @@
+(* 04_suppose_block.lep - declaring several mutable values at once, where
+   a later line can update a name declared earlier in the same block. *)
+
+suppose!
+    x = 1
+    y = 30
+    x = x + y
+    a = x + 20
+    b = a + x + y
+done()
+
+show "x:" x
+show "y:" y
+show "a:" a
+show "b:" b

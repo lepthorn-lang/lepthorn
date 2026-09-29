@@ -1,0 +1,11 @@
+(* 03_ensure_block.lep - declaring several immutable values at once. *)
+
+ensure!
+    name = "Ali"
+    age = 21
+    country = "Pakistan"
+done()
+
+show "name:" name
+show "age:" age
+show "country:" country

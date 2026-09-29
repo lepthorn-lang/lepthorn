@@ -1,0 +1,268 @@
+(* cg_expr.lep - expression codegen. Mirrors eval_node's dispatch; every
+   case returns the LLVM operand (register or constant) holding the
+   expression's i64 value. Operands are evaluated left to right. *)
+
+use core::ast::ast
+use core::units::quantity
+use core::lang_syntax::parser
+use runtime::primitives
+use codegen::cg_core
+
+make cg_expr(ctx, arena, idx)
+    ensure node = arena_get(arena, idx)
+    ensure k = node.kind
+    when k == "NUM"
+        done(cg_num_node(ctx, node))
+    done()
+    when k == "BOOL"
+        when node.bool_value
+            done("7")
+        done()
+        done("6")
+    done()
+    when k == "TEXT"
+        done(cg_text_value(ctx, node.text_value))
+    done()
+    when k == "VAR"
+        done(cg_load_var(ctx, node.op))
+    done()
+    when k == "FIELD_ACCESS"
+        ensure fbase = cg_load_var(ctx, node.op)
+        ensure ffid = cg_field_id(ctx, node.params)
+        ensure fr = cg_tmp(ctx)
+        cg_emit(ctx, fr + " = call i64 @lep_get_field(i64 " + fbase + ", i64 " + ffid + ")")
+        done(fr)
+    done()
+    when k == "INDEX_ACCESS"
+        ensure ibase = cg_load_var(ctx, node.op)
+        ensure iidx = cg_expr(ctx, arena, node.left)
+        ensure ir = cg_tmp(ctx)
+        cg_emit(ctx, ir + " = call i64 @lep_index_get(i64 " + ibase + ", i64 " + iidx + ")")
+        done(ir)
+    done()
+    when k == "SHAPE_CONSTRUCT"
+        done(cg_shape_construct(ctx, arena, node))
+    done()
+    when k == "ARRAY_LITERAL"
+        done(cg_array_literal(ctx, arena, node))
+    done()
+    when k == "CALL"
+        done(cg_call(ctx, arena, node, true))
+    done()
+    when k == "UNARY"
+        ensure uv = cg_expr(ctx, arena, node.left)
+        ensure ur = cg_tmp(ctx)
+        when node.op == "~"
+            cg_emit(ctx, ur + " = call i64 @lep_bnot(i64 " + uv + ")")
+        otherwise
+            cg_emit(ctx, ur + " = call i64 @lep_not(i64 " + uv + ")")
+        done()
+        done(ur)
+    done()
+    when k == "BINOP"
+        ensure fname = cg_binop_fn(node.op)
+        when fname == ""
+            cg_fail(ctx, "LEC7001: codegen error: unsupported operator '" + node.op + "'")
+            done("10")
+        done()
+        ensure lv = cg_expr(ctx, arena, node.left)
+        ensure rv = cg_expr(ctx, arena, node.right)
+        ensure br = cg_tmp(ctx)
+        cg_emit(ctx, br + " = call i64 " + fname + "(i64 " + lv + ", i64 " + rv + ")")
+        done(br)
+    done()
+    cg_fail(ctx, "LEC7001: codegen error: unsupported expression kind '" + k + "'")
+    done("10")
+done()
+
+make cg_num_node(ctx, node)
+    ensure ue = lookup_unit(ctx.unit_table, node.op)
+    when node.op != "" and ue.suffix == ""
+        cg_fail(ctx, "LEC7001: codegen error: unknown unit suffix '" + node.op + "'")
+        done("10")
+    done()
+    ensure mag = node.num_value * ue.scale
+    when dim_equal(ue.dim, dim_zero())
+        done(cg_num_lit(ctx, mag))
+    done()
+    ensure d = ue.dim
+    ensure dims = "i32 " + text::from_number(d.kg) + ", i32 " + text::from_number(d.m) + ", i32 " + text::from_number(d.s) + ", i32 " + text::from_number(d.a) + ", i32 " + text::from_number(d.k) + ", i32 " + text::from_number(d.mol) + ", i32 " + text::from_number(d.cd) + ", i32 " + text::from_number(d.rad)
+    ensure qr = cg_tmp(ctx)
+    cg_emit(ctx, qr + " = call i64 @lep_qty(double " + cg_double_lit(mag) + ", " + dims + ")")
+    done(qr)
+done()
+
+make cg_field_id(ctx, name)
+    ensure fid = cg_text_index(ctx.fids, name)
+    when fid < 0
+        cg_fail(ctx, "LEC7006: codegen error: no shape declares a field named '" + name + "'")
+        done("0")
+    done()
+    done(text::from_number(fid))
+done()
+
+(* comma-joined "i64 a, i64 b" argument list, evaluated left to right *)
+make cg_args(ctx, arena, start)
+    suppose outs = ""
+    suppose aidx = start
+    repeat
+        when aidx == none_idx()
+            stop
+        done()
+        ensure anode = arena_get(arena, aidx)
+        ensure av = cg_expr(ctx, arena, aidx)
+        when outs == ""
+            outs = "i64 " + av
+        otherwise
+            outs = outs + ", i64 " + av
+        done()
+        aidx = anode.sibling
+    done()
+    done(outs)
+done()
+
+make cg_chain_len(arena, start)
+    suppose n = 0
+    suppose cidx = start
+    repeat
+        when cidx == none_idx()
+            stop
+        done()
+        ensure cnode = arena_get(arena, cidx)
+        n = n + 1
+        cidx = cnode.sibling
+    done()
+    done(n)
+done()
+
+(* need_value: a user function that falls off its end yields "no value";
+   using that in an expression is a runtime error, exactly as the host
+   reports it - a bare call statement passes false and ignores it. *)
+make cg_call(ctx, arena, node, need_value)
+    ensure op = node.op
+    ensure argc = cg_chain_len(arena, node.left)
+    when op_is_namespaced(op)
+        ensure ar = cg_builtin_arity(op)
+        when ar < 0
+            cg_fail(ctx, "LEC7002: codegen error: unknown builtin '" + op + "'")
+            done("10")
+        done()
+        when ar != argc
+            cg_fail(ctx, "LEC7004: codegen error: " + op + " expects " + text::from_number(ar) + " argument(s), got " + text::from_number(argc))
+            done("10")
+        done()
+        ensure bargs = cg_args(ctx, arena, node.left)
+        ensure bres = cg_tmp(ctx)
+        cg_emit(ctx, bres + " = call i64 " + cg_builtin_symbol(op) + "(" + bargs + ")")
+        done(bres)
+    done()
+    ensure fi = cg_func_index(ctx, op)
+    when fi < 0
+        when op == "length" and argc == 1
+            ensure larg = cg_args(ctx, arena, node.left)
+            ensure lres = cg_tmp(ctx)
+            cg_emit(ctx, lres + " = call i64 @lep_length(" + larg + ")")
+            done(lres)
+        done()
+        when op == "vector" and argc == 3
+            ensure vargs = cg_args(ctx, arena, node.left)
+            ensure vres = cg_tmp(ctx)
+            cg_emit(ctx, vres + " = call i64 @lep_vector(" + vargs + ")")
+            done(vres)
+        done()
+        cg_fail(ctx, "LEC7003: codegen error: call to undefined function '" + op + "'")
+        done("10")
+    done()
+    ensure f = ring::peek(ctx.funcs, fi)
+    ensure pc = param_count(f.params)
+    when pc != argc
+        cg_fail(ctx, "LEC7003: codegen error: " + op + " expects " + text::from_number(pc) + " argument(s), got " + text::from_number(argc))
+        done("10")
+    done()
+    ensure uargs = cg_args(ctx, arena, node.left)
+    ensure ures = cg_tmp(ctx)
+    cg_emit(ctx, ures + " = call i64 @lf." + op + "(" + uargs + ")")
+    when not need_value
+        done(ures)
+    done()
+    ensure fnv = cg_tmp(ctx)
+    cg_emit(ctx, fnv + " = ptrtoint ptr @.fn." + op + " to i64")
+    ensure checked = cg_tmp(ctx)
+    cg_emit(ctx, checked + " = call i64 @lep_need_value(i64 " + ures + ", i64 " + fnv + ")")
+    done(checked)
+done()
+
+make cg_find_field_init(arena, start, fname)
+    suppose fidx = start
+    repeat
+        when fidx == none_idx()
+            stop
+        done()
+        ensure fnode = arena_get(arena, fidx)
+        when fnode.op == fname
+            done(fidx)
+        done()
+        fidx = fnode.sibling
+    done()
+    done(none_idx())
+done()
+
+(* fields are evaluated in declaration order (the host's own order),
+   stored by slot = declaration index *)
+make cg_shape_construct(ctx, arena, node)
+    ensure sid = cg_shape_id(ctx, node.op)
+    when sid < 0
+        cg_fail(ctx, "LEC7006: codegen error: unknown shape '" + node.op + "'")
+        done("10")
+    done()
+    ensure sd = ring::peek(ctx.shapes, sid)
+    suppose cidx = node.left
+    repeat
+        when cidx == none_idx()
+            stop
+        done()
+        ensure cnode = arena_get(arena, cidx)
+        when not name_in_list(sd.field_names, cnode.op)
+            cg_fail(ctx, "LEC7006: codegen error: shape '" + node.op + "' has no field '" + cnode.op + "'")
+        done()
+        cidx = cnode.sibling
+    done()
+    ensure sreg = cg_tmp(ctx)
+    cg_emit(ctx, sreg + " = call i64 @lep_shape_new(i64 " + text::from_number(sid) + ")")
+    suppose j = 0
+    repeat
+        when j >= sd.field_count
+            stop
+        done()
+        ensure fname = param_at(sd.field_names, j)
+        ensure finit = cg_find_field_init(arena, node.left, fname)
+        when finit == none_idx()
+            cg_fail(ctx, "LEC7006: codegen error: shape '" + node.op + "' construction is missing field '" + fname + "'")
+        otherwise
+            ensure finode = arena_get(arena, finit)
+            ensure fv = cg_expr(ctx, arena, finode.left)
+            cg_emit(ctx, "call void @lep_shape_init(i64 " + sreg + ", i64 " + text::from_number(j) + ", i64 " + fv + ")")
+        done()
+        j = j + 1
+    done()
+    done(sreg)
+done()
+
+make cg_array_literal(ctx, arena, node)
+    ensure n = cg_chain_len(arena, node.left)
+    ensure areg = cg_tmp(ctx)
+    cg_emit(ctx, areg + " = call i64 @lep_array_new(i64 " + text::from_number(n) + ")")
+    suppose eidx = node.left
+    suppose ei = 0
+    repeat
+        when eidx == none_idx()
+            stop
+        done()
+        ensure enode = arena_get(arena, eidx)
+        ensure ev = cg_expr(ctx, arena, enode.left)
+        cg_emit(ctx, "call void @lep_array_init(i64 " + areg + ", i64 " + text::from_number(ei) + ", i64 " + ev + ")")
+        eidx = enode.sibling
+        ei = ei + 1
+    done()
+    done(areg)
+done()

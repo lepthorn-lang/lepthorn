@@ -1,0 +1,22 @@
+(* 09_compound_assignment.lep - += -= *= /= %= **= update a variable in place. *)
+
+suppose speed = 10
+show "start:" speed
+
+speed += 5
+show "after += 5:" speed
+
+speed -= 3
+show "after -= 3:" speed
+
+speed *= 2
+show "after *= 2:" speed
+
+speed /= 4
+show "after /= 4:" speed
+
+speed %= 5
+show "after %= 5:" speed
+
+speed **= 3
+show "after **= 3:" speed

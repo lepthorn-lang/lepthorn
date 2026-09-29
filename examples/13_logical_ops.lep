@@ -1,0 +1,8 @@
+(* 13_logical_ops.lep - word-based logical operators: and, or, not. *)
+
+ensure battery_ok = true
+ensure gps_ok = false
+
+show "battery_ok and gps_ok:" (battery_ok and gps_ok)
+show "battery_ok or gps_ok:" (battery_ok or gps_ok)
+show "not gps_ok:" (not gps_ok)

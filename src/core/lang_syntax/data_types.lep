@@ -1,0 +1,566 @@
+(* data_types.lep - token/cursor shapes and the lexer. No deps. *)
+
+(* The lexer turns source text into tokens, using the text::
+   primitives.
+
+   AST (Node, below): left/right are expression operands, or a
+   statement's condition/block-start; alt is a WHEN_STMT's otherwise
+   branch; sibling is the next statement in the same block. 999999 is
+   the no-node sentinel (none_idx()) - every node consumes a real
+   token, so arena capacity = token count is a real bound, not a
+   guess; no synthetic nodes exist yet.
+
+   Loop signals (Signal, below): only RETURN propagates past a loop -
+   STOP and NEXT are both consumed at the loop boundary. *)
+
+shape LexResult
+    next_index: Number
+    kind: Text
+    value: Text
+done()
+
+make is_digit(c)
+    done(c >= "0" and c <= "9")
+done()
+
+make is_alpha(c)
+    when c == "_"
+        done(true)
+    otherwise when c >= "a" and c <= "z"
+        done(true)
+    otherwise when c >= "A" and c <= "Z"
+        done(true)
+    otherwise
+        done(false)
+    done()
+done()
+
+make is_alnum(c)
+    when is_digit(c)
+        done(true)
+    otherwise
+        done(is_alpha(c))
+    done()
+done()
+
+make classify_keyword(word)
+    when word == "ensure"
+        done("ENSURE")
+    otherwise when word == "suppose"
+        done("SUPPOSE")
+    otherwise when word == "show"
+        done("SHOW")
+    otherwise when word == "take"
+        done("TAKE")
+    otherwise when word == "read"
+        done("READ")
+    otherwise when word == "done"
+        done("DONE")
+    otherwise when word == "make"
+        done("MAKE")
+    otherwise when word == "shape"
+        done("SHAPE")
+    otherwise when word == "when"
+        done("WHEN")
+    otherwise when word == "otherwise"
+        done("OTHERWISE")
+    otherwise when word == "repeat"
+        done("REPEAT")
+    otherwise when word == "until"
+        done("UNTIL")
+    otherwise when word == "stop"
+        done("STOP")
+    otherwise when word == "next"
+        done("NEXT")
+    otherwise when word == "true"
+        done("TRUE")
+    otherwise when word == "false"
+        done("FALSE")
+    otherwise when word == "and"
+        done("AND")
+    otherwise when word == "or"
+        done("OR")
+    otherwise when word == "not"
+        done("NOT")
+    otherwise when word == "parallel"
+        done("PARALLEL")
+    otherwise when word == "atomic"
+        done("ATOMIC")
+    otherwise when word == "shared"
+        done("SHARED")
+    otherwise when word == "priority"
+        done("PRIORITY")
+    otherwise when word == "sync"
+        done("SYNC")
+    otherwise when word == "wait"
+        done("WAIT")
+    otherwise when word == "loop_hz"
+        done("LOOP_HZ")
+    otherwise when word == "deadline"
+        done("DEADLINE")
+    otherwise when word == "timeout"
+        done("TIMEOUT")
+    otherwise when word == "watch"
+        done("WATCH")
+    otherwise when word == "interrupt"
+        done("INTERRUPT")
+    otherwise when word == "choose"
+        done("CHOOSE")
+    otherwise when word == "case"
+        done("CASE")
+    otherwise when word == "every"
+        done("EVERY")
+    otherwise
+        done("IDENT")
+    done()
+done()
+
+make skip_comment(source, j, n)
+    suppose k = j
+    suppose depth = 1
+    repeat
+        when depth == 0
+            stop
+        done()
+        when k >= n
+            show "LEC1001: unterminated comment"
+            stop
+        done()
+        ensure c = text::char_at(source, k)
+        when c == "("
+            when k + 1 < n
+                when text::char_at(source, k + 1) == "*"
+                    depth = depth + 1
+                    k = k + 2
+                otherwise
+                    k = k + 1
+                done()
+            otherwise
+                k = k + 1
+            done()
+        otherwise when c == "*"
+            when k + 1 < n
+                when text::char_at(source, k + 1) == ")"
+                    depth = depth - 1
+                    k = k + 2
+                otherwise
+                    k = k + 1
+                done()
+            otherwise
+                k = k + 1
+            done()
+        otherwise
+            k = k + 1
+        done()
+    done()
+    done(k)
+done()
+
+make skip_trivia(source, i, n)
+    suppose j = i
+    repeat
+        when j >= n
+            stop
+        done()
+        ensure c = text::char_at(source, j)
+        when c == " "
+            j = j + 1
+        otherwise when c == text::from_code(9)
+            j = j + 1
+        otherwise when c == "("
+            when j + 1 < n
+                when text::char_at(source, j + 1) == "*"
+                    j = skip_comment(source, j + 2, n)
+                otherwise
+                    stop
+                done()
+            otherwise
+                stop
+            done()
+        otherwise when c == "/"
+            (* `//` line comments are a deliberate, real rejection, not
+               an unsupported gap - one sanctioned comment style only
+               (`(* ... *)`, nestable, real depth-tracked in
+               skip_comment above), a real language decision, not a
+               parser limitation. Still advances to end of line (not
+               consuming the newline itself, still a real statement
+               terminator) so a file with several `//` uses reports
+               every one of them in a single pass, matching this
+               project's own "report everything, not just the first"
+               convention (report_parse_errors/report_ctv_errors), and
+               so the rest of the file still lexes instead of the two
+               slashes being read as divide operators followed by
+               garbage tokens. *)
+            when j + 1 < n
+                when text::char_at(source, j + 1) == "/"
+                    show "LEC1002: '//' line comments are not supported - use (* ... *) instead"
+                    suppose k = j + 2
+                    repeat
+                        when k >= n
+                            stop
+                        otherwise when text::char_at(source, k) == text::from_code(10)
+                            stop
+                        otherwise
+                            k = k + 1
+                        done()
+                    done()
+                    j = k
+                otherwise
+                    stop
+                done()
+            otherwise
+                stop
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(j)
+done()
+
+make skip_spaces_tabs(source, i, n)
+    suppose j = i
+    repeat
+        when j >= n
+            stop
+        otherwise when text::char_at(source, j) == " "
+            j = j + 1
+        otherwise when text::char_at(source, j) == text::from_code(9)
+            j = j + 1
+        otherwise
+            stop
+        done()
+    done()
+    done(j)
+done()
+
+(* `done()` and `done(value)` are lexed apart here, same trick as the
+   real compiler: only if nothing but spaces/tabs sit between the
+   parens is it DONE_EMPTY (block close), not the DONE keyword. *)
+make lex_done(source, j, n)
+    ensure k = skip_spaces_tabs(source, j, n)
+    suppose is_empty = false
+    suppose after = k
+    when k < n
+        when text::char_at(source, k) == "("
+            ensure k2 = skip_spaces_tabs(source, k + 1, n)
+            when k2 < n
+                when text::char_at(source, k2) == ")"
+                    is_empty = true
+                    after = k2 + 1
+                done()
+            done()
+        done()
+    done()
+    when is_empty
+        done(LexResult(next_index = after, kind = "DONE_EMPTY", value = ""))
+    done()
+    done(LexResult(next_index = j, kind = "DONE", value = "done"))
+done()
+
+(* LEP-0010 §3's `ensure!`/`suppose!` block form - never actually
+   implemented anywhere before now (checked: not in this bootstrap,
+   not in the OCaml host either - `Accepted` as a design, zero real
+   code). Same disambiguation shape as lex_done's own DONE_EMPTY: a
+   bare `!` immediately after the keyword (spaces/tabs tolerated,
+   matching lex_done's own leniency) makes it a single combined
+   ENSURE_BLOCK/SUPPOSE_BLOCK token instead of the plain keyword - safe
+   precisely because `!` never means anything on its own elsewhere in
+   this grammar (Lepthorn's own logical NOT is the word `not`, LEP-0011
+   - the only other place `!` appears at all is glued to `=` as `!=`,
+   checked first by lex_operator's own 2-char lookahead before a lone
+   `!` would ever reach here). *)
+
+make lex_bang_block(source, j, n, base_kind, base_word, block_kind)
+    ensure k = skip_spaces_tabs(source, j, n)
+    when k < n
+        when text::char_at(source, k) == "!"
+            done(LexResult(next_index = k + 1, kind = block_kind, value = ""))
+        done()
+    done()
+    done(LexResult(next_index = j, kind = base_kind, value = base_word))
+done()
+
+make lex_identifier(source, i, n)
+    suppose j = i + 1
+    repeat
+        when j >= n
+            stop
+        otherwise when is_alnum(text::char_at(source, j))
+            j = j + 1
+        otherwise
+            stop
+        done()
+    done()
+    ensure word = text::slice(source, i, j)
+    when word == "done"
+        done(lex_done(source, j, n))
+    done()
+    when word == "ensure"
+        done(lex_bang_block(source, j, n, "ENSURE", "ensure", "ENSURE_BLOCK"))
+    done()
+    when word == "suppose"
+        done(lex_bang_block(source, j, n, "SUPPOSE", "suppose", "SUPPOSE_BLOCK"))
+    done()
+    ensure kind = classify_keyword(word)
+    done(LexResult(next_index = j, kind = kind, value = word))
+done()
+
+make lex_number(source, i, n)
+    suppose j = i + 1
+    repeat
+        when j >= n
+            stop
+        otherwise when is_digit(text::char_at(source, j))
+            j = j + 1
+        otherwise
+            stop
+        done()
+    done()
+    when j < n
+        when text::char_at(source, j) == "."
+            suppose k = j + 1
+            repeat
+                when k >= n
+                    stop
+                otherwise when is_digit(text::char_at(source, k))
+                    k = k + 1
+                otherwise
+                    stop
+                done()
+            done()
+            when k > j + 1
+                j = k
+            done()
+        done()
+    done()
+    suppose unit_end = j
+    repeat
+        when unit_end >= n
+            stop
+        otherwise when is_alpha(text::char_at(source, unit_end))
+            unit_end = unit_end + 1
+        otherwise
+            stop
+        done()
+    done()
+    ensure word = text::slice(source, i, unit_end)
+    done(LexResult(next_index = unit_end, kind = "NUMBER", value = word))
+done()
+
+make lex_string(source, i, n)
+    ensure quote_char = text::from_code(34)
+    suppose j = i + 1
+    repeat
+        when j >= n
+            stop
+        otherwise when text::char_at(source, j) != quote_char
+            j = j + 1
+        otherwise
+            stop
+        done()
+    done()
+    suppose closing = j
+    when closing < n
+        closing = closing + 1
+    done()
+    ensure word = text::slice(source, i, closing)
+    done(LexResult(next_index = closing, kind = "STRING", value = word))
+done()
+
+make lex_operator(source, i, n)
+    ensure c = text::char_at(source, i)
+    (* `**=` first, longest-match: trying plain `**` before it would
+       greedily consume 2 chars and leave a dangling `=` for a real
+       `speed **= 3` compound assignment (LEP-0011's own operator set -
+       real, pre-existing gap, never lexed at all until this). *)
+    when i + 2 < n
+        ensure c2a = text::char_at(source, i + 1)
+        ensure c3 = text::char_at(source, i + 2)
+        when c3 == "="
+            when c == "*" and c2a == "*"
+                done(LexResult(next_index = i + 3, kind = "OP", value = "**="))
+            done()
+            when c == "<" and c2a == "<"
+                done(LexResult(next_index = i + 3, kind = "OP", value = "<<="))
+            done()
+            when c == ">" and c2a == ">"
+                done(LexResult(next_index = i + 3, kind = "OP", value = ">>="))
+            done()
+        done()
+    done()
+    when i + 1 < n
+        ensure c2 = text::char_at(source, i + 1)
+        when c2 == "<" and c == "<"
+            done(LexResult(next_index = i + 2, kind = "OP", value = "<<"))
+        done()
+        when c2 == ">" and c == ">"
+            done(LexResult(next_index = i + 2, kind = "OP", value = ">>"))
+        done()
+        when c2 == "=" and (c == "&" or c == "|" or c == "^")
+            done(LexResult(next_index = i + 2, kind = "OP", value = c + "="))
+        done()
+        when c2 == "="
+            when c == "="
+                done(LexResult(next_index = i + 2, kind = "OP", value = "=="))
+            done()
+            when c == "!"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "!="))
+            done()
+            when c == "<"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "<="))
+            done()
+            when c == ">"
+                done(LexResult(next_index = i + 2, kind = "OP", value = ">="))
+            done()
+            when c == "+"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "+="))
+            done()
+            when c == "-"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "-="))
+            done()
+            when c == "*"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "*="))
+            done()
+            when c == "/"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "/="))
+            done()
+            when c == "%"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "%="))
+            done()
+        done()
+        when c2 == "*"
+            when c == "*"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "**"))
+            done()
+        done()
+        when c2 == ":"
+            when c == ":"
+                done(LexResult(next_index = i + 2, kind = "OP", value = "::"))
+            done()
+        done()
+    done()
+    done(LexResult(next_index = i + 1, kind = "OP", value = c))
+done()
+
+make next_token(source, i, n)
+    ensure c = text::char_at(source, i)
+    when is_digit(c)
+        done(lex_number(source, i, n))
+    done()
+    when is_alpha(c)
+        done(lex_identifier(source, i, n))
+    done()
+    when c == text::from_code(34)
+        done(lex_string(source, i, n))
+    done()
+    done(lex_operator(source, i, n))
+done()
+
+(* lex_all: full token stream including NEWLINE (statement terminator,
+   pending_content semantics per LEP-0010 - a blank/comment-only line
+   emits none). *)
+
+(* the token buffer is a RingBuffer, not a Queue - parse_primary needs
+   real 2-token lookahead to tell a shape construction `Name(f = v)`
+   apart from a call `f(x, y)`, which front-peek-and-consume (Queue)
+   can't give. See Cursor, below: a read-only RingBuffer of every
+   token plus a mutable `pos` field is peek-anywhere, and "consuming"
+   is just advancing `pos` - the same shared-mutable-state trick
+   Queue's own internal counters already relied on. *)
+
+shape Cursor
+    pos: Number
+done()
+
+make cur_current(tok_buf, cur)
+    ensure n = ring::size(tok_buf)
+    when cur.pos >= n
+        done(LexResult(next_index = 0, kind = "EOF", value = ""))
+    done()
+    done(ring::peek(tok_buf, cur.pos))
+done()
+
+make cur_peek_at(tok_buf, cur, offset)
+    ensure n = ring::size(tok_buf)
+    ensure i = cur.pos + offset
+    when i >= n
+        done(LexResult(next_index = 0, kind = "EOF", value = ""))
+    done()
+    done(ring::peek(tok_buf, i))
+done()
+
+(* the whole reason for Cursor over Queue: telling `Name(f = v)`
+   (shape construction) apart from `f(x, y)` (a call) needs to see two
+   tokens past the `(` still sitting under the cursor. *)
+make looks_like_shape_construct(tok_buf, cur)
+    ensure t1 = cur_peek_at(tok_buf, cur, 1)
+    when t1.kind == "IDENT"
+        ensure t2 = cur_peek_at(tok_buf, cur, 2)
+        when t2.kind == "OP"
+            done(t2.value == "=")
+        done()
+    done()
+    done(false)
+done()
+
+make cur_is_empty(tok_buf, cur)
+    done(cur.pos >= ring::size(tok_buf))
+done()
+
+make cur_take(tok_buf, cur)
+    ensure t = cur_current(tok_buf, cur)
+    cur.pos = cur.pos + 1
+    done(t)
+done()
+
+make lex_all(source)
+    ensure n = text::length(source)
+    ensure tok_buf = ring::create(n + 1)
+    suppose i = 0
+    suppose pending = false
+    (* a newline inside an unclosed ( or [ doesn't end the statement -
+       lets a long call or literal span several lines, as in the host *)
+    suppose depth = 0
+    suppose r = LexResult(next_index = 0, kind = "", value = "")
+    repeat
+        i = skip_trivia(source, i, n)
+        when i >= n
+            stop
+        done()
+        when text::char_at(source, i) == text::from_code(10)
+            when pending and depth == 0
+                ring::write(tok_buf, LexResult(next_index = i + 1, kind = "NEWLINE", value = ""))
+                pending = false
+            done()
+            i = i + 1
+        otherwise
+            r = next_token(source, i, n)
+            ring::write(tok_buf, r)
+            i = r.next_index
+            pending = true
+            when r.kind == "OP"
+                when r.value == "(" or r.value == "["
+                    depth = depth + 1
+                otherwise when r.value == ")" or r.value == "]"
+                    when depth > 0
+                        depth = depth - 1
+                    done()
+                done()
+            done()
+        done()
+    done()
+    done(tok_buf)
+done()
+
+(* AST: no self-referential shapes (verified - a shape field can't
+   name its own shape), so nodes live in a RingBuffer arena sized to
+   the token count (an upper bound on node count - each node consumes
+   at least one token) and reference children by arena index, not by
+   nesting. index 0 = oldest = stable as long as writes stay under
+   capacity, which this bound guarantees. *)
+
+(* left/right/next/alt/arg2 are all arena indices, -1 = none. Reused by
+   context: left/right are expr operands for BINOP, but body/otherwise
+   for WHEN_STMT etc.; next chains a statement to the next one in its
+   block; arg2 is a CALL's third argument. *)

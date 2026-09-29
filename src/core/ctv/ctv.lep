@@ -1,0 +1,475 @@
+(* ctv.lep - the bootstrap's own Compile-Time Verifier: undeclared-
+   variable, immutable-reassignment, undefined-function, and
+   wrong-arity checks. *)
+
+use core::ast::ast
+
+shape DeclInfo
+    name: Text
+    is_mut: Boolean
+done()
+
+shape CtvError
+    message: Text
+done()
+
+make collect_decl(decls, name, is_mut)
+    ring::write(decls, DeclInfo(name = name, is_mut = is_mut))
+done()
+
+make ctv_error(sink, message)
+    ring::write(sink, CtvError(message = message))
+done()
+
+make ctv_is_declared(decls, name)
+    ensure n = ring::size(decls)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure d = ring::peek(decls, i)
+        when d.name == name
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make ctv_is_mutable(decls, name)
+    ensure n = ring::size(decls)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure d = ring::peek(decls, i)
+        when d.name == name
+            done(d.is_mut)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+(* shared bindings (LEP-0020 §6, real as of this session - previously
+   the parser erased `shared` entirely, see parser.lep's own note)
+   collect into BOTH the current scope's own decls (so they're usable
+   immediately, same as any other declaration) AND this separate,
+   program-wide list, later merged into every OTHER scope too
+   (ctv_merge_shared) - matching the OCaml host's own working design,
+   where shared bindings live in a table completely separate from any
+   function's per-call scope, checked independently of it. *)
+
+make ctv_is_shared_mutable(shared_decls, name)
+    ensure n = ring::size(shared_decls)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure d = ring::peek(shared_decls, i)
+        when d.name == name
+            done(d.is_mut)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make ctv_merge_shared(decls, shared_decls)
+    ensure n = ring::size(shared_decls)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure d = ring::peek(shared_decls, i)
+        collect_decl(decls, d.name, d.is_mut)
+        i = i + 1
+    done()
+done()
+
+make ctv_collect_block(arena, decls, shared_decls, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        when node.kind == "ENSURE_STMT"
+            collect_decl(decls, node.op, false)
+        done()
+        when node.kind == "SUPPOSE_STMT"
+            collect_decl(decls, node.op, true)
+        done()
+        when node.kind == "SHARED_ENSURE_STMT"
+            collect_decl(decls, node.op, false)
+            collect_decl(shared_decls, node.op, false)
+        done()
+        when node.kind == "SHARED_SUPPOSE_STMT"
+            collect_decl(decls, node.op, true)
+            collect_decl(shared_decls, node.op, true)
+        done()
+        when node.kind == "DECL_BLOCK_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "WHEN_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+            when node.alt != none_idx()
+                ctv_collect_block(arena, decls, shared_decls, node.alt)
+            done()
+        done()
+        when node.kind == "REPEAT_UNTIL_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "REPEAT_FOREVER_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "REPEAT_COUNT_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "PARALLEL_STMT"
+            ctv_collect_tasks(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "ATOMIC_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "LOOP_HZ_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "DEADLINE_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "TIMEOUT_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "WATCH_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "INTERRUPT_STMT" or node.kind == "EVERY_STMT"
+            ctv_collect_block(arena, decls, shared_decls, node.right)
+        done()
+        when node.kind == "TAKE_STMT" or node.kind == "READ_STMT"
+            collect_decl(decls, node.op, true)
+        done()
+        when node.kind == "CHOOSE_STMT"
+            suppose cidx = node.right
+            repeat
+                when cidx == none_idx()
+                    stop
+                done()
+                ensure cnode = arena_get(arena, cidx)
+                ctv_collect_block(arena, decls, shared_decls, cnode.right)
+                cidx = cnode.sibling
+            done()
+            when node.alt != none_idx()
+                ctv_collect_block(arena, decls, shared_decls, node.alt)
+            done()
+        done()
+        idx = node.sibling
+    done()
+done()
+
+(* each parallel TASK's priority expr can't reference variables (the
+   collect pass only gathers ensure/suppose sites, priority is read-
+   only) - just recurse into the child's own body, same as any other
+   nested block. *)
+
+make ctv_collect_tasks(arena, decls, shared_decls, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ctv_collect_block(arena, decls, shared_decls, node.right)
+        idx = node.sibling
+    done()
+done()
+
+make ctv_func_lookup(funcs, name)
+    ensure n = ring::size(funcs)
+    suppose i = n - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure f = ring::peek(funcs, i)
+        when f.name == name
+            done(f)
+        done()
+        i = i - 1
+    done()
+    done(FuncDef(name = "", params = "", body = none_idx()))
+done()
+
+make ctv_func_param_count(f)
+    done(param_count(f.params))
+done()
+
+make ctv_check_chain(arena, decls, sink, funcs, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ctv_check_expr(arena, decls, sink, funcs, node.left)
+        idx = node.sibling
+    done()
+done()
+
+(* CALL's argument chain is different from ctv_check_chain's shape:
+   the argument expressions themselves ARE the chain nodes (linked via
+   their own .sibling, see parse_call) - not wrapper nodes whose .left
+   points to the value the way FIELD_INIT/ELEM_INIT do. *)
+
+make ctv_check_arglist(arena, decls, sink, funcs, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ctv_check_expr(arena, decls, sink, funcs, idx)
+        idx = node.sibling
+    done()
+done()
+
+make ctv_check_expr(arena, decls, sink, funcs, idx)
+    ensure node = arena_get(arena, idx)
+    when node.kind == "VAR"
+        when not ctv_is_declared(decls, node.op)
+            ctv_error(sink, "undeclared variable '" + node.op + "'")
+        done()
+    otherwise when node.kind == "FIELD_ACCESS"
+        when not ctv_is_declared(decls, node.op)
+            ctv_error(sink, "undeclared variable '" + node.op + "'")
+        done()
+    otherwise when node.kind == "INDEX_ACCESS"
+        when not ctv_is_declared(decls, node.op)
+            ctv_error(sink, "undeclared variable '" + node.op + "'")
+        done()
+        ctv_check_expr(arena, decls, sink, funcs, node.left)
+    otherwise when node.kind == "SHAPE_CONSTRUCT"
+        ctv_check_chain(arena, decls, sink, funcs, node.left)
+    otherwise when node.kind == "ARRAY_LITERAL"
+        ctv_check_chain(arena, decls, sink, funcs, node.left)
+    otherwise when node.kind == "NUM"
+    otherwise when node.kind == "BOOL"
+    otherwise when node.kind == "TEXT"
+    otherwise when node.kind == "UNARY"
+        ctv_check_expr(arena, decls, sink, funcs, node.left)
+    otherwise when node.kind == "CALL"
+        when op_is_namespaced(node.op)
+            ctv_check_arglist(arena, decls, sink, funcs, node.left)
+        otherwise
+            (* length(array) and vector(x, y, z) are built-in top-level
+               functions unless the program defines its own - the host's
+               rule *)
+            ensure target = ctv_func_lookup(funcs, node.op)
+            ensure is_builtin = node.op == "length" or node.op == "vector"
+            when target.body == none_idx() and is_builtin
+            otherwise when target.body == none_idx()
+                ctv_error(sink, "call to undefined function '" + node.op + "'")
+            otherwise when target.body != none_idx()
+                ensure want = ctv_func_param_count(target)
+                when node.num_value != want
+                    ctv_error(sink, "wrong number of arguments in call to '" + node.op + "'")
+                done()
+            done()
+            ctv_check_arglist(arena, decls, sink, funcs, node.left)
+        done()
+    otherwise
+        ctv_check_expr(arena, decls, sink, funcs, node.left)
+        ctv_check_expr(arena, decls, sink, funcs, node.right)
+    done()
+done()
+
+(* `needs_atomic`: true exactly when checking inside a `parallel`
+   task's own body and not yet inside a nested `atomic` block -
+   ctv_check_tasks sets it true entering each task, ATOMIC_STMT's own
+   case sets it back to false entering its body (LEP-0020 §7: atomic
+   is the only approved way to touch shared-mutable state under
+   parallel). Ordinary sequential code (top level, inside a plain
+   `make` function, or inside `atomic`) never carries this - matches
+   the design's own "sequential use: allowed" rule exactly. *)
+
+make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomic)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        when node.kind == "SHOW_STMT"
+            (* `show` may juxtapose several expressions (`show a b c`,
+               LEP-0011), chained via .sibling off node.left the same
+               way CALL arguments are - reuse ctv_check_arglist so
+               every argument gets checked, not just the first. *)
+            ctv_check_arglist(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "FIELD_ASSIGN_STMT"
+            when not ctv_is_declared(decls, node.op)
+                ctv_error(sink, "undeclared variable '" + node.op + "'")
+            done()
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "INDEX_ASSIGN_STMT"
+            when not ctv_is_declared(decls, node.op)
+                ctv_error(sink, "undeclared variable '" + node.op + "'")
+            done()
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_expr(arena, decls, sink, funcs, node.right)
+        otherwise when node.kind == "ASSIGN_STMT"
+            when not ctv_is_declared(decls, node.op)
+                ctv_error(sink, "assignment to undeclared variable '" + node.op + "'")
+            otherwise when not ctv_is_mutable(decls, node.op)
+                ctv_error(sink, "cannot reassign '" + node.op + "' - declared with ensure (immutable)")
+            otherwise when needs_atomic and ctv_is_shared_mutable(shared_decls, node.op)
+                ctv_error(sink, "'" + node.op + "' is a shared suppose value, reassigned inside parallel without atomic")
+            done()
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "SHARED_ENSURE_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "SHARED_SUPPOSE_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "DECL_BLOCK_STMT"
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "WHEN_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+            when node.alt != none_idx()
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic)
+            done()
+        otherwise when node.kind == "REPEAT_UNTIL_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "REPEAT_FOREVER_STMT"
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "REPEAT_COUNT_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "PARALLEL_STMT"
+            ctv_check_tasks(arena, decls, shared_decls, sink, funcs, node.right)
+        otherwise when node.kind == "ATOMIC_STMT"
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, false)
+        otherwise when node.kind == "SYNC_STMT"
+        otherwise when node.kind == "WAIT_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        otherwise when node.kind == "LOOP_HZ_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "DEADLINE_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "TIMEOUT_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "WATCH_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "INTERRUPT_STMT"
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "EVERY_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic)
+        otherwise when node.kind == "CHOOSE_STMT"
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+            suppose cidx = node.right
+            repeat
+                when cidx == none_idx()
+                    stop
+                done()
+                ensure cnode = arena_get(arena, cidx)
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, cnode.right, needs_atomic)
+                cidx = cnode.sibling
+            done()
+            when node.alt != none_idx()
+                ctv_check_block(arena, decls, shared_decls, sink, funcs, node.alt, needs_atomic)
+            done()
+        otherwise when node.kind == "TAKE_STMT" or node.kind == "READ_STMT"
+        otherwise when node.kind == "STOP_STMT"
+        otherwise when node.kind == "NEXT_STMT"
+        otherwise
+            ctv_check_expr(arena, decls, sink, funcs, node.left)
+        done()
+        idx = node.sibling
+    done()
+done()
+
+(* mirrors ctv_collect_tasks: each TASK's priority expr is a real
+   expression (may reference an already-declared variable), its body
+   is an ordinary nested block - entered with needs_atomic = true,
+   the one place it ever becomes true. *)
+
+make ctv_check_tasks(arena, decls, shared_decls, sink, funcs, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ctv_check_expr(arena, decls, sink, funcs, node.left)
+        ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, true)
+        idx = node.sibling
+    done()
+done()
+
+make ctv_check_program(arena, program_start, funcs, sink)
+    ensure cap = ring::size(arena) + 1
+    ensure top_decls = ring::create(cap)
+    ensure shared_decls = ring::create(cap)
+    ctv_collect_block(arena, top_decls, shared_decls, program_start)
+    ensure fn_count = ring::size(funcs)
+    (* one scratch ring reused (cleared) per function, not one each -
+       compiling a large program would otherwise reserve a full
+       arena-sized ring per function *)
+    ensure fn_decls = ring::create(cap)
+    suppose i = 0
+    repeat
+        when i >= fn_count
+            stop
+        done()
+        ensure f = ring::peek(funcs, i)
+        ring::clear(fn_decls)
+        ctv_collect_block(arena, fn_decls, shared_decls, f.body)
+        i = i + 1
+    done()
+    ctv_merge_shared(top_decls, shared_decls)
+    ctv_check_block(arena, top_decls, shared_decls, sink, funcs, program_start, false)
+    suppose j = 0
+    repeat
+        when j >= fn_count
+            stop
+        done()
+        ensure f2 = ring::peek(funcs, j)
+        ring::clear(fn_decls)
+        ensure fpc = param_count(f2.params)
+        suppose pj = 0
+        repeat
+            when pj >= fpc
+                stop
+            done()
+            collect_decl(fn_decls, param_at(f2.params, pj), true)
+            pj = pj + 1
+        done()
+        ctv_collect_block(arena, fn_decls, shared_decls, f2.body)
+        ctv_merge_shared(fn_decls, shared_decls)
+        ctv_check_block(arena, fn_decls, shared_decls, sink, funcs, f2.body, false)
+        j = j + 1
+    done()
+done()
+
+make report_ctv_errors(sink)
+    ensure n = ring::size(sink)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure e = ring::peek(sink, i)
+        show "LEC3001: " + e.message
+        i = i + 1
+    done()
+done()

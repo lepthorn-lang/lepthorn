@@ -1,0 +1,3 @@
+ensure r = ring::create(2)
+show "empty:" ring::is_empty(r)
+show ring::get(r)

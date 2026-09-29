@@ -1,0 +1,12 @@
+392.266 kg·m/s² (N)
+force: 392.266 kg·m/s² (N)
+force: 392.266 kg·m/s² (N) status: ok
+speed: 5 m/s
+energy: 18 kg·m²/s² (J)
+number: 42
+text: drone
+boolean: true
+array: [1, 2, 3]
+masses: [1 kg, 2 kg]
+ring: RingBuffer[1/4]
+formatted: 9.81 m/s²

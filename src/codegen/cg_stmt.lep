@@ -1,0 +1,628 @@
+(* cg_stmt.lep - statement and control-flow codegen. Mirrors exec_stmt's
+   dispatch. Loops use plain basic blocks; stop/next branch straight to
+   the innermost loop's exit/continue label. *)
+
+use core::ast::ast
+use runtime::primitives
+use codegen::cg_core
+use codegen::cg_expr
+
+(* every ensure/suppose name in a body, recursively - so a slot exists
+   in the entry block before any code (in any branch) touches it *)
+make cg_scan_locals(ctx, arena, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ensure k = node.kind
+        when k == "ENSURE_STMT" or k == "SUPPOSE_STMT" or k == "TAKE_STMT" or k == "READ_STMT"
+            cg_add_local(ctx, node.op)
+        otherwise when k == "WHEN_STMT"
+            cg_scan_locals(ctx, arena, node.right)
+            when node.alt != none_idx()
+                cg_scan_locals(ctx, arena, node.alt)
+            done()
+        otherwise when k == "CHOOSE_STMT"
+            suppose lcidx = node.right
+            repeat
+                when lcidx == none_idx()
+                    stop
+                done()
+                ensure lcnode = arena_get(arena, lcidx)
+                cg_scan_locals(ctx, arena, lcnode.right)
+                lcidx = lcnode.sibling
+            done()
+            when node.alt != none_idx()
+                cg_scan_locals(ctx, arena, node.alt)
+            done()
+        otherwise when k == "PARALLEL_STMT"
+            suppose tidx = node.right
+            repeat
+                when tidx == none_idx()
+                    stop
+                done()
+                ensure tnode = arena_get(arena, tidx)
+                cg_scan_locals(ctx, arena, tnode.right)
+                tidx = tnode.sibling
+            done()
+        otherwise when cg_has_body(k)
+            cg_scan_locals(ctx, arena, node.right)
+        done()
+        idx = node.sibling
+    done()
+done()
+
+make cg_has_body(k)
+    done(k == "DECL_BLOCK_STMT" or k == "REPEAT_FOREVER_STMT" or k == "REPEAT_UNTIL_STMT" or k == "REPEAT_COUNT_STMT" or k == "ATOMIC_STMT" or k == "LOOP_HZ_STMT" or k == "DEADLINE_STMT" or k == "TIMEOUT_STMT" or k == "WATCH_STMT" or k == "INTERRUPT_STMT" or k == "EVERY_STMT")
+done()
+
+(* every `shared` name anywhere in a body - these become module globals *)
+make cg_scan_shared(ctx, arena, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        ensure k = node.kind
+        when k == "SHARED_ENSURE_STMT" or k == "SHARED_SUPPOSE_STMT"
+            cg_add_shared(ctx, node.op)
+        otherwise when k == "WHEN_STMT"
+            cg_scan_shared(ctx, arena, node.right)
+            when node.alt != none_idx()
+                cg_scan_shared(ctx, arena, node.alt)
+            done()
+        otherwise when k == "CHOOSE_STMT"
+            suppose scidx = node.right
+            repeat
+                when scidx == none_idx()
+                    stop
+                done()
+                ensure scnode = arena_get(arena, scidx)
+                cg_scan_shared(ctx, arena, scnode.right)
+                scidx = scnode.sibling
+            done()
+            when node.alt != none_idx()
+                cg_scan_shared(ctx, arena, node.alt)
+            done()
+        otherwise when k == "PARALLEL_STMT"
+            suppose tidx = node.right
+            repeat
+                when tidx == none_idx()
+                    stop
+                done()
+                ensure tnode = arena_get(arena, tidx)
+                cg_scan_shared(ctx, arena, tnode.right)
+                tidx = tnode.sibling
+            done()
+        otherwise when cg_has_body(k)
+            cg_scan_shared(ctx, arena, node.right)
+        done()
+        idx = node.sibling
+    done()
+done()
+
+make cg_block(ctx, arena, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        when ctx.terminated
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        cg_stmt(ctx, arena, node)
+        idx = node.sibling
+    done()
+done()
+
+make cg_cond(ctx, arena, expr_idx, which)
+    ensure cv = cg_expr(ctx, arena, expr_idx)
+    ensure ci = cg_tmp(ctx)
+    cg_emit(ctx, ci + " = call i32 @lep_cond(i64 " + cv + ", i32 " + which + ")")
+    ensure cb = cg_tmp(ctx)
+    cg_emit(ctx, cb + " = icmp ne i32 " + ci + ", 0")
+    done(cb)
+done()
+
+make cg_stmt(ctx, arena, node)
+    ensure k = node.kind
+    when k == "ENSURE_STMT" or k == "SUPPOSE_STMT" or k == "ASSIGN_STMT"
+        ensure av = cg_expr(ctx, arena, node.left)
+        cg_store_var(ctx, node.op, av)
+        done(true)
+    done()
+    when k == "SHARED_ENSURE_STMT" or k == "SHARED_SUPPOSE_STMT"
+        ensure gv = cg_expr(ctx, arena, node.left)
+        cg_emit(ctx, "store i64 " + gv + ", ptr @g." + node.op)
+        done(true)
+    done()
+    when k == "SHOW_STMT"
+        cg_show(ctx, arena, node)
+        done(true)
+    done()
+    when k == "EXPR_STMT"
+        ensure enode = arena_get(arena, node.left)
+        when enode.kind == "CALL"
+            cg_call(ctx, arena, enode, false)
+        otherwise
+            cg_expr(ctx, arena, node.left)
+        done()
+        done(true)
+    done()
+    when k == "RETURN_STMT"
+        ensure rv = cg_expr(ctx, arena, node.left)
+        when ctx.in_main
+            cg_emit(ctx, "call void @lep_finish()")
+            cg_emit(ctx, ctx.main_ret)
+            ctx.terminated = true
+        otherwise
+            cg_ret(ctx, rv)
+        done()
+        done(true)
+    done()
+    when k == "FIELD_ASSIGN_STMT"
+        ensure fv = cg_expr(ctx, arena, node.left)
+        ensure fbase = cg_load_var(ctx, node.op)
+        ensure ffid = cg_field_id(ctx, node.params)
+        cg_emit(ctx, "call void @lep_set_field(i64 " + fbase + ", i64 " + ffid + ", i64 " + fv + ")")
+        done(true)
+    done()
+    when k == "INDEX_ASSIGN_STMT"
+        ensure ibase = cg_load_var(ctx, node.op)
+        ensure iidx = cg_expr(ctx, arena, node.left)
+        ensure ival = cg_expr(ctx, arena, node.right)
+        cg_emit(ctx, "call void @lep_index_set(i64 " + ibase + ", i64 " + iidx + ", i64 " + ival + ")")
+        done(true)
+    done()
+    when k == "DECL_BLOCK_STMT" or k == "ATOMIC_STMT" or k == "INTERRUPT_STMT"
+        cg_block(ctx, arena, node.right)
+        done(true)
+    done()
+    when k == "SYNC_STMT"
+        done(true)
+    done()
+    when k == "WATCH_STMT"
+        cg_expr(ctx, arena, node.left)
+        cg_block(ctx, arena, node.right)
+        done(true)
+    done()
+    when k == "WHEN_STMT"
+        cg_when(ctx, arena, node)
+        done(true)
+    done()
+    when k == "REPEAT_FOREVER_STMT"
+        cg_repeat_forever(ctx, arena, node)
+        done(true)
+    done()
+    when k == "REPEAT_UNTIL_STMT"
+        cg_repeat_until(ctx, arena, node)
+        done(true)
+    done()
+    when k == "REPEAT_COUNT_STMT"
+        cg_repeat_count(ctx, arena, node)
+        done(true)
+    done()
+    when k == "STOP_STMT" or k == "NEXT_STMT"
+        suppose target = ctx.break_label
+        when k == "NEXT_STMT"
+            target = ctx.continue_label
+        done()
+        when target == ""
+            cg_fail(ctx, "LEC7001: codegen error: stop/next used outside a loop")
+        otherwise
+            cg_emit(ctx, "br label %" + target)
+            ctx.terminated = true
+        done()
+        done(true)
+    done()
+    when k == "PARALLEL_STMT"
+        cg_parallel(ctx, arena, node)
+        done(true)
+    done()
+    when k == "WAIT_STMT"
+        cg_wait(ctx, arena, node.left, "", "")
+        done(true)
+    done()
+    when k == "LOOP_HZ_STMT"
+        cg_release_loop(ctx, arena, node, false)
+        done(true)
+    done()
+    when k == "EVERY_STMT"
+        cg_release_loop(ctx, arena, node, true)
+        done(true)
+    done()
+    when k == "DEADLINE_STMT"
+        ensure dbud = cg_period(ctx, arena, node.left, "deadline")
+        ensure dst = cg_tmp(ctx)
+        cg_emit(ctx, dst + " = call double @lep_now()")
+        cg_block(ctx, arena, node.right)
+        when not ctx.terminated
+            cg_emit(ctx, "call void @lep_deadline_check(double " + dst + ", double " + dbud + ")")
+        done()
+        done(true)
+    done()
+    when k == "TIMEOUT_STMT"
+        cg_timeout(ctx, arena, node)
+        done(true)
+    done()
+    when k == "TAKE_STMT" or k == "READ_STMT"
+        ensure tname = cg_text_value(ctx, node.op)
+        ensure tv = cg_tmp(ctx)
+        when k == "TAKE_STMT"
+            cg_emit(ctx, tv + " = call i64 @lep_sys_take(i64 " + tname + ")")
+        otherwise
+            cg_emit(ctx, tv + " = call i64 @lep_sys_read(i64 " + tname + ")")
+        done()
+        cg_store_var(ctx, node.op, tv)
+        done(true)
+    done()
+    when k == "CHOOSE_STMT"
+        cg_choose(ctx, arena, node)
+        done(true)
+    done()
+    cg_fail(ctx, "LEC7001: codegen error: unsupported statement kind '" + k + "'")
+    done(false)
+done()
+
+(* the subject must be Text; the first case whose label equals it runs,
+   else the `otherwise` block if there is one *)
+make cg_choose(ctx, arena, node)
+    ensure subj = cg_expr(ctx, arena, node.left)
+    cg_emit(ctx, "call void @lep_choose_check(i64 " + subj + ")")
+    ensure end_l = cg_newlabel(ctx, "endchoose")
+    suppose cidx = node.right
+    repeat
+        when cidx == none_idx()
+            stop
+        done()
+        ensure cnode = arena_get(arena, cidx)
+        ensure lbl = cg_text_value(ctx, cnode.op)
+        ensure eqv = cg_tmp(ctx)
+        cg_emit(ctx, eqv + " = call i64 @lep_eq(i64 " + subj + ", i64 " + lbl + ")")
+        ensure hit = cg_tmp(ctx)
+        cg_emit(ctx, hit + " = icmp eq i64 " + eqv + ", 7")
+        ensure case_l = cg_newlabel(ctx, "case")
+        ensure next_l = cg_newlabel(ctx, "nextcase")
+        cg_emit(ctx, "br i1 " + hit + ", label %" + case_l + ", label %" + next_l)
+        cg_label(ctx, case_l)
+        cg_block(ctx, arena, cnode.right)
+        when not ctx.terminated
+            cg_emit(ctx, "br label %" + end_l)
+        done()
+        cg_label(ctx, next_l)
+        cidx = cnode.sibling
+    done()
+    when node.alt != none_idx()
+        cg_block(ctx, arena, node.alt)
+    done()
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + end_l)
+    done()
+    cg_label(ctx, end_l)
+done()
+
+(* all arguments are evaluated before anything prints, as the
+   interpreter does *)
+make cg_show(ctx, arena, node)
+    suppose regs = ""
+    suppose argc = 0
+    suppose sidx = node.left
+    repeat
+        when sidx == none_idx()
+            stop
+        done()
+        ensure snode = arena_get(arena, sidx)
+        ensure sv = cg_expr(ctx, arena, sidx)
+        when argc == 0
+            regs = sv
+        otherwise
+            regs = regs + "," + sv
+        done()
+        argc = argc + 1
+        sidx = snode.sibling
+    done()
+    when argc == 1
+        cg_emit(ctx, "call void @lep_show1(i64 " + regs + ")")
+        done(true)
+    done()
+    suppose i = 0
+    repeat
+        when i >= argc
+            stop
+        done()
+        suppose first = "0"
+        when i == 0
+            first = "1"
+        done()
+        cg_emit(ctx, "call void @lep_show_arg(i64 " + param_at(regs, i) + ", i64 " + first + ")")
+        i = i + 1
+    done()
+    cg_emit(ctx, "call void @lep_show_end()")
+done()
+
+make cg_when(ctx, arena, node)
+    ensure cb = cg_cond(ctx, arena, node.left, "0")
+    ensure then_l = cg_newlabel(ctx, "then")
+    ensure else_l = cg_newlabel(ctx, "else")
+    ensure merge_l = cg_newlabel(ctx, "endif")
+    cg_emit(ctx, "br i1 " + cb + ", label %" + then_l + ", label %" + else_l)
+    cg_label(ctx, then_l)
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + merge_l)
+    done()
+    cg_label(ctx, else_l)
+    when node.alt != none_idx()
+        cg_block(ctx, arena, node.alt)
+    done()
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + merge_l)
+    done()
+    cg_label(ctx, merge_l)
+done()
+
+make cg_repeat_forever(ctx, arena, node)
+    ensure head_l = cg_newlabel(ctx, "loop")
+    ensure exit_l = cg_newlabel(ctx, "endloop")
+    ensure saved_b = ctx.break_label
+    ensure saved_c = ctx.continue_label
+    ctx.break_label = exit_l
+    ctx.continue_label = head_l
+    cg_emit(ctx, "br label %" + head_l)
+    cg_label(ctx, head_l)
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + head_l)
+    done()
+    ctx.break_label = saved_b
+    ctx.continue_label = saved_c
+    cg_label(ctx, exit_l)
+done()
+
+(* do-until: `next` lands on the condition check, like the host *)
+make cg_repeat_until(ctx, arena, node)
+    ensure head_l = cg_newlabel(ctx, "loop")
+    ensure check_l = cg_newlabel(ctx, "until")
+    ensure exit_l = cg_newlabel(ctx, "endloop")
+    ensure saved_b = ctx.break_label
+    ensure saved_c = ctx.continue_label
+    ctx.break_label = exit_l
+    ctx.continue_label = check_l
+    cg_emit(ctx, "br label %" + head_l)
+    cg_label(ctx, head_l)
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + check_l)
+    done()
+    ctx.break_label = saved_b
+    ctx.continue_label = saved_c
+    cg_label(ctx, check_l)
+    ensure cb = cg_cond(ctx, arena, node.left, "1")
+    cg_emit(ctx, "br i1 " + cb + ", label %" + exit_l + ", label %" + head_l)
+    cg_label(ctx, exit_l)
+done()
+
+make cg_repeat_count(ctx, arena, node)
+    ensure cv = cg_expr(ctx, arena, node.left)
+    ensure n = cg_tmp(ctx)
+    cg_emit(ctx, n + " = call i64 @lep_count(i64 " + cv + ")")
+    ensure slot = cg_newlabel(ctx, "%rc")
+    cg_alloca(ctx, slot, "i64")
+    cg_emit(ctx, "store i64 0, ptr " + slot)
+    ensure check_l = cg_newlabel(ctx, "count")
+    ensure body_l = cg_newlabel(ctx, "loop")
+    ensure incr_l = cg_newlabel(ctx, "next")
+    ensure exit_l = cg_newlabel(ctx, "endloop")
+    ensure saved_b = ctx.break_label
+    ensure saved_c = ctx.continue_label
+    ctx.break_label = exit_l
+    ctx.continue_label = incr_l
+    cg_emit(ctx, "br label %" + check_l)
+    cg_label(ctx, check_l)
+    ensure cur = cg_tmp(ctx)
+    cg_emit(ctx, cur + " = load i64, ptr " + slot)
+    ensure more = cg_tmp(ctx)
+    cg_emit(ctx, more + " = icmp slt i64 " + cur + ", " + n)
+    cg_emit(ctx, "br i1 " + more + ", label %" + body_l + ", label %" + exit_l)
+    cg_label(ctx, body_l)
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + incr_l)
+    done()
+    ctx.break_label = saved_b
+    ctx.continue_label = saved_c
+    cg_label(ctx, incr_l)
+    ensure cur2 = cg_tmp(ctx)
+    cg_emit(ctx, cur2 + " = load i64, ptr " + slot)
+    ensure nxt = cg_tmp(ctx)
+    cg_emit(ctx, nxt + " = add i64 " + cur2 + ", 1")
+    cg_emit(ctx, "store i64 " + nxt + ", ptr " + slot)
+    cg_emit(ctx, "br label %" + check_l)
+    cg_label(ctx, exit_l)
+done()
+
+(* `parallel` runs its tasks one after another in priority order
+   (highest first, ties in source order) - the same order the
+   interpreter and host launch them in. Priorities are all evaluated
+   before any task body runs. *)
+make cg_parallel(ctx, arena, node)
+    ensure n = cg_chain_len(arena, node.right)
+    when n == 0
+        done(true)
+    done()
+    ensure ns = text::from_number(n)
+    ensure prios = cg_newlabel(ctx, "%pr")
+    ensure used = cg_newlabel(ctx, "%pu")
+    cg_alloca(ctx, prios, "[" + ns + " x i64]")
+    cg_alloca(ctx, used, "[" + ns + " x i8]")
+    suppose tidx = node.right
+    suppose ti = 0
+    repeat
+        when tidx == none_idx()
+            stop
+        done()
+        ensure tnode = arena_get(arena, tidx)
+        ensure pv = cg_expr(ctx, arena, tnode.left)
+        ensure pp = cg_tmp(ctx)
+        cg_emit(ctx, pp + " = getelementptr i64, ptr " + prios + ", i64 " + text::from_number(ti))
+        cg_emit(ctx, "store i64 " + pv + ", ptr " + pp)
+        ensure up = cg_tmp(ctx)
+        cg_emit(ctx, up + " = getelementptr i8, ptr " + used + ", i64 " + text::from_number(ti))
+        cg_emit(ctx, "store i8 0, ptr " + up)
+        tidx = tnode.sibling
+        ti = ti + 1
+    done()
+    ensure pick_l = cg_newlabel(ctx, "pick")
+    ensure exit_l = cg_newlabel(ctx, "endpar")
+    ensure base = cg_newlabel(ctx, "task")
+    cg_emit(ctx, "br label %" + pick_l)
+    cg_label(ctx, pick_l)
+    ensure sel = cg_tmp(ctx)
+    cg_emit(ctx, sel + " = call i64 @lep_pick_task(ptr " + prios + ", ptr " + used + ", i64 " + ns + ")")
+    suppose cases = ""
+    suppose ci = 0
+    repeat
+        when ci >= n
+            stop
+        done()
+        cases = cases + " i64 " + text::from_number(ci) + ", label %" + base + "_" + text::from_number(ci)
+        ci = ci + 1
+    done()
+    cg_emit(ctx, "switch i64 " + sel + ", label %" + exit_l + " [" + cases + " ]")
+    suppose tidx2 = node.right
+    suppose tj = 0
+    repeat
+        when tidx2 == none_idx()
+            stop
+        done()
+        ensure tnode2 = arena_get(arena, tidx2)
+        cg_label(ctx, base + "_" + text::from_number(tj))
+        cg_block(ctx, arena, tnode2.right)
+        when not ctx.terminated
+            cg_emit(ctx, "br label %" + pick_l)
+        done()
+        tidx2 = tnode2.sibling
+        tj = tj + 1
+    done()
+    cg_label(ctx, exit_l)
+done()
+
+make cg_period(ctx, arena, expr_idx, what)
+    ensure pv = cg_expr(ctx, arena, expr_idx)
+    ensure wv = cg_text_value(ctx, what)
+    ensure pr = cg_tmp(ctx)
+    cg_emit(ctx, pr + " = call double @lep_period(i64 " + pv + ", i64 " + wv + ")")
+    done(pr)
+done()
+
+(* `wait <Boolean>` polls until true; `wait <duration>` sleeps. Inside a
+   `timeout`, started/budget are the timeout's own, and a poll gives up
+   (with the host's warning) once the budget is spent. *)
+make cg_wait(ctx, arena, expr_idx, started, budget)
+    ensure v0 = cg_expr(ctx, arena, expr_idx)
+    ensure ib = cg_tmp(ctx)
+    cg_emit(ctx, ib + " = call i32 @lep_is_bool(i64 " + v0 + ")")
+    ensure ibc = cg_tmp(ctx)
+    cg_emit(ctx, ibc + " = icmp ne i32 " + ib + ", 0")
+    ensure poll_l = cg_newlabel(ctx, "wpoll")
+    ensure sleep_l = cg_newlabel(ctx, "wsleep")
+    ensure dur_l = cg_newlabel(ctx, "wdur")
+    ensure end_l = cg_newlabel(ctx, "wend")
+    cg_emit(ctx, "br i1 " + ibc + ", label %" + poll_l + ", label %" + dur_l)
+    cg_label(ctx, dur_l)
+    ensure wtxt = cg_text_value(ctx, "wait")
+    ensure per = cg_tmp(ctx)
+    cg_emit(ctx, per + " = call double @lep_period(i64 " + v0 + ", i64 " + wtxt + ")")
+    cg_emit(ctx, "call void @lep_sleep(double " + per + ")")
+    when started != ""
+        cg_emit(ctx, "call void @lep_timeout_check(double " + started + ", double " + budget + ")")
+    done()
+    cg_emit(ctx, "br label %" + end_l)
+    cg_label(ctx, poll_l)
+    ensure vk = cg_expr(ctx, arena, expr_idx)
+    ensure ok = cg_tmp(ctx)
+    cg_emit(ctx, ok + " = icmp eq i64 " + vk + ", 7")
+    cg_emit(ctx, "br i1 " + ok + ", label %" + end_l + ", label %" + sleep_l)
+    cg_label(ctx, sleep_l)
+    when started != ""
+        ensure now = cg_tmp(ctx)
+        cg_emit(ctx, now + " = call double @lep_now()")
+        ensure el = cg_tmp(ctx)
+        cg_emit(ctx, el + " = fsub double " + now + ", " + started)
+        ensure over = cg_tmp(ctx)
+        cg_emit(ctx, over + " = fcmp ogt double " + el + ", " + budget)
+        ensure warn_l = cg_newlabel(ctx, "wwarn")
+        ensure nap_l = cg_newlabel(ctx, "wnap")
+        cg_emit(ctx, "br i1 " + over + ", label %" + warn_l + ", label %" + nap_l)
+        cg_label(ctx, warn_l)
+        cg_emit(ctx, "call void @lep_timeout_warn(double " + budget + ")")
+        cg_emit(ctx, "br label %" + end_l)
+        cg_label(ctx, nap_l)
+    done()
+    cg_emit(ctx, "call void @lep_sleep(double 0.001)")
+    cg_emit(ctx, "br label %" + poll_l)
+    cg_label(ctx, end_l)
+done()
+
+make cg_timeout(ctx, arena, node)
+    ensure bud = cg_period(ctx, arena, node.left, "timeout")
+    ensure st = cg_tmp(ctx)
+    cg_emit(ctx, st + " = call double @lep_now()")
+    when node.right != none_idx()
+        ensure only = arena_get(arena, node.right)
+        when only.kind == "WAIT_STMT" and only.sibling == none_idx()
+            cg_wait(ctx, arena, only.left, st, bud)
+            done(true)
+        done()
+    done()
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "call void @lep_timeout_check(double " + st + ", double " + bud + ")")
+    done()
+done()
+
+(* loop_hz / every: a fixed release grid - iteration k starts at
+   start + k*period, so a long body never drifts the schedule later *)
+make cg_release_loop(ctx, arena, node, is_every)
+    ensure hv = cg_expr(ctx, arena, node.left)
+    ensure per = cg_tmp(ctx)
+    when is_every
+        ensure etxt = cg_text_value(ctx, "every")
+        cg_emit(ctx, per + " = call double @lep_period(i64 " + hv + ", i64 " + etxt + ")")
+    otherwise
+        cg_emit(ctx, per + " = call double @lep_hz_period(i64 " + hv + ")")
+    done()
+    ensure st = cg_tmp(ctx)
+    cg_emit(ctx, st + " = call double @lep_now()")
+    ensure slot = cg_newlabel(ctx, "%it")
+    cg_alloca(ctx, slot, "i64")
+    cg_emit(ctx, "store i64 0, ptr " + slot)
+    ensure head_l = cg_newlabel(ctx, "tick")
+    ensure cont_l = cg_newlabel(ctx, "tock")
+    ensure exit_l = cg_newlabel(ctx, "endtick")
+    ensure saved_b = ctx.break_label
+    ensure saved_c = ctx.continue_label
+    ctx.break_label = exit_l
+    ctx.continue_label = cont_l
+    cg_emit(ctx, "br label %" + head_l)
+    cg_label(ctx, head_l)
+    cg_block(ctx, arena, node.right)
+    when not ctx.terminated
+        cg_emit(ctx, "br label %" + cont_l)
+    done()
+    ctx.break_label = saved_b
+    ctx.continue_label = saved_c
+    cg_label(ctx, cont_l)
+    ensure i0 = cg_tmp(ctx)
+    cg_emit(ctx, i0 + " = load i64, ptr " + slot)
+    ensure i1 = cg_tmp(ctx)
+    cg_emit(ctx, i1 + " = add i64 " + i0 + ", 1")
+    cg_emit(ctx, "store i64 " + i1 + ", ptr " + slot)
+    cg_emit(ctx, "call void @lep_release_wait(double " + st + ", double " + per + ", i64 " + i1 + ")")
+    cg_emit(ctx, "br label %" + head_l)
+    cg_label(ctx, exit_l)
+done()

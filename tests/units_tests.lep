@@ -1,0 +1,6 @@
+use runtime::interpreter
+
+ensure newline = text::from_code(10)
+show "-- units: dimensioned arithmetic + mismatch detection --"
+run_program("ensure mass = 5kg" + newline + "ensure mass2 = 3kg" + newline + "show mass + mass2")
+run_program("ensure bad = 5kg + 3m" + newline + "show bad")

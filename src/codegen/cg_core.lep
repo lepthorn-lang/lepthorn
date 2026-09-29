@@ -1,0 +1,439 @@
+(* cg_core.lep - native codegen state and shared helpers.
+
+   Every Lepthorn value is one i64 word at runtime: a dimensionless
+   Number is its IEEE-754 bits plus 2^49, a Boolean is 6/7, "no value"
+   is 10, and everything else (Text, dimensioned Number, shape, array,
+   ring/queue/stack, file handle) is a raw pointer to a heap object.
+   Codegen therefore never needs to know a value's kind ahead of time -
+   the runtime (cg_rt_*.lep, emitted as LLVM IR into every program)
+   checks kinds where an operation needs one. *)
+
+use core::ast::ast
+use core::units::quantity
+use core::lang_syntax::parser
+use runtime::primitives
+
+(* collection-valued fields are declared Number: the language has no
+   type name for a ring/handle, and a dynamic value satisfies any
+   declared field type (same approach as Binding.num_value). *)
+
+shape CgCtx
+    counter: Number
+    cur: Text
+    chunks: Number
+    gcur: Text
+    gchunks: Number
+    allocas: Text
+    terminated: Boolean
+    break_label: Text
+    continue_label: Text
+    failed: Boolean
+    fids: Number
+    shapes: Number
+    funcs: Number
+    locals: Number
+    shared_names: Number
+    unit_table: Number
+    in_main: Boolean
+    main_ret: Text
+done()
+
+make cg_emit(ctx, line)
+    ctx.cur = ctx.cur + "  " + line + text::from_code(10)
+    when text::length(ctx.cur) > 4000
+        ring::write(ctx.chunks, ctx.cur)
+        ctx.cur = ""
+    done()
+done()
+
+make cg_label(ctx, name)
+    ctx.cur = ctx.cur + name + ":" + text::from_code(10)
+    ctx.terminated = false
+done()
+
+make cg_global(ctx, line)
+    ctx.gcur = ctx.gcur + line + text::from_code(10)
+    when text::length(ctx.gcur) > 4000
+        ring::write(ctx.gchunks, ctx.gcur)
+        ctx.gcur = ""
+    done()
+done()
+
+make cg_tmp(ctx)
+    ctx.counter = ctx.counter + 1
+    done("%t" + text::from_number(ctx.counter))
+done()
+
+make cg_newlabel(ctx, base)
+    ctx.counter = ctx.counter + 1
+    done(base + text::from_number(ctx.counter))
+done()
+
+make cg_fail(ctx, msg)
+    ctx.failed = true
+    show msg
+done()
+
+(* a function-level alloca, hoisted into the entry block so a loop never
+   grows the stack per iteration *)
+make cg_alloca(ctx, reg, ty)
+    ctx.allocas = ctx.allocas + "  " + reg + " = alloca " + ty + text::from_code(10)
+done()
+
+(* -- LLVM text constants -- *)
+
+make cg_hex2(n)
+    ensure digits = "0123456789ABCDEF"
+    ensure lo = n % 16
+    ensure hi = (n - lo) / 16
+    done(text::char_at(digits, hi) + text::char_at(digits, lo))
+done()
+
+(* Lepthorn has no char->code builtin; only reached for the rare bytes
+   that need a \XX escape (quote, backslash, control, non-ASCII). *)
+make cg_char_code(c)
+    suppose k = 0
+    repeat
+        when k > 255
+            stop
+        done()
+        when text::from_code(k) == c
+            done(k)
+        done()
+        k = k + 1
+    done()
+    done(63)
+done()
+
+make cg_escape(s)
+    ensure len = text::length(s)
+    ensure q = text::from_code(34)
+    ensure bs = text::from_code(92)
+    suppose outs = ""
+    suppose run_start = 0
+    suppose i = 0
+    repeat
+        when i >= len
+            stop
+        done()
+        ensure c = text::char_at(s, i)
+        suppose plain = false
+        when c >= " "
+            when c <= "~"
+                when c != q
+                    when c != bs
+                        plain = true
+                    done()
+                done()
+            done()
+        done()
+        when not plain
+            ensure code = cg_char_code(c)
+            outs = outs + text::slice(s, run_start, i) + bs + cg_hex2(code)
+            run_start = i + 1
+        done()
+        i = i + 1
+    done()
+    done(outs + text::slice(s, run_start, len))
+done()
+
+(* a NUL-terminated C string global *)
+make cg_cstr_global(ctx, gname, s)
+    ensure n1 = text::from_number(text::length(s) + 1)
+    ensure q = text::from_code(34)
+    cg_global(ctx, gname + " = private unnamed_addr constant [" + n1 + " x i8] c" + q + cg_escape(s) + "\00" + q)
+done()
+
+(* a Text heap-object layout constant: {kind=1, aux, len, bytes} *)
+make cg_text_global(ctx, gname, s)
+    ensure len = text::length(s)
+    ensure n1 = text::from_number(len + 1)
+    ensure q = text::from_code(34)
+    cg_global(ctx, gname + " = private unnamed_addr constant { i32, i32, i64, [" + n1 + " x i8] } { i32 1, i32 0, i64 " + text::from_number(len) + ", [" + n1 + " x i8] c" + q + cg_escape(s) + "\00" + q + " }, align 8")
+done()
+
+make cg_text_value(ctx, s)
+    ensure gname = cg_newlabel(ctx, "@.s")
+    cg_text_global(ctx, gname, s)
+    ensure r = cg_tmp(ctx)
+    cg_emit(ctx, r + " = ptrtoint ptr " + gname + " to i64")
+    done(r)
+done()
+
+(* LLVM needs a '.' or exponent in every double literal; %.17g omits
+   both for whole numbers. *)
+make cg_double_lit(n)
+    ensure s = text::from_number(n)
+    when s == "inf"
+        done("0x7FF0000000000000")
+    done()
+    ensure len = text::length(s)
+    suppose i = 0
+    repeat
+        when i >= len
+            stop
+        done()
+        ensure c = text::char_at(s, i)
+        when c == "."
+            done(s)
+        done()
+        when c == "e"
+            done(s)
+        done()
+        i = i + 1
+    done()
+    done(s + ".0")
+done()
+
+make cg_num_lit(ctx, magnitude)
+    ensure b = cg_tmp(ctx)
+    cg_emit(ctx, b + " = bitcast double " + cg_double_lit(magnitude) + " to i64")
+    ensure r = cg_tmp(ctx)
+    cg_emit(ctx, r + " = add i64 " + b + ", 562949953421312")
+    done(r)
+done()
+
+(* -- lookups -- *)
+
+make cg_text_index(r, name)
+    ensure n = ring::size(r)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        when ring::peek(r, i) == name
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()
+
+make cg_is_local(ctx, name)
+    done(cg_text_index(ctx.locals, name) >= 0)
+done()
+
+make cg_is_shared(ctx, name)
+    done(cg_text_index(ctx.shared_names, name) >= 0)
+done()
+
+make cg_add_local(ctx, name)
+    when cg_is_local(ctx, name)
+        done(true)
+    done()
+    ring::write(ctx.locals, name)
+    ctx.allocas = ctx.allocas + "  %v." + name + " = alloca i64" + text::from_code(10) + "  store i64 10, ptr %v." + name + text::from_code(10)
+done()
+
+make cg_add_shared(ctx, name)
+    when cg_is_shared(ctx, name)
+        done(true)
+    done()
+    ring::write(ctx.shared_names, name)
+done()
+
+(* shape id: the LAST declaration with this name wins, like the host's
+   own shape table *)
+make cg_shape_id(ctx, name)
+    suppose i = ring::size(ctx.shapes) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure sd = ring::peek(ctx.shapes, i)
+        when sd.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make cg_func_index(ctx, name)
+    suppose i = ring::size(ctx.funcs) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure f = ring::peek(ctx.funcs, i)
+        when f.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make cg_load_var(ctx, name)
+    ensure r = cg_tmp(ctx)
+    when cg_is_local(ctx, name)
+        cg_emit(ctx, r + " = load i64, ptr %v." + name)
+        done(r)
+    done()
+    when cg_is_shared(ctx, name)
+        cg_emit(ctx, r + " = load i64, ptr @g." + name)
+        done(r)
+    done()
+    cg_fail(ctx, "LEC7009: codegen error: undefined variable '" + name + "'")
+    done("10")
+done()
+
+make cg_store_var(ctx, name, v)
+    when cg_is_local(ctx, name)
+        cg_emit(ctx, "store i64 " + v + ", ptr %v." + name)
+        done(true)
+    done()
+    when cg_is_shared(ctx, name)
+        cg_emit(ctx, "store i64 " + v + ", ptr @g." + name)
+        done(true)
+    done()
+    cg_fail(ctx, "LEC7009: codegen error: assignment to undeclared variable '" + name + "'")
+done()
+
+(* returns from the current function, restoring the call-depth counter *)
+make cg_ret(ctx, v)
+    ensure d0 = cg_tmp(ctx)
+    cg_emit(ctx, d0 + " = load i64, ptr @lep_depth")
+    ensure d1 = cg_tmp(ctx)
+    cg_emit(ctx, d1 + " = sub i64 " + d0 + ", 1")
+    cg_emit(ctx, "store i64 " + d1 + ", ptr @lep_depth")
+    cg_emit(ctx, "ret i64 " + v)
+    ctx.terminated = true
+done()
+
+(* -- builtins: `ns::fn` calls map to runtime @lep_ns_fn, all i64 -- *)
+
+make cg_builtin_arity(op)
+    when op == "text::length" or op == "text::to_number" or op == "text::from_code" or op == "text::from_number"
+        done(1)
+    done()
+    when op == "text::char_at"
+        done(2)
+    done()
+    when op == "text::slice"
+        done(3)
+    done()
+    when op == "ring::create" or op == "ring::get" or op == "ring::size" or op == "ring::is_empty" or op == "ring::is_full" or op == "ring::clear"
+        done(1)
+    done()
+    when op == "ring::write" or op == "ring::peek"
+        done(2)
+    done()
+    when op == "queue::create" or op == "queue::dequeue" or op == "queue::front" or op == "queue::size" or op == "queue::is_empty" or op == "queue::is_full"
+        done(1)
+    done()
+    when op == "queue::enqueue"
+        done(2)
+    done()
+    when op == "stack::create" or op == "stack::pop" or op == "stack::peek" or op == "stack::size" or op == "stack::is_empty" or op == "stack::is_full"
+        done(1)
+    done()
+    when op == "stack::push"
+        done(2)
+    done()
+    when op == "file::open" or op == "file::load" or op == "file::write"
+        done(2)
+    done()
+    when op == "file::close" or op == "file::exists" or op == "file::delete"
+        done(1)
+    done()
+    when op == "file::error"
+        done(0)
+    done()
+    when op == "force::gravity" or op == "matrix::rotationZ"
+        done(1)
+    done()
+    when op == "force::acceleration" or op == "motion::velocity"
+        done(2)
+    done()
+    when op == "sys::arg_count" or op == "sys::cwd" or op == "sys::now"
+        done(0)
+    done()
+    when op == "sys::arg" or op == "sys::run" or op == "sys::exit" or op == "sys::getenv" or op == "sys::is_dir" or op == "sys::mkdir" or op == "sys::file_size" or op == "sys::realpath" or op == "sys::kind" or op == "sys::take" or op == "sys::read" or op == "sys::list_dir" or op == "sys::fail" or op == "sys::capture" or op == "sys::chdir"
+        done(1)
+    done()
+    when op == "text::format"
+        done(1)
+    done()
+    when op == "sys::setenv"
+        done(2)
+    done()
+    done(0 - 1)
+done()
+
+make cg_builtin_symbol(op)
+    ensure len = text::length(op)
+    suppose i = 0
+    repeat
+        when i + 1 >= len
+            stop
+        done()
+        when text::char_at(op, i) == ":"
+            done("@lep_" + text::slice(op, 0, i) + "_" + text::slice(op, i + 2, len))
+        done()
+        i = i + 1
+    done()
+    done("@lep_" + op)
+done()
+
+make cg_binop_fn(op)
+    when op == "+"
+        done("@lep_add")
+    done()
+    when op == "-"
+        done("@lep_sub")
+    done()
+    when op == "*"
+        done("@lep_mul")
+    done()
+    when op == "/"
+        done("@lep_div")
+    done()
+    when op == "%"
+        done("@lep_mod")
+    done()
+    when op == "**"
+        done("@lep_pow")
+    done()
+    when op == "=="
+        done("@lep_eq")
+    done()
+    when op == "!="
+        done("@lep_ne")
+    done()
+    when op == "<"
+        done("@lep_lt")
+    done()
+    when op == ">"
+        done("@lep_gt")
+    done()
+    when op == "<="
+        done("@lep_le")
+    done()
+    when op == ">="
+        done("@lep_ge")
+    done()
+    when op == "and"
+        done("@lep_and")
+    done()
+    when op == "or"
+        done("@lep_or")
+    done()
+    when op == "&"
+        done("@lep_band")
+    done()
+    when op == "|"
+        done("@lep_bor")
+    done()
+    when op == "^"
+        done("@lep_bxor")
+    done()
+    when op == "<<"
+        done("@lep_shl")
+    done()
+    when op == ">>"
+        done("@lep_shr")
+    done()
+    done("")
+done()

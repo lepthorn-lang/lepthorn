@@ -1,0 +1,13 @@
+(* 29_choose_case.lep - pattern selection, replacing switch/match. Case
+   labels are quoted Text, not bare identifiers. *)
+
+ensure mode = "AUTO"
+
+choose mode
+case "AUTO"
+    show "Running autonomously"
+case "MANUAL"
+    show "Under manual control"
+otherwise
+    show "Unknown mode"
+done()

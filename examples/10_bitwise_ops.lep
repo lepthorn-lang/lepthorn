@@ -1,0 +1,11 @@
+(* 10_bitwise_ops.lep - & | ^ ~ << >> work on dimensionless whole numbers. *)
+
+ensure a = 6
+ensure b = 3
+
+show "a & b:" (a & b)
+show "a | b:" (a | b)
+show "a ^ b:" (a ^ b)
+show "~a:" (~a)
+show "a << 2:" (a << 2)
+show "a >> 1:" (a >> 1)

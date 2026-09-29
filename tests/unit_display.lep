@@ -1,0 +1,26 @@
+(* unit display: SI style in Unicode by default, ASCII when
+   LEPTHORN_OUTPUT=ascii; the mode is read at each show *)
+ensure force = 40kg * 9.80665m/1s/1s
+ensure pressure = force / 1m / 1m
+ensure freq = 1 / 2s
+ensure power = force * 3m / 1s
+ensure big = 1m * 1m * 1m * 1m * 1m * 1m * 1m * 1m * 1m * 1m * 1m / 1kg / 1s
+
+show "force:" force
+show "pressure:" pressure
+show "frequency:" freq
+show "power:" power
+show "big:" big
+show "angle:" 2rad
+show "formatted:" text::format(force)
+
+sys::setenv("LEPTHORN_OUTPUT", "ascii")
+show "force:" force
+show "pressure:" pressure
+show "frequency:" freq
+show "power:" power
+show "big:" big
+show "formatted:" text::format(force)
+
+sys::setenv("LEPTHORN_OUTPUT", "unicode")
+show "back:" force

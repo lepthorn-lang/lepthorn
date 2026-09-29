@@ -1,0 +1,46 @@
+(* 39_text_primitives.lep - text::length, char_at, slice and to_number,
+   and comparing Text with < <= > >=. The compiler's own lexer is built
+   from these. *)
+
+ensure source = "mass25"
+
+ensure len = text::length(source)
+show "length:" len
+
+ensure first_char = text::char_at(source, 0)
+show "first char:" first_char
+
+ensure digits = text::slice(source, 4, 6)
+show "digits slice:" digits
+
+ensure parsed = text::to_number(digits)
+show "parsed number:" parsed
+
+(* Ordering comparison on Text - lexicographic, used for char-range checks
+   like a lexer's `is_digit`/`is_alpha`. *)
+ensure c = "5"
+when c >= "0" and c <= "9"
+    show "c is a digit"
+otherwise
+    show "c is not a digit"
+done()
+
+ensure letter = "m"
+when letter >= "a" and letter <= "z"
+    show "letter is lowercase alpha"
+otherwise
+    show "letter is not lowercase alpha"
+done()
+
+(* Walk the whole string character by character - the exact loop shape a
+   lexer's main scan loop needs. *)
+suppose i = 0
+suppose collected = ""
+suppose ch = ""
+repeat
+    ch = text::char_at(source, i)
+    collected = collected + ch
+    i = i + 1
+until i >= text::length(source)
+done()
+show "reassembled:" collected

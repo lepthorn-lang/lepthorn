@@ -1,0 +1,8 @@
+queue front: a size: 2
+dequeued: a b
+queue empty: true
+stack full: true top: 2 m
+popped: 2 m 1 m
+ring: RingBuffer[3/3] oldest: 21 newest: 31
+got: 21 left: 2
+cleared: true

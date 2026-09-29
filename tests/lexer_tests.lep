@@ -1,0 +1,14 @@
+use runtime::interpreter
+
+show "-- lexer: token stream for a small real program --"
+ensure newline = text::from_code(10)
+ensure sample = "ensure mass = 25kg" + newline + "show mass"
+ensure toks = lex_all(sample)
+ensure c = Cursor(pos = 0)
+repeat
+    when cur_is_empty(toks, c)
+        stop
+    done()
+    ensure t = cur_take(toks, c)
+    show t.kind ":" t.value
+done()

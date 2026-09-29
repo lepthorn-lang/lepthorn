@@ -1,0 +1,102 @@
+(* quantity.lep - the unit table (units.ml's, field for field: same
+   dimensions, same SI scales) and dimension equality. A unit literal's
+   suffix is looked up here at compile time; the runtime carries the
+   dimension from there on. An unknown suffix comes back with suffix ""
+   and each caller reports it. *)
+
+shape Dimension
+    kg: Number
+    m: Number
+    s: Number
+    a: Number
+    k: Number
+    mol: Number
+    cd: Number
+    rad: Number
+done()
+
+shape UnitEntry
+    suffix: Text
+    dim: Dimension
+    scale: Number
+done()
+
+make dim_zero()
+    done(Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0))
+done()
+
+make dim_equal(d1, d2)
+    when d1.kg != d2.kg
+        done(false)
+    done()
+    when d1.m != d2.m
+        done(false)
+    done()
+    when d1.s != d2.s
+        done(false)
+    done()
+    when d1.a != d2.a
+        done(false)
+    done()
+    when d1.k != d2.k
+        done(false)
+    done()
+    when d1.mol != d2.mol
+        done(false)
+    done()
+    when d1.cd != d2.cd
+        done(false)
+    done()
+    when d1.rad != d2.rad
+        done(false)
+    done()
+    done(true)
+done()
+
+make mk_unit(table, suffix, dim, scale)
+    ring::write(table, UnitEntry(suffix = suffix, dim = dim, scale = scale))
+done()
+
+make build_unit_table()
+    ensure table = ring::create(21)
+    mk_unit(table, "kg", Dimension(kg = 1, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "g", Dimension(kg = 1, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 0.001)
+    mk_unit(table, "t", Dimension(kg = 1, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1000)
+    mk_unit(table, "m", Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "km", Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1000)
+    mk_unit(table, "cm", Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 0.01)
+    mk_unit(table, "mm", Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 0.001)
+    mk_unit(table, "s", Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "ms", Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 0.001)
+    mk_unit(table, "min", Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 60)
+    mk_unit(table, "h", Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 3600)
+    mk_unit(table, "N", Dimension(kg = 1, m = 1, s = 0 - 2, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "kN", Dimension(kg = 1, m = 1, s = 0 - 2, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1000)
+    mk_unit(table, "MN", Dimension(kg = 1, m = 1, s = 0 - 2, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1000000)
+    mk_unit(table, "mps", Dimension(kg = 0, m = 1, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "Hz", Dimension(kg = 0, m = 0, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1)
+    mk_unit(table, "kHz", Dimension(kg = 0, m = 0, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0), 1000)
+    mk_unit(table, "rad", Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 1), 1)
+    mk_unit(table, "degree", Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 1), 0.017453292519943295)
+    mk_unit(table, "deg", Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 1), 0.017453292519943295)
+    done(table)
+done()
+
+make lookup_unit(table, suffix)
+    when suffix == ""
+        done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+    done()
+    ensure n = ring::size(table)
+    suppose i = n - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure entry = ring::peek(table, i)
+        when entry.suffix == suffix
+            done(entry)
+        done()
+        i = i - 1
+    done()
+    done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+done()

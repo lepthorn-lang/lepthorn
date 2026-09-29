@@ -1,0 +1,4 @@
+take mass
+read pilot
+show "force:" force::gravity(mass)
+show "pilot:" pilot

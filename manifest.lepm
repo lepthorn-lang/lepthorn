@@ -1,0 +1,39 @@
+[Package]
+    name = "lepthornc"
+    version = "1.0.0"
+    description = "The native compiler for Lepthorn."
+    authors = ["Ali Zain"]
+    license = "Apache-2.0"
+    license_file = "LICENSE"
+    readme = "README.md"
+
+
+[Target]
+    name = "lepthornc"
+    kind = "bin"
+    source = "src/main.lep"
+
+[Test]
+
+    tests = "tests/"
+
+[Profile]
+    name = "debug"
+    optimization = "none"
+
+[Profile]
+    name = "release"
+    optimization = "O2"
+
+
+[Target_Platform]
+    triple = "x86_64-linux-gnu"
+    libc = "glibc"
+    link = "dynamic"
+    libraries = ["m"]
+
+[Target_Platform]
+    triple = "x86_64-linux-musl"
+    libc = "musl"
+    link = "static"
+    libraries = ["m"]

@@ -1,0 +1,8 @@
+arith: 9 3 18 2 0 36
+compare: true false true false true false
+logic: true true true
+bitwise: 2 7 5 -7 24 3
+flags: 10
+compound: 4
+text: abcd true true
+units: 1500 m 4 1.5708 rad

@@ -1,0 +1,6 @@
+(* 16_take_input.lep - `take` reads a numeric/unit-suffixed value from
+   standard input. Try: echo "40kg" | lepthornc eval 16_take_input.lep *)
+
+take user_mass
+suppose force = force::gravity(user_mass)
+show "Force on that mass:" force

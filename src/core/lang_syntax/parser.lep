@@ -1,0 +1,1286 @@
+(* parser.lep - recursive-descent expression + statement parser,
+   builds the AST arena from a Cursor over lexed tokens. *)
+
+use core::lang_syntax::data_types
+use core::ast::ast
+
+make token_kind(tok_buf, cur)
+    when cur_is_empty(tok_buf, cur)
+        done("EOF")
+    done()
+    ensure t = cur_current(tok_buf, cur)
+    done(t.kind)
+done()
+
+make token_value(tok_buf, cur)
+    when cur_is_empty(tok_buf, cur)
+        done("")
+    done()
+    ensure t = cur_current(tok_buf, cur)
+    done(t.value)
+done()
+
+(* true when the current token can begin an expression - how `show a b
+   c` (juxtaposed arguments, no separator) knows another argument
+   follows *)
+make could_start_expr(tok_buf, cur)
+    ensure csk = token_kind(tok_buf, cur)
+    when csk == "NUMBER" or csk == "STRING" or csk == "TRUE" or csk == "FALSE" or csk == "IDENT" or csk == "NOT"
+        done(true)
+    done()
+    when csk == "OP"
+        ensure csv = token_value(tok_buf, cur)
+        done(csv == "(" or csv == "[" or csv == "~")
+    done()
+    done(false)
+done()
+
+(* precedence climbing, dimensionless numbers only, +, -, *, /, %, **,
+   ==, !=, <, >, <=, >=, and, or, not, parens. Each level returns an
+   arena index, not a value - parse_or(tok_buf, cur, arena) is the entry
+   point. *)
+
+(* a lexed NUMBER token's value is still the merged text ("25kg") -
+   lex_number never split it (see lex_number's own note); split here
+   instead, at parse time, per bootstrap-units-design.md's recommended
+   option - the digit/dot run is the magnitude, everything after it is
+   the unit suffix (empty for a bare dimensionless literal), stored in
+   the NUM node's `op` field, which nothing else uses for NUM. *)
+
+make digit_prefix_len(word)
+    ensure len = text::length(word)
+    suppose j = 0
+    repeat
+        when j >= len
+            stop
+        otherwise when is_digit(text::char_at(word, j))
+            j = j + 1
+        otherwise when text::char_at(word, j) == "."
+            j = j + 1
+        otherwise
+            stop
+        done()
+    done()
+    done(j)
+done()
+
+make parse_primary(tok_buf, cur, arena)
+    ensure kind = token_kind(tok_buf, cur)
+    ensure val = token_value(tok_buf, cur)
+    suppose node = mk_node("", 0, false, "", 0, 0)
+    when kind == "NUMBER"
+        ensure t = cur_take(tok_buf, cur)
+        ensure dp = digit_prefix_len(t.value)
+        ensure num_part = text::slice(t.value, 0, dp)
+        ensure unit_part = text::slice(t.value, dp, text::length(t.value))
+        node = mk_node("NUM", text::to_number(num_part), false, unit_part, 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "STRING"
+        ensure t2 = cur_take(tok_buf, cur)
+        ensure str_inner = text::slice(t2.value, 1, text::length(t2.value) - 1)
+        node = mk_node("TEXT", 0, false, "", 0, 0)
+        node.text_value = str_inner
+        done(arena_add(arena, node))
+    done()
+    when kind == "TRUE"
+        cur_take(tok_buf, cur)
+        node = mk_node("BOOL", 0, true, "", 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "FALSE"
+        cur_take(tok_buf, cur)
+        node = mk_node("BOOL", 0, false, "", 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "IDENT"
+        cur_take(tok_buf, cur)
+        when token_kind(tok_buf, cur) == "OP"
+            when token_value(tok_buf, cur) == "::"
+                cur_take(tok_buf, cur)
+                ensure member_tok = cur_take(tok_buf, cur)
+                done(parse_call(tok_buf, cur, arena, val + "::" + member_tok.value))
+            done()
+            when token_value(tok_buf, cur) == "("
+                when looks_like_shape_construct(tok_buf, cur)
+                    done(parse_shape_construct(tok_buf, cur, arena, val))
+                done()
+                done(parse_call(tok_buf, cur, arena, val))
+            done()
+            when token_value(tok_buf, cur) == "."
+                cur_take(tok_buf, cur)
+                ensure field_tok = cur_take(tok_buf, cur)
+                node = Node(kind = "FIELD_ACCESS", num_value = 0, bool_value = false, text_value = "", op = val, params = field_tok.value, left = 0, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                done(arena_add(arena, node))
+            done()
+            when token_value(tok_buf, cur) == "["
+                cur_take(tok_buf, cur)
+                ensure idx_expr = parse_or(tok_buf, cur, arena)
+                cur_take(tok_buf, cur)
+                node = mk_node("INDEX_ACCESS", 0, false, val, idx_expr, 0)
+                done(arena_add(arena, node))
+            done()
+        done()
+        node = mk_node("VAR", 0, false, val, 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "OP"
+        when val == "("
+            cur_take(tok_buf, cur)
+            ensure inner = parse_or(tok_buf, cur, arena)
+            cur_take(tok_buf, cur)
+            done(inner)
+        done()
+        when val == "["
+            done(parse_array_literal(tok_buf, cur, arena))
+        done()
+    done()
+    node = mk_node("PARSE_ERROR", 0, false, "unexpected token '" + val + "' (" + kind + ")", 0, 0)
+    when not cur_is_empty(tok_buf, cur)
+        cur_take(tok_buf, cur)
+    done()
+    done(arena_add(arena, node))
+done()
+
+(* `~x` (bitwise not) binds tightest; `not` normally sits lower (see
+   parse_not) - this case only catches it in operand position, e.g.
+   `a == not b`. *)
+make parse_unary(tok_buf, cur, arena)
+    when token_kind(tok_buf, cur) == "NOT"
+        cur_take(tok_buf, cur)
+        ensure operand = parse_unary(tok_buf, cur, arena)
+        ensure node = mk_node("UNARY", 0, false, "not", operand, 0)
+        done(arena_add(arena, node))
+    done()
+    when token_kind(tok_buf, cur) == "OP"
+        when token_value(tok_buf, cur) == "~"
+            cur_take(tok_buf, cur)
+            ensure boperand = parse_unary(tok_buf, cur, arena)
+            ensure bnode = mk_node("UNARY", 0, false, "~", boperand, 0)
+            done(arena_add(arena, bnode))
+        done()
+    done()
+    done(parse_primary(tok_buf, cur, arena))
+done()
+
+make parse_pow(tok_buf, cur, arena)
+    ensure left = parse_unary(tok_buf, cur, arena)
+    when token_kind(tok_buf, cur) == "OP"
+        when token_value(tok_buf, cur) == "**"
+            cur_take(tok_buf, cur)
+            ensure right = parse_pow(tok_buf, cur, arena)
+            ensure node = mk_node("BINOP", 0, false, "**", left, right)
+            done(arena_add(arena, node))
+        done()
+    done()
+    done(left)
+done()
+
+make parse_mul(tok_buf, cur, arena)
+    suppose left = parse_pow(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    repeat
+        when token_kind(tok_buf, cur) == "OP"
+            ensure val = token_value(tok_buf, cur)
+            when val == "*"
+                cur_take(tok_buf, cur)
+                right = parse_pow(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, "*", left, right)
+                left = arena_add(arena, node)
+            otherwise when val == "/"
+                cur_take(tok_buf, cur)
+                right = parse_pow(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, "/", left, right)
+                left = arena_add(arena, node)
+            otherwise when val == "%"
+                cur_take(tok_buf, cur)
+                right = parse_pow(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, "%", left, right)
+                left = arena_add(arena, node)
+            otherwise
+                stop
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(left)
+done()
+
+make parse_add(tok_buf, cur, arena)
+    suppose left = parse_mul(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    repeat
+        when token_kind(tok_buf, cur) == "OP"
+            ensure val = token_value(tok_buf, cur)
+            when val == "+"
+                cur_take(tok_buf, cur)
+                right = parse_mul(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, "+", left, right)
+                left = arena_add(arena, node)
+            otherwise when val == "-"
+                cur_take(tok_buf, cur)
+                right = parse_mul(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, "-", left, right)
+                left = arena_add(arena, node)
+            otherwise
+                stop
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(left)
+done()
+
+make parse_compare(tok_buf, cur, arena)
+    ensure left = parse_add(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    when token_kind(tok_buf, cur) == "OP"
+        ensure val = token_value(tok_buf, cur)
+        when val == "=="
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "==", left, right)
+            done(arena_add(arena, node))
+        done()
+        when val == "!="
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "!=", left, right)
+            done(arena_add(arena, node))
+        done()
+        when val == "<="
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "<=", left, right)
+            done(arena_add(arena, node))
+        done()
+        when val == ">="
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, ">=", left, right)
+            done(arena_add(arena, node))
+        done()
+        when val == "<"
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "<", left, right)
+            done(arena_add(arena, node))
+        done()
+        when val == ">"
+            cur_take(tok_buf, cur)
+            right = parse_add(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, ">", left, right)
+            done(arena_add(arena, node))
+        done()
+    done()
+    done(left)
+done()
+
+(* host precedence (lowest first): or, and, not, bitwise & | ^ << >>
+   (one left-assoc level), comparison, + -, * / %, **, ~. So `a & b ==
+   c` is `a & (b == c)` - a type error, never a silent mis-grouping -
+   and `not a == b` is `not (a == b)`. *)
+make parse_bitwise(tok_buf, cur, arena)
+    suppose left = parse_compare(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    repeat
+        when token_kind(tok_buf, cur) == "OP"
+            ensure val = token_value(tok_buf, cur)
+            when val == "&" or val == "|" or val == "^" or val == "<<" or val == ">>"
+                cur_take(tok_buf, cur)
+                right = parse_compare(tok_buf, cur, arena)
+                node = mk_node("BINOP", 0, false, val, left, right)
+                left = arena_add(arena, node)
+            otherwise
+                stop
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(left)
+done()
+
+make parse_not(tok_buf, cur, arena)
+    when token_kind(tok_buf, cur) == "NOT"
+        cur_take(tok_buf, cur)
+        ensure operand = parse_not(tok_buf, cur, arena)
+        ensure node = mk_node("UNARY", 0, false, "not", operand, 0)
+        done(arena_add(arena, node))
+    done()
+    done(parse_bitwise(tok_buf, cur, arena))
+done()
+
+make parse_and(tok_buf, cur, arena)
+    suppose left = parse_not(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    repeat
+        when token_kind(tok_buf, cur) == "AND"
+            cur_take(tok_buf, cur)
+            right = parse_not(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "and", left, right)
+            left = arena_add(arena, node)
+        otherwise
+            stop
+        done()
+    done()
+    done(left)
+done()
+
+make parse_or(tok_buf, cur, arena)
+    suppose left = parse_and(tok_buf, cur, arena)
+    suppose right = left
+    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
+    repeat
+        when token_kind(tok_buf, cur) == "OR"
+            cur_take(tok_buf, cur)
+            right = parse_and(tok_buf, cur, arena)
+            node = mk_node("BINOP", 0, false, "or", left, right)
+            left = arena_add(arena, node)
+        otherwise
+            stop
+        done()
+    done()
+    done(left)
+done()
+
+(* -- units: dimensional analysis for the bootstrap's own target
+   language, mirroring src/core/units/units.ml field-for-field so the
+   two backends agree numerically. Every bootstrap NUMBER is now a
+   real Quantity (magnitude + Dimension), not a bare float - see
+   Lepthorn-Future/bootstrap-units-design.md for the design this
+   implements. *)
+
+make parse_call(tok_buf, cur, arena, name)
+    cur_take(tok_buf, cur)
+    suppose first_arg = none_idx()
+    suppose prev_arg = none_idx()
+    suppose prev_anode = mk_node("", 0, false, "", 0, 0)
+    suppose argc = 0
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when token_kind(tok_buf, cur) == "OP"
+                when token_value(tok_buf, cur) == ")"
+                    keep_going = false
+                done()
+            done()
+            when keep_going
+                ensure aidx = parse_or(tok_buf, cur, arena)
+                when first_arg == none_idx()
+                    first_arg = aidx
+                otherwise
+                    prev_anode = arena_get(arena, prev_arg)
+                    prev_anode.sibling = aidx
+                done()
+                prev_arg = aidx
+                argc = argc + 1
+                when token_kind(tok_buf, cur) == "OP"
+                    when token_value(tok_buf, cur) == ","
+                        cur_take(tok_buf, cur)
+                    done()
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    ensure node = mk_node("CALL", argc, false, name, first_arg, 0)
+    done(arena_add(arena, node))
+done()
+
+(* shape construction: `Name(field = value, ...)`. Parses into a
+   FIELD_INIT chain (template - value expressions unevaluated) hung
+   off a SHAPE_CONSTRUCT node; eval_node instantiates a fresh FIELD
+   chain from it every time it's evaluated (see instantiate_shape),
+   the same way a real construction produces a new instance each time
+   it runs, not once at parse time. *)
+
+make parse_shape_construct(tok_buf, cur, arena, shape_name)
+    cur_take(tok_buf, cur)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when token_kind(tok_buf, cur) == "OP"
+                when token_value(tok_buf, cur) == ")"
+                    keep_going = false
+                done()
+            done()
+            when keep_going
+                ensure fname_tok = cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                ensure vexpr = parse_or(tok_buf, cur, arena)
+                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                ensure fidx = arena_add(arena, fnode)
+                when first == none_idx()
+                    first = fidx
+                otherwise
+                    prev_node = arena_get(arena, prev)
+                    prev_node.sibling = fidx
+                done()
+                prev = fidx
+                when token_kind(tok_buf, cur) == "OP"
+                    when token_value(tok_buf, cur) == ","
+                        cur_take(tok_buf, cur)
+                    done()
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    ensure node = Node(kind = "SHAPE_CONSTRUCT", num_value = 0, bool_value = false, text_value = "", op = shape_name, params = "", left = first, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+    done(arena_add(arena, node))
+done()
+
+make parse_array_literal(tok_buf, cur, arena)
+    cur_take(tok_buf, cur)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when token_kind(tok_buf, cur) == "OP"
+                when token_value(tok_buf, cur) == "]"
+                    keep_going = false
+                done()
+            done()
+            when keep_going
+                ensure vexpr = parse_or(tok_buf, cur, arena)
+                ensure enode = mk_node("ELEM_INIT", 0, false, "", vexpr, 0)
+                ensure eidx = arena_add(arena, enode)
+                when first == none_idx()
+                    first = eidx
+                otherwise
+                    prev_node = arena_get(arena, prev)
+                    prev_node.sibling = eidx
+                done()
+                prev = eidx
+                when token_kind(tok_buf, cur) == "OP"
+                    when token_value(tok_buf, cur) == ","
+                        cur_take(tok_buf, cur)
+                    done()
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    ensure node = mk_node("ARRAY_LITERAL", 0, false, "", first, 0)
+    done(arena_add(arena, node))
+done()
+
+make parse_when_tail(tok_buf, cur, arena)
+    suppose body2 = none_idx()
+    when token_kind(tok_buf, cur) == "OTHERWISE"
+        cur_take(tok_buf, cur)
+        when token_kind(tok_buf, cur) == "WHEN"
+            cur_take(tok_buf, cur)
+            ensure cond2 = parse_or(tok_buf, cur, arena)
+            cur_take(tok_buf, cur)
+            body2 = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "OTHERWISE")
+            ensure alt2 = parse_when_tail(tok_buf, cur, arena)
+            suppose node2 = mk_node("WHEN_STMT", 0, false, "", cond2, body2)
+            node2.alt = alt2
+            done(arena_add(arena, node2))
+        otherwise
+            cur_take(tok_buf, cur)
+            body2 = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+            cur_take(tok_buf, cur)
+            done(body2)
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    done(none_idx())
+done()
+
+(* statements: ensure/suppose/show/reassignment/when/otherwise when/
+   repeat/stop/next/done(value), NEWLINE-terminated. Nested bodies
+   chain their statements via each Node's own `sibling` field - see
+   parse_block. *)
+
+make parse_partasks(tok_buf, cur, arena)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose keep_going = true
+    suppose prio_idx = 0
+    suppose body_start = none_idx()
+    suppose task_node = mk_node("", 0, false, "", 0, 0)
+    suppose s = 0
+    repeat
+        when keep_going
+            when cur_is_empty(tok_buf, cur)
+                keep_going = false
+            done()
+            when keep_going
+                ensure k = token_kind(tok_buf, cur)
+                when k == "DONE_EMPTY"
+                    keep_going = false
+                otherwise when k == "NEWLINE"
+                    cur_take(tok_buf, cur)
+                otherwise when k == "PRIORITY"
+                    cur_take(tok_buf, cur)
+                    prio_idx = parse_or(tok_buf, cur, arena)
+                    cur_take(tok_buf, cur)
+                    body_start = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+                    cur_take(tok_buf, cur)
+                    task_node = mk_node("TASK", 0, false, "", prio_idx, body_start)
+                    s = arena_add(arena, task_node)
+                    when first == none_idx()
+                        first = s
+                    otherwise
+                        prev_node = arena_get(arena, prev)
+                        prev_node.sibling = s
+                    done()
+                    prev = s
+                otherwise
+                    ensure zero_node = mk_node("NUM", 0, false, "", 0, 0)
+                    ensure zero_idx = arena_add(arena, zero_node)
+                    ensure one_stmt = parse_statement(tok_buf, cur, arena)
+                    task_node = mk_node("TASK", 0, false, "", zero_idx, one_stmt)
+                    s = arena_add(arena, task_node)
+                    when first == none_idx()
+                        first = s
+                    otherwise
+                        prev_node = arena_get(arena, prev)
+                        prev_node.sibling = s
+                    done()
+                    prev = s
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(first)
+done()
+
+(* a plain comma-scan, deliberately not reusing runtime::primitives'
+   param_count/param_at (same job, same shape) - core/ has no deps on
+   runtime/ anywhere else in this codebase, and this one small local
+   helper isn't worth inverting that layering for. *)
+
+make name_in_list(joined, name)
+    when joined == ""
+        done(false)
+    done()
+    ensure len = text::length(joined)
+    suppose seg_start = 0
+    suppose i = 0
+    suppose found = false
+    repeat
+        when found
+            stop
+        otherwise when i >= len
+            when text::slice(joined, seg_start, len) == name
+                found = true
+            done()
+            stop
+        otherwise when text::char_at(joined, i) == ","
+            when text::slice(joined, seg_start, i) == name
+                found = true
+            done()
+            seg_start = i + 1
+            i = i + 1
+        otherwise
+            i = i + 1
+        done()
+    done()
+    done(found)
+done()
+
+(* ensure!/suppose! block form (LEP-0010 §3, real and shared alike) -
+   desugars into the exact same ENSURE_STMT/SUPPOSE_STMT/
+   SHARED_ENSURE_STMT/SHARED_SUPPOSE_STMT/ASSIGN_STMT chain a sequence
+   of individually-written statements would ("identical semantics",
+   per the LEP's own text) - wrapped in one real new node kind,
+   DECL_BLOCK_STMT, whose `.right` holds that chain. The wrapper is
+   necessary, not cosmetic: every caller of parse_statement (parse_
+   block/parse_program/parse_partasks) tracks exactly one returned
+   node index as "the previous statement" to patch its `.sibling` once
+   the next statement is known - handing back a multi-node chain's
+   own first node directly would make that tracking silently patch
+   the WRONG node's sibling once more statements follow, corrupting
+   the chain. DECL_BLOCK_STMT restores "one statement = one node" for
+   every caller, the same way ATOMIC_STMT already wraps a nested block
+   without any caller needing to know it's not a single primitive
+   statement - ctv_collect_block/ctv_check_block/exec_stmt/codegen_stmt
+   each need exactly one more case, transparently recursing into
+   `.right`, mirroring ATOMIC_STMT's own case in each of those four
+   places precisely.
+
+   Inside an `ensure!` block every line is unconditionally a fresh
+   declaration (LEP-0010: "every name is a fresh immutable
+   declaration"); inside a `suppose!` block, a name's first appearance
+   declares it, any later appearance in the same block is an ordinary
+   reassignment - tracked with a small comma-joined name list, scoped
+   to just this one block. *)
+
+make parse_bang_block(tok_buf, cur, arena, is_ensure, is_shared)
+    cur_take(tok_buf, cur)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose declared = ""
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when cur_is_empty(tok_buf, cur)
+                keep_going = false
+            done()
+            when keep_going
+                ensure k = token_kind(tok_buf, cur)
+                when k == "DONE_EMPTY"
+                    keep_going = false
+                otherwise when k == "NEWLINE"
+                    cur_take(tok_buf, cur)
+                otherwise
+                    ensure name_tok = cur_take(tok_buf, cur)
+                    cur_take(tok_buf, cur)
+                    ensure expr_idx = parse_or(tok_buf, cur, arena)
+                    suppose node = mk_node("", 0, false, "", 0, 0)
+                    when is_ensure
+                        when is_shared
+                            node = mk_node("SHARED_ENSURE_STMT", 0, false, name_tok.value, expr_idx, 0)
+                        otherwise
+                            node = mk_node("ENSURE_STMT", 0, false, name_tok.value, expr_idx, 0)
+                        done()
+                    otherwise when name_in_list(declared, name_tok.value)
+                        node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, expr_idx, 0)
+                    otherwise
+                        when is_shared
+                            node = mk_node("SHARED_SUPPOSE_STMT", 0, false, name_tok.value, expr_idx, 0)
+                        otherwise
+                            node = mk_node("SUPPOSE_STMT", 0, false, name_tok.value, expr_idx, 0)
+                        done()
+                        when declared == ""
+                            declared = name_tok.value
+                        otherwise
+                            declared = declared + "," + name_tok.value
+                        done()
+                    done()
+                    ensure s = arena_add(arena, node)
+                    when first == none_idx()
+                        first = s
+                    otherwise
+                        prev_node = arena_get(arena, prev)
+                        prev_node.sibling = s
+                    done()
+                    prev = s
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    done(first)
+done()
+
+make parse_statement(tok_buf, cur, arena)
+    ensure kind = token_kind(tok_buf, cur)
+    suppose node = mk_node("", 0, false, "", 0, 0)
+    suppose name_tok = LexResult(next_index = 0, kind = "", value = "")
+    suppose expr_idx = 0
+    suppose body_idx = none_idx()
+    suppose alt_idx = none_idx()
+    when kind == "ENSURE"
+        cur_take(tok_buf, cur)
+        name_tok = cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        node = mk_node("ENSURE_STMT", 0, false, name_tok.value, expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "SUPPOSE"
+        cur_take(tok_buf, cur)
+        name_tok = cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        node = mk_node("SUPPOSE_STMT", 0, false, name_tok.value, expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "ENSURE_BLOCK"
+        ensure eb_chain = parse_bang_block(tok_buf, cur, arena, true, false)
+        node = mk_node("DECL_BLOCK_STMT", 0, false, "", 0, eb_chain)
+        done(arena_add(arena, node))
+    done()
+    when kind == "SUPPOSE_BLOCK"
+        ensure sb_chain = parse_bang_block(tok_buf, cur, arena, false, false)
+        node = mk_node("DECL_BLOCK_STMT", 0, false, "", 0, sb_chain)
+        done(arena_add(arena, node))
+    done()
+    when kind == "SHOW"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        suppose show_prev = expr_idx
+        suppose show_prev_node = mk_node("", 0, false, "", 0, 0)
+        suppose show_next = expr_idx
+        suppose show_keep_going = true
+        repeat
+            when show_keep_going
+                when could_start_expr(tok_buf, cur)
+                    show_next = parse_or(tok_buf, cur, arena)
+                    show_prev_node = arena_get(arena, show_prev)
+                    show_prev_node.sibling = show_next
+                    show_prev = show_next
+                otherwise
+                    show_keep_going = false
+                done()
+            otherwise
+                stop
+            done()
+        done()
+        node = mk_node("SHOW_STMT", 0, false, "", expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "STOP"
+        cur_take(tok_buf, cur)
+        node = mk_node("STOP_STMT", 0, false, "", 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "DONE"
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        node = mk_node("RETURN_STMT", 0, false, "", expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "WHEN"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "OTHERWISE")
+        alt_idx = parse_when_tail(tok_buf, cur, arena)
+        node = mk_node("WHEN_STMT", 0, false, "", expr_idx, body_idx)
+        node.alt = alt_idx
+        done(arena_add(arena, node))
+    done()
+    when kind == "NEXT"
+        cur_take(tok_buf, cur)
+        node = mk_node("NEXT_STMT", 0, false, "", 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "REPEAT"
+        cur_take(tok_buf, cur)
+        (* bare `repeat` (forever/until) vs `repeat N` (counted, LEP-0012's
+           third form) - real, pre-existing gap: only the first two were
+           ever parsed. A NEWLINE right after `repeat` means the bare
+           forms; anything else (a count expression, e.g. `repeat 6`)
+           means counted - found because the old code unconditionally
+           cur_take()'d whatever followed `repeat` as if it had to be
+           that NEWLINE, silently discarding a real count expression
+           and mis-parsing `repeat 6 ... done()` as an infinite loop. *)
+        when token_kind(tok_buf, cur) == "NEWLINE"
+            cur_take(tok_buf, cur)
+            body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "UNTIL")
+            when token_kind(tok_buf, cur) == "UNTIL"
+                cur_take(tok_buf, cur)
+                expr_idx = parse_or(tok_buf, cur, arena)
+                cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                node = mk_node("REPEAT_UNTIL_STMT", 0, false, "", expr_idx, body_idx)
+                done(arena_add(arena, node))
+            otherwise
+                cur_take(tok_buf, cur)
+                node = mk_node("REPEAT_FOREVER_STMT", 0, false, "", 0, body_idx)
+                done(arena_add(arena, node))
+            done()
+        otherwise
+            ensure count_idx = parse_or(tok_buf, cur, arena)
+            cur_take(tok_buf, cur)
+            ensure count_body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+            cur_take(tok_buf, cur)
+            node = mk_node("REPEAT_COUNT_STMT", 0, false, "", count_idx, count_body_idx)
+            done(arena_add(arena, node))
+        done()
+    done()
+    when kind == "PARALLEL"
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        body_idx = parse_partasks(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        node = mk_node("PARALLEL_STMT", 0, false, "", 0, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "ATOMIC"
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("ATOMIC_STMT", 0, false, "", 0, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "SHARED"
+        (* real, not erased: `shared` used to just re-parse as a plain
+           ENSURE_STMT/SUPPOSE_STMT, throwing the marking away before
+           CTV/the interpreter/codegen ever saw it - a real, previously
+           undiscovered gap (a `shared suppose` referenced inside a
+           separately-called `make` function failed CTV with
+           "undeclared variable", confirmed against the OCaml host's
+           own working `shared_env` design, which deliberately keeps
+           shared bindings in a table separate from any function's own
+           fresh per-call scope - LEP-0020 §6). *)
+        cur_take(tok_buf, cur)
+        ensure shared_kind = token_kind(tok_buf, cur)
+        when shared_kind == "ENSURE"
+            cur_take(tok_buf, cur)
+            name_tok = cur_take(tok_buf, cur)
+            cur_take(tok_buf, cur)
+            expr_idx = parse_or(tok_buf, cur, arena)
+            node = mk_node("SHARED_ENSURE_STMT", 0, false, name_tok.value, expr_idx, 0)
+            done(arena_add(arena, node))
+        done()
+        when shared_kind == "SUPPOSE"
+            cur_take(tok_buf, cur)
+            name_tok = cur_take(tok_buf, cur)
+            cur_take(tok_buf, cur)
+            expr_idx = parse_or(tok_buf, cur, arena)
+            node = mk_node("SHARED_SUPPOSE_STMT", 0, false, name_tok.value, expr_idx, 0)
+            done(arena_add(arena, node))
+        done()
+        when shared_kind == "ENSURE_BLOCK"
+            ensure seb_chain = parse_bang_block(tok_buf, cur, arena, true, true)
+            node = mk_node("DECL_BLOCK_STMT", 0, false, "", 0, seb_chain)
+            done(arena_add(arena, node))
+        done()
+        when shared_kind == "SUPPOSE_BLOCK"
+            ensure ssb_chain = parse_bang_block(tok_buf, cur, arena, false, true)
+            node = mk_node("DECL_BLOCK_STMT", 0, false, "", 0, ssb_chain)
+            done(arena_add(arena, node))
+        done()
+        done(parse_statement(tok_buf, cur, arena))
+    done()
+    when kind == "SYNC"
+        cur_take(tok_buf, cur)
+        node = mk_node("SYNC_STMT", 0, false, "", 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "TAKE" or kind == "READ"
+        cur_take(tok_buf, cur)
+        name_tok = cur_take(tok_buf, cur)
+        when name_tok.kind != "IDENT"
+            node = mk_node("PARSE_ERROR", 0, false, "`take`/`read` needs a variable name", 0, 0)
+            done(arena_add(arena, node))
+        done()
+        node = mk_node(kind + "_STMT", 0, false, name_tok.value, 0, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "EVERY"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("EVERY_STMT", 0, false, "", expr_idx, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "CHOOSE"
+        done(parse_choose(tok_buf, cur, arena))
+    done()
+    when kind == "WAIT"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        node = mk_node("WAIT_STMT", 0, false, "", expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "LOOP_HZ"
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("LOOP_HZ_STMT", 0, false, "", expr_idx, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "DEADLINE"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("DEADLINE_STMT", 0, false, "", expr_idx, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "TIMEOUT"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("TIMEOUT_STMT", 0, false, "", expr_idx, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "WATCH"
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = mk_node("WATCH_STMT", 0, false, "", expr_idx, body_idx)
+        done(arena_add(arena, node))
+    done()
+    when kind == "INTERRUPT"
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        name_tok = cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        cur_take(tok_buf, cur)
+        body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+        cur_take(tok_buf, cur)
+        node = Node(kind = "INTERRUPT_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = "", left = 0, right = body_idx, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+        done(arena_add(arena, node))
+    done()
+    when kind == "IDENT"
+        name_tok = cur_take(tok_buf, cur)
+        when token_kind(tok_buf, cur) == "OP"
+            when token_value(tok_buf, cur) == "."
+                cur_take(tok_buf, cur)
+                ensure field_tok = cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                expr_idx = parse_or(tok_buf, cur, arena)
+                node = Node(kind = "FIELD_ASSIGN_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = field_tok.value, left = expr_idx, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                done(arena_add(arena, node))
+            done()
+            when token_value(tok_buf, cur) == "["
+                cur_take(tok_buf, cur)
+                ensure idx_expr = parse_or(tok_buf, cur, arena)
+                cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                expr_idx = parse_or(tok_buf, cur, arena)
+                node = mk_node("INDEX_ASSIGN_STMT", 0, false, name_tok.value, idx_expr, expr_idx)
+                done(arena_add(arena, node))
+            done()
+            (* a bare call used as a statement, its result discarded -
+               `ring::write(...)`, `foo()` - as opposed to a call inside
+               an ensure/show/done expression, which never reaches this
+               statement-level IDENT dispatch at all. Previously every
+               bare-IDENT statement was unconditionally assumed to be
+               `name = expr` (an assignment) - real, pre-existing gap,
+               never exercised until a namespaced call needed to appear
+               on its own line. *)
+            when token_value(tok_buf, cur) == "::"
+                cur_take(tok_buf, cur)
+                ensure member_tok = cur_take(tok_buf, cur)
+                ensure call_idx = parse_call(tok_buf, cur, arena, name_tok.value + "::" + member_tok.value)
+                node = mk_node("EXPR_STMT", 0, false, "", call_idx, 0)
+                done(arena_add(arena, node))
+            done()
+            when token_value(tok_buf, cur) == "("
+                ensure bare_call_idx = parse_call(tok_buf, cur, arena, name_tok.value)
+                node = mk_node("EXPR_STMT", 0, false, "", bare_call_idx, 0)
+                done(arena_add(arena, node))
+            done()
+            (* compound assignment (+= -= *= /= %= **=, LEP-0011) -
+               desugars to `name = name <op> expr`, the same shape a
+               plain ASSIGN_STMT already has, real and pre-existing gap:
+               the lexer never tokenized these at all until now (see
+               lex_operator's own note), so every compound-assignment
+               example (loop counters especially, `count += 1`) hit a
+               parse error before reaching this statement dispatch. *)
+            suppose compound_base = ""
+            when token_value(tok_buf, cur) == "+="
+                compound_base = "+"
+            done()
+            when token_value(tok_buf, cur) == "-="
+                compound_base = "-"
+            done()
+            when token_value(tok_buf, cur) == "*="
+                compound_base = "*"
+            done()
+            when token_value(tok_buf, cur) == "/="
+                compound_base = "/"
+            done()
+            when token_value(tok_buf, cur) == "%="
+                compound_base = "%"
+            done()
+            when token_value(tok_buf, cur) == "**="
+                compound_base = "**"
+            done()
+            when token_value(tok_buf, cur) == "&="
+                compound_base = "&"
+            done()
+            when token_value(tok_buf, cur) == "|="
+                compound_base = "|"
+            done()
+            when token_value(tok_buf, cur) == "^="
+                compound_base = "^"
+            done()
+            when token_value(tok_buf, cur) == "<<="
+                compound_base = "<<"
+            done()
+            when token_value(tok_buf, cur) == ">>="
+                compound_base = ">>"
+            done()
+            when compound_base != ""
+                cur_take(tok_buf, cur)
+                ensure rhs_idx = parse_or(tok_buf, cur, arena)
+                ensure lhs_var = mk_node("VAR", 0, false, name_tok.value, 0, 0)
+                ensure lhs_idx = arena_add(arena, lhs_var)
+                ensure combined = mk_node("BINOP", 0, false, compound_base, lhs_idx, rhs_idx)
+                ensure combined_idx = arena_add(arena, combined)
+                node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, combined_idx, 0)
+                done(arena_add(arena, node))
+            done()
+        done()
+        cur_take(tok_buf, cur)
+        expr_idx = parse_or(tok_buf, cur, arena)
+        node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, expr_idx, 0)
+        done(arena_add(arena, node))
+    done()
+    node = mk_node("PARSE_ERROR", 0, false, "unexpected statement starting with kind " + kind, 0, 0)
+    when not cur_is_empty(tok_buf, cur)
+        cur_take(tok_buf, cur)
+    done()
+    done(arena_add(arena, node))
+done()
+
+(* parses statements, chaining them by patching each one's `next`
+   field once the following statement is known, until token kind
+   matches stop1 or stop2 (not consumed - the caller decides). Returns
+   the first statement's index, or -1 for an empty block. *)
+
+make parse_block(tok_buf, cur, arena, stop1, stop2)
+    done(parse_block3(tok_buf, cur, arena, stop1, stop2, stop2))
+done()
+
+(* `choose subject` then `case "LABEL"` blocks and an optional
+   `otherwise` block, closed by done(). CHOOSE_STMT: left = subject,
+   right = CASE chain (op = label, right = body), alt = otherwise body. *)
+make parse_choose(tok_buf, cur, arena)
+    cur_take(tok_buf, cur)
+    ensure subject = parse_or(tok_buf, cur, arena)
+    cur_take(tok_buf, cur)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose alt_body = none_idx()
+    suppose keep_going = true
+    repeat
+        when not keep_going
+            stop
+        done()
+        when cur_is_empty(tok_buf, cur)
+            stop
+        done()
+        ensure k = token_kind(tok_buf, cur)
+        when k == "NEWLINE"
+            cur_take(tok_buf, cur)
+        otherwise when k == "CASE"
+            cur_take(tok_buf, cur)
+            ensure label_tok = cur_take(tok_buf, cur)
+            suppose label = ""
+            when label_tok.kind == "STRING"
+                label = text::slice(label_tok.value, 1, text::length(label_tok.value) - 1)
+            otherwise
+                ensure bad = mk_node("PARSE_ERROR", 0, false, "case labels must be quoted Text", 0, 0)
+                arena_add(arena, bad)
+            done()
+            cur_take(tok_buf, cur)
+            ensure body = parse_block3(tok_buf, cur, arena, "CASE", "OTHERWISE", "DONE_EMPTY")
+            ensure cnode = mk_node("CASE", 0, false, label, 0, body)
+            ensure cidx = arena_add(arena, cnode)
+            when first == none_idx()
+                first = cidx
+            otherwise
+                prev_node = arena_get(arena, prev)
+                prev_node.sibling = cidx
+            done()
+            prev = cidx
+        otherwise when k == "OTHERWISE"
+            cur_take(tok_buf, cur)
+            cur_take(tok_buf, cur)
+            alt_body = parse_block3(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY", "DONE_EMPTY")
+        otherwise
+            keep_going = false
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    suppose node = mk_node("CHOOSE_STMT", 0, false, "", subject, first)
+    node.alt = alt_body
+    done(arena_add(arena, node))
+done()
+
+make parse_block3(tok_buf, cur, arena, stop1, stop2, stop3)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when cur_is_empty(tok_buf, cur)
+                keep_going = false
+            done()
+            when keep_going
+                ensure k = token_kind(tok_buf, cur)
+                when k == stop1 or k == stop2 or k == stop3
+                    keep_going = false
+                otherwise when k == "NEWLINE"
+                    cur_take(tok_buf, cur)
+                otherwise
+                    ensure s = parse_statement(tok_buf, cur, arena)
+                    when first == none_idx()
+                        first = s
+                    otherwise
+                        prev_node = arena_get(arena, prev)
+                        prev_node.sibling = s
+                    done()
+                    prev = s
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    done(first)
+done()
+
+(* unbounded parameter list - was hardcoded to exactly 3 (p0..p2);
+   same plain comma-accumulator fix as parse_shape above. *)
+
+make parse_make(tok_buf, cur, arena, funcs)
+    cur_take(tok_buf, cur)
+    ensure name_tok = cur_take(tok_buf, cur)
+    cur_take(tok_buf, cur)
+    suppose joined = ""
+    suppose pcount = 0
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when token_kind(tok_buf, cur) == "OP"
+                when token_value(tok_buf, cur) == ")"
+                    keep_going = false
+                done()
+            done()
+            when keep_going
+                when token_kind(tok_buf, cur) == "IDENT"
+                    ensure ptok = cur_take(tok_buf, cur)
+                    when pcount == 0
+                        joined = ptok.value
+                    otherwise
+                        joined = joined + "," + ptok.value
+                    done()
+                    pcount = pcount + 1
+                done()
+                when token_kind(tok_buf, cur) == "OP"
+                    when token_value(tok_buf, cur) == ","
+                        cur_take(tok_buf, cur)
+                    done()
+                done()
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    cur_take(tok_buf, cur)
+    ensure body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+    cur_take(tok_buf, cur)
+    ring::write(funcs, FuncDef(name = name_tok.value, params = joined, body = body_idx))
+done()
+
+(* top level: chains statements the same way parse_block does, but
+   also recognizes `make` (top-level only, registers into funcs
+   directly rather than becoming an executable statement). *)
+
+(* shape: declaration only. Construction (`Name(field = val, ...)`) is
+   NOT implemented - real Lepthorn's grammar tells `Name(x = 1)` (a
+   shape) apart from `add(x, y)` (a call) using lookahead a hand-
+   written recursive-descent parser can't get from a plain Queue
+   (front-peek-and-consume only, no pushback). Fixing that for real
+   means replacing the token Queue with a RingBuffer + a mutable
+   `Cursor` shape (indexed peek, cursor advanced by field mutation -
+   the same shared-mutable-state trick Queue already relies on) - a
+   real, identified fix, not attempted here; it touches every parsing
+   function that reads `tokens`. `mk_instance_2f` below is a bootstrap-
+   internal test helper standing in for real construction syntax, nothing
+   more. Fields are capped at 4, Number/Boolean only, single-level
+   `IDENT.field` access (no `a.b.c` chains) - v1 boundaries, not bugs. *)
+
+make parse_shape(tok_buf, cur)
+    cur_take(tok_buf, cur)
+    ensure name_tok = cur_take(tok_buf, cur)
+    cur_take(tok_buf, cur)
+    suppose names = ""
+    suppose fcount = 0
+    suppose keep_going = true
+    repeat
+        when keep_going
+            when token_kind(tok_buf, cur) == "DONE_EMPTY"
+                keep_going = false
+            otherwise when token_kind(tok_buf, cur) == "NEWLINE"
+                cur_take(tok_buf, cur)
+            otherwise
+                ensure fname_tok = cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                cur_take(tok_buf, cur)
+                when fcount == 0
+                    names = fname_tok.value
+                otherwise
+                    names = names + "," + fname_tok.value
+                done()
+                fcount = fcount + 1
+            done()
+        otherwise
+            stop
+        done()
+    done()
+    cur_take(tok_buf, cur)
+    done(ShapeDef(name = name_tok.value, field_names = names, field_count = fcount))
+done()
+
+(* bootstrap-internal only, see the note above - not real construction
+   syntax. Builds a 2-field instance (Number or Boolean each) and
+   returns the arena index of its first FIELD node. *)
+
+make parse_program(tok_buf, cur, arena, funcs, shapes)
+    suppose first = none_idx()
+    suppose prev = none_idx()
+    suppose prev_node = mk_node("", 0, false, "", 0, 0)
+    repeat
+        when cur_is_empty(tok_buf, cur)
+            stop
+        done()
+        when token_kind(tok_buf, cur) == "NEWLINE"
+            cur_take(tok_buf, cur)
+        otherwise when token_kind(tok_buf, cur) == "MAKE"
+            parse_make(tok_buf, cur, arena, funcs)
+        otherwise when token_kind(tok_buf, cur) == "SHAPE"
+            ensure sd = parse_shape(tok_buf, cur)
+            ring::write(shapes, sd)
+        otherwise
+            ensure s = parse_statement(tok_buf, cur, arena)
+            when first == none_idx()
+                first = s
+            otherwise
+                prev_node = arena_get(arena, prev)
+                prev_node.sibling = s
+            done()
+            prev = s
+        done()
+    done()
+    done(first)
+done()
+
+(* execution: a Signal propagates STOP/RETURN up through nested
+   blocks - the same shape exec_block and every loop/call function
+   pass around, since Lepthorn functions can only return one value. *)
+

@@ -1,0 +1,9 @@
+(* 23_when_otherwise.lep - the basic conditional. *)
+
+ensure battery = 15
+
+when battery > 20
+    show "Robot Ready"
+otherwise
+    show "Recharge Battery"
+done()

@@ -1,0 +1,13 @@
+(* 05_si_units.lep - the compiler understands SI units and normalizes
+   automatically - no manual conversion needed. *)
+
+ensure mass_kg = 25kg
+ensure mass_g = 25000g
+ensure force_n = 24N
+ensure force_kn = 2.8kN
+
+show "mass_kg:" mass_kg
+show "mass_g:" mass_g
+show "same mass?" (mass_kg == mass_g)
+show "force_n:" force_n
+show "force_kn (normalized to N):" force_kn

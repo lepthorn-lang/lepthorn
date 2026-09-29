@@ -1,0 +1,2 @@
+(* 01_hello_text.lep - the simplest possible Lepthorn program. *)
+show "Hello, Lepthorn!"

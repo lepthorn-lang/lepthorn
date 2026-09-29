@@ -1,0 +1,3 @@
+ensure mass = 25kg
+suppose force = force::gravity(mass)
+show "Force is:" force

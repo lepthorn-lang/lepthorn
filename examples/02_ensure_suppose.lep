@@ -1,0 +1,11 @@
+(* 02_ensure_suppose.lep - the two declaration keywords.
+   ensure = cannot change after declaration. suppose = can change. *)
+
+ensure pi = 3.14159265
+suppose radius = 2m
+
+show "pi:" pi
+show "radius:" radius
+
+radius = 5m
+show "radius after change:" radius

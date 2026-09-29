@@ -1,0 +1,23 @@
+ensure a = 6
+ensure b = 3
+show "arith:" a + b a - b a * b a / b a % b a ** 2
+show "compare:" a > b a < b a >= 6 a <= 5 a == 6 a != 6
+show "logic:" a > b and b > 0 a < b or b > 0 not a == b
+show "bitwise:" a & b a | b a ^ b ~a a << 2 a >> 1
+suppose f = 0
+f |= 5
+f &= 4
+f ^= 1
+f <<= 2
+f >>= 1
+show "flags:" f
+suppose n = 10
+n += 5
+n -= 3
+n *= 2
+n /= 4
+n %= 4
+n **= 2
+show "compound:" n
+show "text:" "ab" + "cd" "ab" < "b" "b" >= "ab"
+show "units:" 1km + 500m 2h / 30min 90degree

@@ -1,0 +1,30 @@
+(* cg_rt_text.lep - the native runtime, part 4: text:: builtins (LEP-0023
+   plus from_number), same bounds rules and messages as the host. *)
+
+use codegen::cg_core
+use codegen::cg_rt_core
+
+make cg_rt_text(ctx)
+    rt_str(ctx, "fn_tlen", "text::length")
+    rt_str(ctx, "fn_charat", "text::char_at")
+    rt_str(ctx, "fn_slice", "text::slice")
+    rt_str(ctx, "fn_tonum", "text::to_number")
+    rt_str(ctx, "w_text", "Text")
+    rt_str(ctx, "w_charidx", "text::char_at: the index")
+    rt_str(ctx, "f_charat", "text::char_at: index %lld is out of bounds for Text of length %lld")
+    rt_str(ctx, "w_slicestart", "text::slice: the start")
+    rt_str(ctx, "w_sliceend", "text::slice: the end")
+    rt_str(ctx, "f_slice", "text::slice: range [%lld, %lld) is out of bounds for Text of length %lld")
+    rt_str(ctx, "f_tonum", "text::to_number: '%s' is not a valid number")
+    rt_str(ctx, "w_code", "text::from_code: the code")
+    rt_str(ctx, "f_fromcode", "text::from_code: %lld is out of range (0-255)")
+    rt_str(ctx, "m_fromnum", "text::from_number: expected a Number")
+    rt_str(ctx, "f_g17", "%.17g")
+    rt(ctx, "define internal i64 @lep_text_length(i64 %t) {|entry:|  call void @lep.need(i64 %t, i32 1, ptr @.rt.fn_tlen, ptr @.rt.w_text)|  %n = call i64 @lep.tlen(i64 %t)|  %r = call i64 @lep.num(i64 %n)|  ret i64 %r|}")
+    rt(ctx, "define internal i64 @lep_text_char_at(i64 %t, i64 %iv) {|entry:|  call void @lep.need(i64 %t, i32 1, ptr @.rt.fn_charat, ptr @.rt.w_text)|  %i = call i64 @lep.whole(i64 %iv, ptr @.rt.w_charidx)|  %n = call i64 @lep.tlen(i64 %t)|  %lo = icmp slt i64 %i, 0|  %hi = icmp sge i64 %i, %n|  %oob = or i1 %lo, %hi|  br i1 %oob, label %bad, label %ok|bad:|  call void @lep.dieii(ptr @.rt.f_charat, i64 %i, i64 %n)|  unreachable|ok:|  %cp = call ptr @lep.tchars(i64 %t)|  %bp = getelementptr i8, ptr %cp, i64 %i|  %b = load i8, ptr %bp|  %r = call i64 @lep.charv(i8 %b)|  ret i64 %r|}")
+    rt(ctx, "define internal i64 @lep_text_slice(i64 %t, i64 %av, i64 %bv) {|entry:|  call void @lep.need(i64 %t, i32 1, ptr @.rt.fn_slice, ptr @.rt.w_text)|  %a = call i64 @lep.whole(i64 %av, ptr @.rt.w_slicestart)|  %b = call i64 @lep.whole(i64 %bv, ptr @.rt.w_sliceend)|  %n = call i64 @lep.tlen(i64 %t)|  %c1 = icmp slt i64 %a, 0|  %c2 = icmp sgt i64 %b, %n|  %c3 = icmp sgt i64 %a, %b|  %c12 = or i1 %c1, %c2|  %bad = or i1 %c12, %c3|  br i1 %bad, label %err, label %ok|err:|  call void @lep.dieiii(ptr @.rt.f_slice, i64 %a, i64 %b, i64 %n)|  unreachable|ok:|  %az = icmp eq i64 %a, 0|  %bf = icmp eq i64 %b, %n|  %all = and i1 %az, %bf|  br i1 %all, label %same, label %cut|same:|  ret i64 %t|cut:|  %cp = call ptr @lep.tchars(i64 %t)|  %sp = getelementptr i8, ptr %cp, i64 %a|  %len = sub i64 %b, %a|  %r = call i64 @lep.text_new(ptr %sp, i64 %len)|  ret i64 %r|}")
+    rt(ctx, "define internal i64 @lep_text_to_number(i64 %t) {|entry:|  %ip = alloca i64|  %np = alloca i64|  %endp = alloca ptr|  call void @lep.need(i64 %t, i32 1, ptr @.rt.fn_tonum, ptr @.rt.w_text)|  %len = call i64 @lep.tlen(i64 %t)|  %src = call ptr @lep.tchars(i64 %t)|  %sz = add i64 %len, 1|  %buf = call ptr @malloc(i64 %sz)|  store i64 0, ptr %ip|  store i64 0, ptr %np|  br label %loop|loop:|  %i = load i64, ptr %ip|  %done = icmp sge i64 %i, %len|  br i1 %done, label %fin, label %body|body:|  %cp = getelementptr i8, ptr %src, i64 %i|  %c = load i8, ptr %cp|  %us = icmp eq i8 %c, 95|  br i1 %us, label %next, label %copy|copy:|  %n = load i64, ptr %np|  %dp = getelementptr i8, ptr %buf, i64 %n|  store i8 %c, ptr %dp|  %n1 = add i64 %n, 1|  store i64 %n1, ptr %np|  br label %next|next:|  %i1 = add i64 %i, 1|  store i64 %i1, ptr %ip|  br label %loop")
+    rt(ctx, "fin:|  %nf = load i64, ptr %np|  %ep = getelementptr i8, ptr %buf, i64 %nf|  store i8 0, ptr %ep|  %empty = icmp eq i64 %nf, 0|  br i1 %empty, label %bad, label %parse|parse:|  %d = call double @strtod(ptr %buf, ptr %endp)|  %e = load ptr, ptr %endp|  %ec = load i8, ptr %e|  %ok = icmp eq i8 %ec, 0|  br i1 %ok, label %good, label %bad|good:|  call void @free(ptr %buf)|  %r = call i64 @lep.enc(double %d)|  ret i64 %r|bad:|  call void @lep.die1(ptr @.rt.f_tonum, ptr %src)|  unreachable|}")
+    rt(ctx, "define internal i64 @lep_text_from_code(i64 %cv) {|entry:|  %c = call i64 @lep.whole(i64 %cv, ptr @.rt.w_code)|  %lo = icmp slt i64 %c, 0|  %hi = icmp sgt i64 %c, 255|  %bad = or i1 %lo, %hi|  br i1 %bad, label %err, label %ok|err:|  call void @lep.diei(ptr @.rt.f_fromcode, i64 %c)|  unreachable|ok:|  %b = trunc i64 %c to i8|  %r = call i64 @lep.charv(i8 %b)|  ret i64 %r|}")
+    rt(ctx, "define internal i64 @lep_text_from_number(i64 %n) {|entry:|  %pv = alloca double|  %pd = alloca [8 x i32]|  %buf = alloca [64 x i8]|  %g = call i1 @lep.getq(i64 %n, ptr %pv, ptr %pd)|  br i1 %g, label %ok, label %bad|bad:|  call void @lep.die(ptr @.rt.m_fromnum)|  unreachable|ok:|  %x = load double, ptr %pv|  %len = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 64, ptr @.rt.f_g17, double %x)|  %l = sext i32 %len to i64|  %r = call i64 @lep.text_new(ptr %buf, i64 %l)|  ret i64 %r|}")
+done()

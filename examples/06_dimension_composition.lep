@@ -1,0 +1,13 @@
+(* 06_dimension_composition.lep - multiplying/dividing quantities composes
+   their dimensions automatically (m / s -> velocity, without ever
+   declaring a "velocity" type). *)
+
+ensure distance = 100m
+ensure time = 20s
+suppose speed = distance / time
+show "speed:" speed
+
+ensure mass = 10kg
+ensure acceleration_value = 2mps
+suppose force = mass * acceleration_value
+show "force:" force

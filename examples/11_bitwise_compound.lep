@@ -1,0 +1,20 @@
+(* 11_bitwise_compound.lep - &= |= ^= <<= >>= update flags in place.
+   A common pattern for register/flag-style manipulation. *)
+
+suppose flags = 0
+show "start:" flags
+
+flags |= 1
+show "after |= 1:" flags
+
+flags |= 4
+show "after |= 4:" flags
+
+flags &= 5
+show "after &= 5:" flags
+
+flags ^= 1
+show "after ^= 1:" flags
+
+flags <<= 2
+show "after <<= 2:" flags

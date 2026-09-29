@@ -1,0 +1,64 @@
+make fib(k)
+    when k < 2
+        done(k)
+    done()
+    done(fib(k - 1) + fib(k - 2))
+done()
+
+make classify(t)
+    when t > 30
+        done("hot")
+    otherwise when t > 15
+        done("mild")
+    otherwise
+        done("cold")
+    done()
+done()
+
+make task(name)
+    show "task" name
+done()
+
+show "fib(15):" fib(15)
+show classify(40) classify(20) classify(5)
+suppose i = 0
+repeat
+    i += 1
+    when i == 2
+        next
+    done()
+    when i > 4
+        stop
+    done()
+    show "forever:" i
+done()
+suppose j = 0
+repeat
+    j += 2
+until j >= 6
+done()
+show "until:" j
+repeat 2
+    show "counted"
+done()
+ensure mode = "MANUAL"
+choose mode
+case "AUTO"
+    show "auto"
+case "MANUAL"
+    show "manual"
+otherwise
+    show "unknown"
+done()
+choose "OTHER"
+case "AUTO"
+    show "auto"
+otherwise
+    show "fallback"
+done()
+parallel
+    task("low")
+    priority 5
+        task("high")
+    done()
+done()

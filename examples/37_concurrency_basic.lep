@@ -1,0 +1,46 @@
+(* 37_concurrency_basic.lep - parallel, priority, shared and atomic.
+   In this version the tasks of a `parallel` block run one after
+   another, highest priority first. `shared` values are visible in every
+   function; a `shared suppose` value changed inside `parallel` must be
+   changed inside `atomic`. *)
+
+shared suppose counter = 0
+
+make bump()
+    atomic
+        counter = counter + 1
+    done()
+done()
+
+(* Two workers with different priorities. Both add 1 to the same shared
+   counter. *)
+parallel
+    priority 10
+        bump()
+    done()
+
+    priority 5
+        bump()
+    done()
+done()
+
+show "Counter after two workers:" counter
+
+(* A bare function call is a task too - no `priority` wrapper needed. *)
+make greet_a()
+    show "Hello from task A"
+done()
+
+make greet_b()
+    show "Hello from task B"
+done()
+
+parallel
+    greet_a()
+    greet_b()
+done()
+
+show "Both tasks joined"
+
+wait 20ms
+show "Waited"

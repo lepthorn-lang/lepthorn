@@ -1,0 +1,4 @@
+-- units: dimensioned arithmetic + mismatch detection --
+8 kg
+LEC8025: runtime error: dimension mismatch in +
+0

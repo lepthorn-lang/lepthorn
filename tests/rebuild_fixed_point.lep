@@ -1,0 +1,22 @@
+(* the compiler under test builds a; a rebuilds itself as b. Both come
+   from the same source, so a must reproduce itself byte for byte *)
+ensure lc = sys::getenv("LEPTHORNC")
+when lc == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+ensure q = text::from_code(34)
+sys::mkdir("build/test/fixed")
+ensure a = "build/test/fixed/a"
+ensure b = "build/test/fixed/b"
+ensure log = " > build/test/fixed/build.log 2>&1"
+show "a built:" sys::run(q + lc + q + " build -o " + a + log) == 0
+show "b built by a:" sys::run(a + " build -o " + b + log) == 0
+
+make contents(path)
+    ensure h = file::open(path, "r")
+    ensure body = file::load(h, sys::file_size(path))
+    file::close(h)
+    done(body)
+done()
+
+show "a == b:" contents(a) == contents(b)

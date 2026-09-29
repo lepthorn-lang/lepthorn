@@ -1,0 +1,1336 @@
+(* driver.lep - the lepthornc command line. Includes its own `use`
+   resolver, the same rules as the original host's (namespace paths from
+   <project root>/src, `module.lep` directory index, quoted relative
+   paths, each file included once), so a native lepthornc needs nothing
+   but clang and libc. *)
+
+use core::lang_syntax::parser
+use runtime::primitives
+use runtime::interpreter
+use codegen::cg_program
+
+shape DrvState
+    failed: Boolean
+done()
+
+(* joins many pieces without re-copying one ever-growing string *)
+shape TextBuilder
+    cur: Text
+    parts: Number
+done()
+
+make tb_new()
+    done(TextBuilder(cur = "", parts = ring::create(100000)))
+done()
+
+make tb_add(tb, s)
+    tb.cur = tb.cur + s
+    when text::length(tb.cur) > 4096
+        ring::write(tb.parts, tb.cur)
+        tb.cur = ""
+    done()
+done()
+
+make tb_text(tb)
+    suppose outs = ""
+    repeat
+        when ring::is_empty(tb.parts)
+            stop
+        done()
+        outs = outs + ring::get(tb.parts)
+    done()
+    done(outs + tb.cur)
+done()
+
+make drv_is_space(c)
+    done(c == " " or c == text::from_code(9) or c == text::from_code(10) or c == text::from_code(13) or c == text::from_code(12))
+done()
+
+make drv_trim(s)
+    suppose a = 0
+    suppose b = text::length(s)
+    repeat
+        when a >= b
+            stop
+        done()
+        when not drv_is_space(text::char_at(s, a))
+            stop
+        done()
+        a = a + 1
+    done()
+    repeat
+        when b <= a
+            stop
+        done()
+        when not drv_is_space(text::char_at(s, b - 1))
+            stop
+        done()
+        b = b - 1
+    done()
+    done(text::slice(s, a, b))
+done()
+
+make drv_starts_with(s, prefix)
+    ensure pl = text::length(prefix)
+    when text::length(s) < pl
+        done(false)
+    done()
+    done(text::slice(s, 0, pl) == prefix)
+done()
+
+make drv_ends_with(s, suffix)
+    ensure sl = text::length(suffix)
+    ensure n = text::length(s)
+    when n < sl
+        done(false)
+    done()
+    done(text::slice(s, n - sl, n) == suffix)
+done()
+
+make drv_last_index(s, c)
+    suppose i = text::length(s) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        when text::char_at(s, i) == c
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make drv_dirname(path)
+    ensure k = drv_last_index(path, "/")
+    when k < 0
+        done(".")
+    done()
+    when k == 0
+        done("/")
+    done()
+    done(text::slice(path, 0, k))
+done()
+
+make drv_basename(path)
+    ensure k = drv_last_index(path, "/")
+    done(text::slice(path, k + 1, text::length(path)))
+done()
+
+make drv_strip_ext(name)
+    when drv_ends_with(name, ".lep")
+        done(text::slice(name, 0, text::length(name) - 4))
+    done()
+    done(name)
+done()
+
+make drv_concat(dir, file)
+    when drv_ends_with(dir, "/")
+        done(dir + file)
+    done()
+    done(dir + "/" + file)
+done()
+
+make drv_read(path)
+    ensure size = sys::file_size(path)
+    ensure h = file::open(path, "r")
+    ensure body = file::load(h, size + 1)
+    file::close(h)
+    done(body)
+done()
+
+(* "Q" + path for `use "path"`, "N" + dotted for `use a::b`, "" otherwise *)
+make drv_extract_use(line)
+    ensure trimmed = drv_trim(line)
+    when text::length(trimmed) <= 4
+        done("")
+    done()
+    when not drv_starts_with(trimmed, "use ")
+        done("")
+    done()
+    ensure rest = drv_trim(text::slice(trimmed, 4, text::length(trimmed)))
+    when rest == ""
+        done("")
+    done()
+    ensure q = text::from_code(34)
+    when text::char_at(rest, 0) == q
+        suppose i = 1
+        repeat
+            when i >= text::length(rest)
+                stop
+            done()
+            when text::char_at(rest, i) == q
+                done("Q" + text::slice(rest, 1, i))
+            done()
+            i = i + 1
+        done()
+        done("")
+    done()
+    done("N" + rest)
+done()
+
+make drv_dotted_to_dir(src_root, dotted)
+    suppose outp = src_root
+    suppose seg = 0
+    suppose i = 0
+    ensure n = text::length(dotted)
+    repeat
+        when i > n
+            stop
+        done()
+        suppose boundary = i == n
+        when not boundary
+            boundary = text::char_at(dotted, i) == ":"
+        done()
+        when boundary
+            when i > seg
+                outp = drv_concat(outp, text::slice(dotted, seg, i))
+            done()
+            seg = i + 1
+        done()
+        i = i + 1
+    done()
+    done(outp)
+done()
+
+make drv_module_file(src_root, dotted)
+    done(drv_concat(drv_dotted_to_dir(src_root, dotted), "module.lep"))
+done()
+
+(* `use A::B::C`: src/A/B/C/module.lep if it exists, else file C.lep
+   inside module A::B *)
+make drv_resolve_ns(st, src_root, dotted)
+    ensure as_module = drv_module_file(src_root, dotted)
+    when file::exists(as_module)
+        done(as_module)
+    done()
+    ensure k = drv_last_index(dotted, ":")
+    when k < 0
+        show "lepthornc: no module `" + dotted + "` (expected " + as_module + ")"
+        st.failed = true
+        done("")
+    done()
+    suppose pk = k
+    repeat
+        when pk <= 0
+            stop
+        done()
+        when text::char_at(dotted, pk - 1) != ":"
+            stop
+        done()
+        pk = pk - 1
+    done()
+    ensure prefix = text::slice(dotted, 0, pk)
+    ensure file_seg = text::slice(dotted, k + 1, text::length(dotted))
+    ensure prefix_module = drv_module_file(src_root, prefix)
+    when file::exists(prefix_module)
+        done(drv_concat(drv_dotted_to_dir(src_root, prefix), file_seg + ".lep"))
+    done()
+    show "lepthornc: no module `" + dotted + "` or `" + prefix + "` found (looked for " + as_module + " and " + prefix_module + ")"
+    st.failed = true
+    done("")
+done()
+
+make drv_resolve_uses(st, src_root, visited, path)
+    ensure canonical = sys::realpath(path)
+    when cg_text_index(visited, canonical) >= 0
+        done("")
+    done()
+    ring::write(visited, canonical)
+    when not file::exists(path)
+        show "lepthornc: cannot read " + path
+        st.failed = true
+        done("")
+    done()
+    ensure raw = drv_read(path)
+    ensure dir = drv_dirname(path)
+    ensure nl = text::from_code(10)
+    ensure tb = tb_new()
+    ensure n = text::length(raw)
+    suppose start = 0
+    suppose i = 0
+    suppose first = true
+    repeat
+        when i > n
+            stop
+        done()
+        suppose at_break = i == n
+        when not at_break
+            at_break = text::char_at(raw, i) == nl
+        done()
+        when at_break
+            ensure line = text::slice(raw, start, i)
+            ensure u = drv_extract_use(line)
+            suppose piece = line
+            when u != ""
+                ensure target = text::slice(u, 1, text::length(u))
+                when text::char_at(u, 0) == "Q"
+                    suppose rel = target
+                    when not drv_starts_with(target, "/")
+                        rel = drv_concat(dir, target)
+                    done()
+                    piece = drv_resolve_uses(st, src_root, visited, rel)
+                otherwise
+                    ensure resolved = drv_resolve_ns(st, src_root, target)
+                    when resolved == ""
+                        piece = ""
+                    otherwise
+                        piece = drv_resolve_uses(st, src_root, visited, resolved)
+                    done()
+                done()
+            done()
+            when not first
+                tb_add(tb, nl)
+            done()
+            tb_add(tb, piece)
+            first = false
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    done(tb_text(tb))
+done()
+
+make drv_source(st, path)
+    ensure src_root = drv_concat(sys::cwd(), "src")
+    ensure visited = ring::create(10000)
+    done(drv_resolve_uses(st, src_root, visited, path))
+done()
+
+make drv_write(path, content)
+    ensure h = file::open(path, "w")
+    file::write(h, content)
+    file::close(h)
+done()
+
+make drv_mkdirs(path)
+    suppose i = 1
+    ensure n = text::length(path)
+    repeat
+        when i >= n
+            stop
+        done()
+        when text::char_at(path, i) == "/"
+            sys::mkdir(text::slice(path, 0, i))
+        done()
+        i = i + 1
+    done()
+    sys::mkdir(path)
+done()
+
+make drv_quote(s)
+    done("'" + s + "'")
+done()
+
+
+make drv_contains(s, sub)
+    ensure n = text::length(s)
+    ensure m = text::length(sub)
+    suppose i = 0
+    repeat
+        when i + m > n
+            stop
+        done()
+        when text::slice(s, i, i + m) == sub
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make drv_first_index(s, c)
+    ensure n = text::length(s)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        when text::char_at(s, i) == c
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(n)
+done()
+
+(* the first PATH entry holding `prog`, or "" *)
+make drv_find_in_path(prog)
+    ensure path = sys::getenv("PATH")
+    ensure n = text::length(path)
+    suppose start = 0
+    suppose i = 0
+    repeat
+        when i > n
+            stop
+        done()
+        suppose at_sep = i == n
+        when not at_sep
+            at_sep = text::char_at(path, i) == ":"
+        done()
+        when at_sep
+            suppose dir = text::slice(path, start, i)
+            when dir == ""
+                dir = "."
+            done()
+            ensure candidate = drv_concat(dir, prog)
+            when file::exists(candidate)
+                done(candidate)
+            done()
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    done("")
+done()
+
+(* -- clang, profiles, platforms -- *)
+
+(* the clang to run: --cc, else LEPTHORN_CLANG, else LEPTHORN_CC, else
+   `clang`; a program name is looked up on PATH *)
+make drv_cc()
+    ensure flag = drv_flag_value("--cc")
+    when flag != ""
+        done(flag)
+    done()
+    ensure c1 = sys::getenv("LEPTHORN_CLANG")
+    when c1 != ""
+        done(c1)
+    done()
+    ensure c2 = sys::getenv("LEPTHORN_CC")
+    when c2 != ""
+        done(c2)
+    done()
+    done("clang")
+done()
+
+(* where that clang lives: as given when it holds a '/', else on PATH *)
+make drv_clang_path(cc)
+    when drv_contains(cc, "/")
+        when file::exists(cc)
+            done(cc)
+        done()
+        done("")
+    done()
+    done(drv_find_in_path(cc))
+done()
+
+make drv_have_clang(cc)
+    when drv_clang_path(cc) == ""
+        show "lepthornc: " + cc + " not found - install clang, put it on PATH, or set LEPTHORN_CLANG"
+        done(false)
+    done()
+    done(true)
+done()
+
+make drv_host_triple(cc)
+    done(drv_trim(sys::capture(cc + " -print-target-triple")))
+done()
+
+make drv_opt_flag(o)
+    when o == "none"
+        done("-O0")
+    done()
+    done("-" + o)
+done()
+
+make drv_profile_name()
+    ensure p = drv_flag_value("--profile")
+    when p != ""
+        done(p)
+    done()
+    when drv_has_flag("--release")
+        done("release")
+    done()
+    done("debug")
+done()
+
+(* a declared profile, else the built-in debug (none) or release (O2) *)
+make drv_profile_opt(m, pname)
+    ensure pi = mf_find(m, "profile", "name", pname)
+    when pi >= 0
+        done(drv_opt_flag(mf_get(m, "profile", pi, "optimization")))
+    done()
+    when pname == "debug"
+        done("-O0")
+    done()
+    when pname == "release"
+        done("-O2")
+    done()
+    show "lepthornc: no profile " + pname + " (debug, release, or a [Profile] in manifest.lepm)"
+    sys::exit(2)
+done()
+
+shape Platform
+    triple: Text
+    libc: Text
+    link: Text
+    libs: Text
+done()
+
+(* a [Target_Platform] when the manifest declares any; otherwise the two
+   the runtime supports: glibc linked dynamically, musl statically (so
+   it runs on any Linux) *)
+make drv_platform(m, triple)
+    when mf_count(m, "target_platform") > 0
+        ensure pi = mf_find(m, "target_platform", "triple", triple)
+        when pi < 0
+            show "lepthornc: target " + triple + " is not declared in manifest.lepm (declared: " + mf_names(m, "target_platform", "triple") + ")"
+            sys::exit(2)
+        done()
+        ensure libc = mf_get(m, "target_platform", pi, "libc")
+        suppose link = mf_get(m, "target_platform", pi, "link")
+        when link == ""
+            link = "dynamic"
+            when libc == "musl"
+                link = "static"
+            done()
+        done()
+        done(Platform(triple = triple, libc = libc, link = link, libs = mf_get(m, "target_platform", pi, "libraries")))
+    done()
+    when triple == "x86_64-linux-gnu"
+        done(Platform(triple = triple, libc = "glibc", link = "dynamic", libs = ""))
+    done()
+    when triple == "x86_64-linux-musl"
+        done(Platform(triple = triple, libc = "musl", link = "static", libs = ""))
+    done()
+    show "lepthornc: unknown target " + triple + " (x86_64-linux-gnu, x86_64-linux-musl, or a [Target_Platform] in manifest.lepm)"
+    sys::exit(2)
+done()
+
+(* clang flags for a platform. The host's libc comes from clang's own
+   target triple; another libc means a cross build against that
+   platform's sysroot: LEPTHORN_SYSROOT, else <clang dir>/../<triple>,
+   with its libraries found by probing for crt1.o. *)
+make drv_target_flags(cc, pf, for_library)
+    ensure host = drv_host_triple(cc)
+    when host == ""
+        show "lepthornc: could not run " + cc + " -print-target-triple"
+        sys::exit(2)
+    done()
+    when text::slice(host, 0, drv_first_index(host, "-")) != "x86_64"
+        show "lepthornc: " + cc + " builds for " + host + "; the runtime supports x86-64 only"
+        sys::exit(2)
+    done()
+    ensure want_musl = pf.libc == "musl"
+    suppose link = ""
+    when pf.link == "static" and not for_library
+        link = " -static"
+    done()
+    when want_musl == drv_contains(host, "musl")
+        done(link)
+    done()
+    suppose root = sys::getenv("LEPTHORN_SYSROOT")
+    when root == ""
+        ensure cpath = drv_clang_path(cc)
+        when cpath != ""
+            root = drv_concat(drv_dirname(drv_dirname(cpath)), pf.triple)
+        done()
+    done()
+    suppose libdir = ""
+    ensure candidates = [drv_concat(root, "lib64"), drv_concat(root, "lib"), drv_concat(root, "usr/lib64"), drv_concat(root, "usr/lib")]
+    suppose ci = 0
+    repeat
+        when ci >= length(candidates) or libdir != ""
+            stop
+        done()
+        when file::exists(drv_concat(candidates[ci], "crt1.o"))
+            libdir = candidates[ci]
+        done()
+        ci = ci + 1
+    done()
+    when libdir == ""
+        show "lepthornc: no sysroot for " + pf.triple + " (looked in " + root + "); install " + pf.libc + " for this target or set LEPTHORN_SYSROOT"
+        sys::exit(2)
+    done()
+    done("--target=" + pf.triple + " --sysroot=" + drv_quote(root) + " -B" + drv_quote(libdir) + " -L" + drv_quote(libdir) + link)
+done()
+
+(* -l flags: m, which the runtime always needs (pow, fmod, sin...), then
+   the platform's libraries, each once *)
+make drv_lib_flags(pf_libs)
+    suppose seen = " m "
+    suppose flags = " -lm"
+    ensure items = mf_items(pf_libs)
+    repeat
+        when ring::is_empty(items)
+            stop
+        done()
+        ensure lib = ring::get(items)
+        when not drv_contains(seen, " " + lib + " ")
+            seen = seen + lib + " "
+            flags = flags + " -l" + lib
+        done()
+    done()
+    done(flags)
+done()
+
+shape BuildCfg
+    cc: Text
+    profile: Text
+    opt: Text
+    triple: Text
+    cflags: Text
+    libs: Text
+done()
+
+(* what a build needs from the command line, the manifest and the
+   environment. Without --target, programs are built for whatever clang
+   builds for here. *)
+make drv_config(m, for_library)
+    ensure cc = drv_cc()
+    ensure pname = drv_profile_name()
+    ensure opt = drv_profile_opt(m, pname)
+    ensure triple = drv_flag_value("--target")
+    suppose cflags = ""
+    suppose pf_libs = ""
+    when triple != ""
+        ensure pf = drv_platform(m, triple)
+        when not drv_have_clang(cc)
+            sys::exit(2)
+        done()
+        cflags = drv_target_flags(cc, pf, for_library)
+        pf_libs = pf.libs
+    done()
+    done(BuildCfg(cc = cc, profile = pname, opt = opt, triple = triple, cflags = cflags, libs = drv_lib_flags(pf_libs)))
+done()
+
+(* build/<profile>, or build/<profile>/<triple> for a named platform *)
+make drv_out_root(cfg)
+    when cfg.triple == ""
+        done("build/" + cfg.profile)
+    done()
+    done("build/" + cfg.profile + "/" + cfg.triple)
+done()
+
+(* source file -> native binary: codegen to <out>.ll, then clang *)
+make drv_compile(src_path, out_path, cfg, keep_ll)
+    ensure st = DrvState(failed = false)
+    ensure source = drv_source(st, src_path)
+    when st.failed
+        done(false)
+    done()
+    when not drv_have_clang(cfg.cc)
+        done(false)
+    done()
+    drv_mkdirs(drv_dirname(out_path))
+    ensure ll = out_path + ".ll"
+    when not codegen_program(source, ll)
+        show "lepthornc: compilation failed"
+        done(false)
+    done()
+    ensure cmd = cfg.cc + " " + cfg.opt + " -w " + cfg.cflags + " -o " + drv_quote(out_path) + " " + drv_quote(ll) + cfg.libs
+    ensure status = sys::run(cmd)
+    when not keep_ll
+        file::delete(ll)
+    done()
+    when status != 0
+        show "lepthornc: clang failed (exit " + text::from_number(status) + ")"
+        done(false)
+    done()
+    done(true)
+done()
+
+(* project names become C-level symbol prefixes: anything outside
+   [A-Za-z0-9_] turns into '_' *)
+make drv_c_ident(name)
+    suppose outs = ""
+    suppose i = 0
+    ensure n = text::length(name)
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure c = text::char_at(name, i)
+        when is_alnum(c)
+            outs = outs + c
+        otherwise
+            outs = outs + "_"
+        done()
+        i = i + 1
+    done()
+    done(outs)
+done()
+
+(* library: lib<name>.so and lib<name>.a in libdir *)
+make drv_compile_lib(src_path, libdir, name, cfg, keep_ll)
+    ensure st = DrvState(failed = false)
+    ensure source = drv_source(st, src_path)
+    when st.failed
+        done(false)
+    done()
+    when not drv_have_clang(cfg.cc)
+        done(false)
+    done()
+    ensure base = drv_concat(libdir, "lib" + name)
+    ensure ll = base + ".ll"
+    when not codegen_library(source, ll, name)
+        show "lepthornc: compilation failed"
+        done(false)
+    done()
+    ensure obj = base + ".o"
+    ensure cc = cfg.cc + " " + cfg.opt + " -w -fPIC " + cfg.cflags + " "
+    suppose status = sys::run(cc + "-shared -o " + drv_quote(base + ".so") + " " + drv_quote(ll) + cfg.libs)
+    when status == 0
+        status = sys::run(cc + "-c -o " + drv_quote(obj) + " " + drv_quote(ll))
+    done()
+    when status == 0
+        file::delete(base + ".a")
+        status = sys::run("ar rcs " + drv_quote(base + ".a") + " " + drv_quote(obj))
+    done()
+    file::delete(obj)
+    when not keep_ll
+        file::delete(ll)
+    done()
+    when status != 0
+        show "lepthornc: building the library failed (exit " + text::from_number(status) + ")"
+        done(false)
+    done()
+    done(true)
+done()
+
+make drv_usage()
+    show "lepthornc - the Lepthorn compiler"
+    show ""
+    show "usage:"
+    show "  lepthornc compile <file.lep> [-o <out>] [--release] [--target <t>] [--emit-llvm]"
+    show "  lepthornc run <file.lep> [--release] [--target <t>] [--ascii]   compile natively, then run"
+    show "  lepthornc eval <file.lep> [--ascii]   interpret, no binary"
+    show "  lepthornc check <file.lep>        lex, parse and verify only"
+    show "  lepthornc resolve <file.lep>      print the use-resolved source"
+    show ""
+    show "  in a project (the nearest manifest.lepm, from here upward):"
+    show "  lepthornc build [--release | --profile <p>] [--target <t>] [--bin <n> | --lib <n>]"
+    show "                  [-o <out>] [--emit-llvm]"
+    show "                                    a bin target to build/<profile>[/<t>]/bin/<n>,"
+    show "                                    a library to build/<profile>[/<t>]/lib/lib<n>.so and .a"
+    show "  lepthornc test [--release | --profile <p>] [--target <t>] [--ascii]"
+    show "  lepthornc promote [--release | --profile <p>] [--target <t>] [--bin <n>]"
+    show "                                    verify built bin targets and copy them to bin/"
+    show "  lepthornc manifest                show what manifest.lepm resolves to"
+    show "  lepthornc new <name> [--lib]      create a project (bin, or a library)"
+    show "  lepthornc version"
+    show ""
+    show "targets: x86_64-linux-gnu (glibc), x86_64-linux-musl (musl), or the manifest's"
+    show "[Target_Platform] sections. Without one, programs are built for whatever clang"
+    show "builds for here. clang is --cc, else LEPTHORN_CLANG, else LEPTHORN_CC, else clang"
+    show "on PATH. A cross target's sysroot is LEPTHORN_SYSROOT, else <clang's dir>/../<target>."
+    show ""
+    show "units display in Unicode (kg·m/s² (N)); --ascii or LEPTHORN_OUTPUT=ascii gives"
+    show "kg*m/s^2 (N). Compiled programs read LEPTHORN_OUTPUT themselves."
+    show ""
+    show "exit status: 0 success, 1 failure, 2 invalid command or configuration"
+done()
+
+make drv_has_flag(flag)
+    ensure argc = sys::arg_count()
+    suppose i = 2
+    repeat
+        when i >= argc
+            stop
+        done()
+        when sys::arg(i) == flag
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make drv_flag_value(flag)
+    ensure argc = sys::arg_count()
+    suppose i = 2
+    repeat
+        when i + 1 >= argc
+            stop
+        done()
+        when sys::arg(i) == flag
+            done(sys::arg(i + 1))
+        done()
+        i = i + 1
+    done()
+    done("")
+done()
+
+(* a path given on the command line, made independent of a later
+   change of directory *)
+make drv_absolute(path)
+    when path == "" or drv_starts_with(path, "/")
+        done(path)
+    done()
+    done(drv_concat(sys::cwd(), path))
+done()
+
+(* the project root is the nearest directory, from here upward, holding
+   manifest.lepm; project commands work from there, so every project
+   path (src, tests, build) is relative to it *)
+make drv_enter_project()
+    suppose dir = sys::cwd()
+    repeat
+        when file::exists(drv_concat(dir, "manifest.lepm"))
+            sys::chdir(dir)
+            done(drv_read("manifest.lepm"))
+        done()
+        when dir == "/" or dir == "" or dir == "."
+            stop
+        done()
+        dir = drv_dirname(dir)
+    done()
+    show "lepthornc: no manifest.lepm in this directory or any parent"
+    sys::exit(2)
+done()
+
+make drv_load_project()
+    ensure m = mf_parse(drv_enter_project())
+    mf_validate(m)
+    done(m)
+done()
+
+(* picked by --bin <name> / --lib <name>; every target when neither *)
+make drv_selected(m, t)
+    ensure want_bin = drv_flag_value("--bin")
+    ensure want_lib = drv_flag_value("--lib")
+    when want_bin == "" and want_lib == ""
+        done(true)
+    done()
+    ensure name = mf_get(m, "target", t, "name")
+    ensure kind = mf_get(m, "target", t, "kind")
+    done((kind == "bin" and name == want_bin) or (kind == "library" and name == want_lib))
+done()
+
+make drv_count_selected(m)
+    suppose n = 0
+    suppose t = 0
+    repeat
+        when t >= mf_count(m, "target")
+            stop
+        done()
+        when drv_selected(m, t)
+            n = n + 1
+        done()
+        t = t + 1
+    done()
+    done(n)
+done()
+
+make drv_build_target(m, t, out_flag, self_exe)
+    ensure name = mf_get(m, "target", t, "name")
+    ensure source = mf_get(m, "target", t, "source")
+    ensure keep_ll = drv_has_flag("--emit-llvm")
+    when mf_get(m, "target", t, "kind") == "library"
+        ensure lcfg = drv_config(m, true)
+        ensure libdir = drv_out_root(lcfg) + "/lib"
+        drv_mkdirs(libdir)
+        ensure lname = drv_c_ident(name)
+        when not drv_compile_lib(source, libdir, lname, lcfg, keep_ll)
+            done(false)
+        done()
+        show "lepthornc build: wrote " + libdir + "/lib" + lname + ".so and " + libdir + "/lib" + lname + ".a"
+        done(true)
+    done()
+    ensure cfg = drv_config(m, false)
+    suppose bout = out_flag
+    suppose note = ""
+    when bout == ""
+        bout = drv_out_root(cfg) + "/bin/" + name
+        (* a compiler rebuilding itself keeps its own binary for comparison *)
+        when sys::realpath(bout) == self_exe
+            note = " (" + bout + " is the compiler running this build)"
+            bout = drv_out_root(cfg) + "/rebuild/bin/" + name
+        done()
+    done()
+    when not drv_compile(source, bout, cfg, keep_ll)
+        done(false)
+    done()
+    show "lepthornc build: wrote " + bout + note
+    done(true)
+done()
+
+make drv_cmd_build()
+    ensure out_flag = drv_absolute(drv_flag_value("-o"))
+    ensure self_exe = drv_self_path()
+    ensure m = drv_load_project()
+    ensure picked = drv_count_selected(m)
+    when picked == 0
+        show "lepthornc: no such target (targets: " + mf_names(m, "target", "name") + ")"
+        sys::exit(2)
+    done()
+    when out_flag != "" and picked > 1
+        show "lepthornc: -o needs a single target; pick one with --bin <name> or --lib <name>"
+        sys::exit(2)
+    done()
+    suppose t = 0
+    repeat
+        when t >= mf_count(m, "target")
+            stop
+        done()
+        when drv_selected(m, t)
+            when out_flag != "" and mf_get(m, "target", t, "kind") == "library"
+                show "lepthornc: -o applies to bin targets; a library goes to build/<profile>/lib/"
+                sys::exit(2)
+            done()
+            when not drv_build_target(m, t, out_flag, self_exe)
+                sys::exit(1)
+            done()
+        done()
+        t = t + 1
+    done()
+    sys::exit(0)
+done()
+
+(* `compiler` builds bin target `name` of this project to `out`, with
+   the running command's profile, platform and clang *)
+make drv_rebuild(compiler, out, cfg, name)
+    suppose cmd = drv_quote(compiler) + " build --bin " + name + " -o " + drv_quote(out) + " --profile " + cfg.profile
+    when cfg.triple != ""
+        cmd = cmd + " --target " + cfg.triple
+    done()
+    when drv_flag_value("--cc") != ""
+        cmd = cmd + " --cc " + drv_quote(drv_flag_value("--cc"))
+    done()
+    done(sys::run(cmd) == 0)
+done()
+
+(* copies build/<profile>[/<triple>]/bin/<name> to bin/<name>. The
+   compiler (target lepthornc) must be a fixed point - it rebuilds
+   itself byte for byte. A candidate built by an older compiler isn't
+   one yet, but its own rebuild (from the same source) is when that
+   rebuild reproduces itself; that one is promoted. *)
+make drv_promote_one(m, t, cfg)
+    ensure name = mf_get(m, "target", t, "name")
+    ensure out_root = drv_out_root(cfg)
+    suppose cand = out_root + "/bin/" + name
+    when not file::exists(cand)
+        show "lepthornc: nothing to promote - " + cand + " does not exist; build it first"
+        sys::exit(2)
+    done()
+    when name == "lepthornc"
+        ensure again = out_root + "/rebuild/bin/" + name
+        when not drv_rebuild(cand, again, cfg, name)
+            show "lepthornc promote: " + cand + " failed to rebuild the compiler"
+            sys::exit(1)
+        done()
+        when drv_read(cand) != drv_read(again)
+            show "lepthornc promote: " + cand + " was built by a different compiler; checking its rebuild"
+            ensure third = out_root + "/rebuild/check/" + name
+            when not drv_rebuild(again, third, cfg, name)
+                show "lepthornc promote: " + again + " failed to rebuild the compiler"
+                sys::exit(1)
+            done()
+            when drv_read(again) != drv_read(third)
+                show "lepthornc promote: " + again + " does not rebuild itself identically - not promoting"
+                sys::exit(1)
+            done()
+            cand = again
+        done()
+        show "lepthornc promote: " + cand + " rebuilds itself identically"
+    done()
+    drv_mkdirs("bin")
+    ensure dest = "bin/" + name
+    ensure tmp = dest + ".new"
+    when sys::run("cp -f " + drv_quote(cand) + " " + drv_quote(tmp) + " && mv -f " + drv_quote(tmp) + " " + drv_quote(dest)) != 0
+        show "lepthornc promote: could not write " + dest
+        sys::exit(1)
+    done()
+    show "lepthornc promote: " + cand + " -> " + dest
+    done(true)
+done()
+
+make drv_cmd_promote()
+    ensure m = drv_load_project()
+    ensure cfg = drv_config(m, false)
+    suppose promoted = 0
+    suppose t = 0
+    repeat
+        when t >= mf_count(m, "target")
+            stop
+        done()
+        when mf_get(m, "target", t, "kind") == "bin" and drv_selected(m, t)
+            drv_promote_one(m, t, cfg)
+            promoted = promoted + 1
+        done()
+        t = t + 1
+    done()
+    when promoted == 0
+        show "lepthornc promote: no bin target to promote (a library's output stays in build/)"
+        sys::exit(2)
+    done()
+    sys::exit(0)
+done()
+
+(* -- test: each test is compiled natively and also interpreted. It
+   passes when the native binary exits with the expected status
+   (<test>.exit next to its source, default 0), prints exactly <test>.out
+   if that file exists, and `eval` produces the same output and status.
+   <test>.in, if present, is fed to both on stdin. Tests see this
+   compiler's own path in LEPTHORNC. The tests are every *.lep in the
+   [Test] directory (default tests/). Units display in Unicode (--ascii:
+   ASCII) whatever the caller's LEPTHORN_OUTPUT, so a test's output
+   doesn't depend on the environment. -- *)
+
+shape TestCase
+    name: Text
+    src: Text
+done()
+
+(* [Test] tests = "dir/", default tests/ *)
+make drv_test_root(m)
+    ensure root = mf_get(m, "test", 0, "tests")
+    when root == ""
+        done("tests")
+    done()
+    done(root)
+done()
+
+make drv_test_cases(m)
+    ensure cases = ring::create(8192)
+    ensure root = drv_test_root(m)
+    when not sys::is_dir(root)
+        show "lepthornc: test directory " + root + " does not exist"
+        sys::exit(2)
+    done()
+    ensure entries = sys::list_dir(root)
+    repeat
+        when ring::is_empty(entries)
+            stop
+        done()
+        ensure entry = ring::get(entries)
+        when drv_ends_with(entry, ".lep")
+            ring::write(cases, TestCase(name = drv_strip_ext(entry), src = drv_concat(root, entry)))
+        done()
+    done()
+    done(cases)
+done()
+
+make drv_dots(name, width)
+    suppose d = " "
+    suppose i = text::length(name)
+    repeat
+        when i >= width
+            stop
+        done()
+        d = d + "."
+        i = i + 1
+    done()
+    done(d + " ")
+done()
+
+make drv_capture(cmd, out_path, in_path)
+    done(sys::run(cmd + " < " + drv_quote(in_path) + " > " + drv_quote(out_path) + " 2>&1"))
+done()
+
+(* this compiler's own executable, from argv[0]: as given when it holds
+   a '/', otherwise found on PATH the way the shell found it *)
+make drv_self_path()
+    ensure argv0 = sys::arg(0)
+    when drv_contains(argv0, "/")
+        done(sys::realpath(argv0))
+    done()
+    done(sys::realpath(drv_find_in_path(argv0)))
+done()
+
+make drv_test_one(tc, self_exe, cfg)
+    ensure src = tc.src
+    ensure base = drv_strip_ext(src)
+    ensure bin = "build/test/" + tc.name
+    suppose input = base + ".in"
+    when not file::exists(input)
+        input = "build/test/empty.in"
+    done()
+    suppose want_exit = "0"
+    ensure exit_file = base + ".exit"
+    when file::exists(exit_file)
+        want_exit = drv_trim(drv_read(exit_file))
+    done()
+    ensure out_file = base + ".out"
+    suppose mode = "unicode"
+    when drv_has_flag("--ascii")
+        mode = "ascii"
+    done()
+    ensure env = "LEPTHORNC=" + drv_quote(self_exe) + " LEPTHORN_OUTPUT=" + mode + " "
+    suppose reason = ""
+    when not file::exists(src)
+        reason = src + " does not exist"
+    otherwise when not drv_compile(src, bin, cfg, false)
+        reason = "does not compile"
+    otherwise
+        ensure nstatus = drv_capture(env + drv_quote(bin), bin + ".native.txt", input)
+        ensure estatus = drv_capture(env + drv_quote(self_exe) + " eval " + drv_quote(src), bin + ".eval.txt", input)
+        ensure nout = drv_read(bin + ".native.txt")
+        ensure eout = drv_read(bin + ".eval.txt")
+        when text::from_number(nstatus) != want_exit
+            reason = "exit " + text::from_number(nstatus) + ", expected " + want_exit
+        otherwise when file::exists(out_file) and nout != drv_read(out_file)
+            reason = "output differs from " + out_file
+        otherwise when nout != eout or nstatus != estatus
+            reason = "eval and native output differ"
+        done()
+    done()
+    when reason == ""
+        show "test: " + tc.name + drv_dots(tc.name, 24) + "ok"
+        done(true)
+    done()
+    show "test: " + tc.name + drv_dots(tc.name, 24) + "FAILED (" + reason + ")"
+    done(false)
+done()
+
+make drv_cmd_test()
+    ensure self_exe = drv_self_path()
+    ensure m = drv_load_project()
+    ensure cfg = drv_config(m, false)
+    ensure cases = drv_test_cases(m)
+    drv_mkdirs("build/test")
+    drv_write("build/test/empty.in", "")
+    suppose passed = 0
+    suppose failed = 0
+    repeat
+        when ring::is_empty(cases)
+            stop
+        done()
+        when drv_test_one(ring::get(cases), self_exe, cfg)
+            passed = passed + 1
+        otherwise
+            failed = failed + 1
+        done()
+    done()
+    show ""
+    show text::from_number(passed) + " passed; " + text::from_number(failed) + " failed"
+    when failed > 0
+        sys::exit(1)
+    done()
+    sys::exit(0)
+done()
+
+(* -- manifest: what manifest.lepm resolves to on this machine -- *)
+
+make drv_show_field(label, value)
+    when value != ""
+        show label + ": " + value
+    done()
+done()
+
+make drv_join_items(value, sep)
+    suppose outs = ""
+    ensure items = mf_items(value)
+    repeat
+        when ring::is_empty(items)
+            stop
+        done()
+        when outs != ""
+            outs = outs + sep
+        done()
+        outs = outs + ring::get(items)
+    done()
+    done(outs)
+done()
+
+make drv_show_platform(m, pf, declared)
+    suppose line = "platform: " + pf.triple + " " + pf.libc + " " + pf.link + drv_lib_flags(pf.libs)
+    when not declared
+        line = line + " (built in)"
+    done()
+    show line
+done()
+
+make drv_cmd_manifest()
+    ensure m = drv_load_project()
+    show "package: " + mf_get(m, "package", 0, "name") + " " + mf_get(m, "package", 0, "version")
+    drv_show_field("description", mf_get(m, "package", 0, "description"))
+    drv_show_field("authors", drv_join_items(mf_get(m, "package", 0, "authors"), ", "))
+    suppose lic = mf_get(m, "package", 0, "license")
+    when lic != "" and mf_get(m, "package", 0, "license_file") != ""
+        lic = lic + " (" + mf_get(m, "package", 0, "license_file") + ")"
+    done()
+    drv_show_field("license", lic)
+    drv_show_field("readme", mf_get(m, "package", 0, "readme"))
+    drv_show_field("repository", mf_get(m, "package", 0, "repository"))
+    drv_show_field("homepage", mf_get(m, "package", 0, "homepage"))
+    suppose t = 0
+    repeat
+        when t >= mf_count(m, "target")
+            stop
+        done()
+        show "target: " + mf_get(m, "target", t, "name") + " (" + mf_get(m, "target", t, "kind") + ") " + mf_get(m, "target", t, "source")
+        t = t + 1
+    done()
+    ensure root = drv_test_root(m)
+    when sys::is_dir(root)
+        show "tests: " + root + " (" + text::from_number(ring::size(drv_test_cases(m))) + " files)"
+    otherwise
+        show "tests: " + root + " (missing)"
+    done()
+    t = 0
+    repeat
+        when t >= mf_count(m, "profile")
+            stop
+        done()
+        ensure pname = mf_get(m, "profile", t, "name")
+        show "profile: " + pname + " " + drv_profile_opt(m, pname)
+        t = t + 1
+    done()
+    when mf_find(m, "profile", "name", "debug") < 0
+        show "profile: debug -O0 (built in)"
+    done()
+    when mf_find(m, "profile", "name", "release") < 0
+        show "profile: release -O2 (built in)"
+    done()
+    t = 0
+    repeat
+        when t >= mf_count(m, "target_platform")
+            stop
+        done()
+        drv_show_platform(m, drv_platform(m, mf_get(m, "target_platform", t, "triple")), true)
+        t = t + 1
+    done()
+    when t == 0
+        drv_show_platform(m, drv_platform(m, "x86_64-linux-gnu"), false)
+        drv_show_platform(m, drv_platform(m, "x86_64-linux-musl"), false)
+    done()
+    ensure cc = drv_cc()
+    ensure cpath = drv_clang_path(cc)
+    when cpath == ""
+        show "clang: " + cc + " (not found)"
+    otherwise
+        ensure host = drv_host_triple(cc)
+        suppose libc = "glibc"
+        when drv_contains(host, "musl")
+            libc = "musl"
+        done()
+        show "clang: " + cc + " -> " + cpath
+        show "host: " + host + " (" + libc + ")"
+    done()
+    sys::exit(0)
+done()
+
+(* -- new: a ready-to-build project skeleton -- *)
+
+make drv_cmd_new(path)
+    when file::exists(path) or sys::is_dir(path)
+        show "lepthornc: " + path + " already exists"
+        sys::exit(2)
+    done()
+    ensure name = drv_basename(path)
+    when not mf_is_name(name)
+        show "lepthornc: a project name may use only letters, digits, _ . and -, got " + name
+        sys::exit(2)
+    done()
+    ensure nl = text::from_code(10)
+    ensure q = text::from_code(34)
+    ensure is_lib = drv_has_flag("--lib")
+    suppose kind = "bin"
+    suppose entry = "src/main.lep"
+    when is_lib
+        kind = "library"
+        entry = "src/lib.lep"
+    done()
+    drv_mkdirs(path + "/src")
+    drv_mkdirs(path + "/tests")
+    ensure package = "[Package]" + nl + "    name = " + q + name + q + nl + "    version = " + q + "0.1.0" + q + nl
+    ensure target = "[Target]" + nl + "    name = " + q + name + q + nl + "    kind = " + q + kind + q + nl + "    source = " + q + entry + q + nl
+    ensure tests = "[Test]" + nl + "    tests = " + q + "tests/" + q + nl
+    drv_write(path + "/manifest.lepm", package + nl + target + nl + tests)
+    ensure lname = drv_c_ident(name)
+    when is_lib
+        drv_write(path + "/src/lib.lep", "make weight(mass)" + nl + "    done(force::gravity(mass))" + nl + "done()" + nl)
+        drv_write(path + "/tests/basic.lep", "use " + q + "../src/lib.lep" + q + nl + nl + "show " + q + "weight:" + q + " weight(2kg)" + nl)
+        drv_write(path + "/tests/basic.out", "weight: 19.6133 kg·m/s² (N)" + nl)
+        drv_write(path + "/README.md", "# " + name + nl + nl + "A Lepthorn library." + nl + nl + "    lepthornc build --release  # build/release/lib/lib" + lname + ".so and .a" + nl + "    lepthornc test             # run tests/*.lep" + nl + nl + "Each `make` function is exported as `" + lname + "_<name>`; `" + lname + "_init()` runs the library's top-level statements." + nl)
+    otherwise
+        drv_write(path + "/src/main.lep", "show " + q + "Hello from Lepthorn" + q + nl)
+        drv_write(path + "/tests/basic.lep", "ensure mass = 2kg" + nl + "show " + q + "mass:" + q + " mass" + nl)
+        drv_write(path + "/tests/basic.out", "mass: 2 kg" + nl)
+        drv_write(path + "/README.md", "# " + name + nl + nl + "A Lepthorn project." + nl + nl + "    lepthornc build                                       # build/debug/bin/" + name + nl + "    lepthornc build --release                             # build/release/bin/" + name + nl + "    lepthornc build --release --target x86_64-linux-musl  # a static musl binary" + nl + "    lepthornc test                                        # run tests/*.lep" + nl)
+    done()
+    show "lepthornc new: created " + path + "/"
+    sys::exit(0)
+done()
+
+make lepthornc_main()
+    ensure argc = sys::arg_count()
+    when argc < 2
+        drv_usage()
+        sys::exit(2)
+    done()
+    ensure cmd = sys::arg(1)
+    (* unit display for this process and the programs it runs *)
+    when drv_has_flag("--ascii")
+        sys::setenv("LEPTHORN_OUTPUT", "ascii")
+    otherwise when drv_has_flag("--unicode")
+        sys::setenv("LEPTHORN_OUTPUT", "unicode")
+    done()
+    when cmd == "version" or cmd == "--version"
+        show "lepthornc 1.0.0 (self-hosted, native)"
+        sys::exit(0)
+    done()
+    when cmd == "help" or cmd == "--help"
+        drv_usage()
+        sys::exit(0)
+    done()
+    when cmd == "build"
+        drv_cmd_build()
+    done()
+    when cmd == "test"
+        drv_cmd_test()
+    done()
+    when cmd == "promote"
+        drv_cmd_promote()
+    done()
+    when cmd == "manifest"
+        drv_cmd_manifest()
+    done()
+    when argc < 3
+        drv_usage()
+        sys::exit(2)
+    done()
+    ensure src = sys::arg(2)
+    when cmd == "new"
+        drv_cmd_new(src)
+    done()
+    when not (cmd == "compile" or cmd == "run" or cmd == "eval" or cmd == "check" or cmd == "resolve")
+        show "lepthornc: unknown command '" + cmd + "'"
+        drv_usage()
+        sys::exit(2)
+    done()
+    when not file::exists(src)
+        show "lepthornc: no such file: " + src
+        sys::exit(2)
+    done()
+    when cmd == "compile"
+        suppose outp = drv_flag_value("-o")
+        when outp == ""
+            outp = drv_strip_ext(drv_basename(src))
+        done()
+        when drv_compile(src, outp, drv_config(mf_empty(), false), drv_has_flag("--emit-llvm"))
+            sys::exit(0)
+        done()
+        sys::exit(1)
+    done()
+    when cmd == "run"
+        ensure runp = "build/run/" + drv_strip_ext(drv_basename(src))
+        when drv_compile(src, runp, drv_config(mf_empty(), false), false)
+            sys::exit(sys::run(drv_quote(runp)))
+        done()
+        sys::exit(1)
+    done()
+    ensure st = DrvState(failed = false)
+    ensure source = drv_source(st, src)
+    when st.failed
+        sys::exit(1)
+    done()
+    when cmd == "eval"
+        when run_program(source)
+            sys::exit(0)
+        done()
+        sys::exit(1)
+    done()
+    when cmd == "check"
+        when validate_compiler_source(source)
+            show "lepthornc check: " + src + " OK"
+            sys::exit(0)
+        done()
+        sys::exit(1)
+    done()
+    show source
+    sys::exit(0)
+done()
+

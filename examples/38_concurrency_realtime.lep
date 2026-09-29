@@ -1,0 +1,64 @@
+(* 38_concurrency_realtime.lep - loop_hz, deadline, timeout, wait,
+   watch and interrupt. See 37_concurrency_basic.lep for parallel,
+   priority, shared and atomic. *)
+
+(* loop_hz(n): runs the body n times per second, on a fixed grid, the
+   same way as `every`. *)
+suppose ticks = 0
+loop_hz(50)
+    ticks = ticks + 1
+    when ticks >= 3
+        stop
+    done()
+done()
+show "Ticks:" ticks
+
+(* deadline: a temporal contract, not automatic cancellation - the
+   body always runs to completion; a miss is a warning, not a crash. *)
+deadline 50ms
+    show "Well within budget"
+done()
+
+(* timeout: bounds how long a `wait` may block, distinct from deadline
+   (which bounds how long an operation takes). Real bounded polling
+   for the `wait <condition>` case. *)
+shared suppose ready = false
+
+make flip_ready()
+    atomic
+        ready = true
+    done()
+done()
+
+parallel
+    flip_ready()
+done()
+
+timeout 100ms
+    wait ready
+done()
+show "Ready after timeout block:" ready
+
+(* wait's condition form directly, no timeout wrapper. *)
+wait ready
+show "Waited on condition directly"
+
+(* watch: in this version the body runs once, right away. Running it
+   when the value changes is not done yet. *)
+suppose temperature = 90
+watch temperature
+    when temperature > 80
+        show "Overheat check triggered"
+    done()
+done()
+
+(* interrupt: in this version the handler runs once, right away, not on
+   a real hardware or software interrupt. *)
+shared suppose event_pending = false
+
+interrupt(sensor_irq)
+    atomic
+        event_pending = true
+    done()
+done()
+show "Event pending after interrupt handler ran:" event_pending

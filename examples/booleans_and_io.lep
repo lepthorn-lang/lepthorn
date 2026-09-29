@@ -1,0 +1,18 @@
+(* booleans_and_io.lep - Booleans, comparisons, joining Text with +,
+   and `read`. *)
+
+ensure mass_a = 25kg
+ensure mass_b = 10kg
+
+suppose heavier = mass_a > mass_b
+show "Is mass_a heavier than mass_b?" heavier
+
+suppose same_mass = (mass_a == 25000g)
+show "mass_a equals 25000g?" same_mass
+
+ensure greeting = "Hello, "
+ensure project = "Lepthorn"
+show (greeting + project)
+
+read pilot_name
+show "Recorded pilot:" pilot_name

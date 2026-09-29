@@ -1,0 +1,5 @@
+(* 17_read_input.lep - `read` reads a raw line of Text from stdin, no
+   parsing at all. Try: echo "Ali Zain" | lepthornc eval 17_read_input.lep *)
+
+read pilot_name
+show "Recorded pilot:" pilot_name

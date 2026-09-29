@@ -1,0 +1,14 @@
+(* the compiler under test (LEPTHORNC, set by `lepthornc test`) builds
+   this compiler from source; the result must run and verify that source *)
+ensure lc = sys::getenv("LEPTHORNC")
+when lc == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+ensure q = text::from_code(34)
+sys::mkdir("build/test/self")
+ensure a = "build/test/self/lepthornc"
+ensure log = " > build/test/self/build.log 2>&1"
+show "build status:" sys::run(q + lc + q + " build -o " + a + log)
+ensure ver = sys::capture(a + " version")
+show "version:" text::slice(ver, 0, text::length(ver) - 1)
+show "check status:" sys::run(a + " check src/main.lep" + log)

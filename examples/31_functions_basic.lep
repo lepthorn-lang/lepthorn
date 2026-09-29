@@ -1,0 +1,22 @@
+(* 31_functions_basic.lep - functions: make, and done(value) to return. *)
+
+make add(a, b)
+    done(a + b)
+done()
+
+make greet()
+    show "Welcome to Lepthorn"
+done()
+
+ensure result = add(10, 20)
+show "10 + 20 =" result
+
+greet()
+
+(* Composing a user function with a builtin UEE call *)
+make weight(mass)
+    done(force::gravity(mass))
+done()
+
+ensure w = weight(25kg)
+show "Weight of 25kg:" w

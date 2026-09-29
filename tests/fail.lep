@@ -1,0 +1,3 @@
+show "before"
+sys::fail("sensor offline")
+show "after"

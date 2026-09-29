@@ -1,0 +1,48 @@
+(* arithmetic_and_blocks.lep - ensure!/suppose! blocks, and the
+   arithmetic, logic, bitwise and compound assignment operators. *)
+
+ensure!
+    name = "Ali"
+    age = 21
+done()
+
+suppose!
+    x = 10
+    y = 3
+done()
+
+suppose sum = x + y
+suppose difference = x - y
+suppose product = x * y
+suppose quotient = x / y
+suppose remainder = x % y
+suppose power = x ** 2
+
+show "sum:" sum
+show "difference:" difference
+show "product:" product
+show "quotient:" quotient
+show "remainder:" remainder
+show "power:" power
+
+x += 5
+show "x after += 5:" x
+
+suppose is_positive = x > 0
+suppose is_small = x < 100
+suppose both = is_positive and is_small
+suppose either = is_positive or false
+suppose negated = not is_small
+
+show "both:" both
+show "either:" either
+show "negated:" negated
+
+suppose flags = 6
+suppose masked = flags & 2
+suppose combined = flags | 8
+suppose flipped = ~flags
+
+show "masked:" masked
+show "combined:" combined
+show "flipped:" flipped

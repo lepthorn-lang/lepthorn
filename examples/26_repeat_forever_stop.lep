@@ -1,0 +1,14 @@
+(* 26_repeat_forever_stop.lep - a bare `repeat` is an intentional infinite
+   loop; `stop` exits it. No separate "forever" keyword exists. *)
+
+suppose count = 0
+
+repeat
+    count += 1
+    show "count:" count
+    when count >= 4
+        stop
+    done()
+done()
+
+show "final count:" count

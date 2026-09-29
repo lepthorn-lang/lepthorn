@@ -1,0 +1,16 @@
+(* show keeps units on every argument, single or many *)
+ensure force = 392.266N
+show force
+show "force:" force
+show "force:" force "status:" "ok"
+show "speed:" 20m / 4s
+show "energy:" 2kg * 3m * 3m / 1s / 1s
+show "number:" 42
+show "text:" "drone"
+show "boolean:" true
+show "array:" [1, 2, 3]
+show "masses:" [1kg, 2kg]
+ensure r = ring::create(4)
+ring::write(r, 1)
+show "ring:" r
+show "formatted:" text::format(9.81m / 1s / 1s)

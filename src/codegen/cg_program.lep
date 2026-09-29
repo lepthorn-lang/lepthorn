@@ -1,0 +1,351 @@
+(* cg_program.lep - whole-program assembly: shape layout tables, one
+   LLVM function per `make`, `main` for the top-level statements, the
+   runtime (cg_rt_*.lep), and codegen_program - the entry point: lex ->
+   parse -> CTV -> codegen -> write .ll.
+
+   Output order: header, then each function as soon as it's generated
+   (its body buffered in chunks only until its entry-block allocas are
+   known), then main, then every global (text constants, tables,
+   runtime) at the end - LLVM resolves forward references. *)
+
+use core::ast::ast
+use core::units::quantity
+use core::lang_syntax::data_types
+use core::lang_syntax::parser
+use core::ctv::ctv
+use runtime::primitives
+use runtime::interpreter
+use codegen::cg_core
+use codegen::cg_expr
+use codegen::cg_stmt
+use codegen::cg_rt_core
+
+(* every distinct field name across all shapes gets a program-wide id;
+   @lep.layout[shape * nfids + fid] is that field's slot, or -1 *)
+make cg_build_fids(ctx)
+    ensure ns = ring::size(ctx.shapes)
+    suppose s = 0
+    repeat
+        when s >= ns
+            stop
+        done()
+        ensure sd = ring::peek(ctx.shapes, s)
+        suppose j = 0
+        repeat
+            when j >= sd.field_count
+                stop
+            done()
+            ensure fname = param_at(sd.field_names, j)
+            when cg_text_index(ctx.fids, fname) < 0
+                ring::write(ctx.fids, fname)
+            done()
+            j = j + 1
+        done()
+        s = s + 1
+    done()
+done()
+
+make cg_i32_array(gname, ty_len, body)
+    when ty_len == 0
+        done(gname + " = internal constant [0 x i32] zeroinitializer")
+    done()
+    done(gname + " = internal constant [" + text::from_number(ty_len) + " x i32] [" + body + "]")
+done()
+
+make cg_ptr_array(gname, ty_len, body)
+    when ty_len == 0
+        done(gname + " = internal constant [0 x ptr] zeroinitializer")
+    done()
+    done(gname + " = internal constant [" + text::from_number(ty_len) + " x ptr] [" + body + "]")
+done()
+
+make cg_shape_tables(ctx)
+    ensure ns = ring::size(ctx.shapes)
+    ensure nf = ring::size(ctx.fids)
+    cg_global(ctx, "@lep.nfids = internal constant i64 " + text::from_number(nf))
+    suppose fnames = ""
+    suppose f = 0
+    repeat
+        when f >= nf
+            stop
+        done()
+        ensure fg = "@.fnm." + text::from_number(f)
+        cg_cstr_global(ctx, fg, ring::peek(ctx.fids, f))
+        when f > 0
+            fnames = fnames + ", "
+        done()
+        fnames = fnames + "ptr " + fg
+        f = f + 1
+    done()
+    cg_global(ctx, cg_ptr_array("@lep.field_names", nf, fnames))
+    suppose layout = ""
+    suppose snames = ""
+    suppose nslots = ""
+    suppose offs = ""
+    suppose slotf = ""
+    suppose total = 0
+    suppose s = 0
+    ensure fieldset = ring::create(1000)
+    repeat
+        when s >= ns
+            stop
+        done()
+        ensure sd = ring::peek(ctx.shapes, s)
+        ensure sg = "@.snm." + text::from_number(s)
+        cg_cstr_global(ctx, sg, sd.name)
+        when s > 0
+            snames = snames + ", "
+            nslots = nslots + ", "
+            offs = offs + ", "
+        done()
+        snames = snames + "ptr " + sg
+        nslots = nslots + "i32 " + text::from_number(sd.field_count)
+        offs = offs + "i32 " + text::from_number(total)
+        ring::clear(fieldset)
+        suppose j = 0
+        repeat
+            when j >= sd.field_count
+                stop
+            done()
+            ensure fname = param_at(sd.field_names, j)
+            ring::write(fieldset, fname)
+            when total > 0
+                slotf = slotf + ", "
+            done()
+            slotf = slotf + "i32 " + text::from_number(cg_text_index(ctx.fids, fname))
+            total = total + 1
+            j = j + 1
+        done()
+        suppose g = 0
+        repeat
+            when g >= nf
+                stop
+            done()
+            when layout != ""
+                layout = layout + ", "
+            done()
+            layout = layout + "i32 " + text::from_number(cg_text_index(fieldset, ring::peek(ctx.fids, g)))
+            g = g + 1
+        done()
+        s = s + 1
+    done()
+    cg_global(ctx, cg_i32_array("@lep.layout", ns * nf, layout))
+    cg_global(ctx, cg_ptr_array("@lep.shape_names", ns, snames))
+    cg_global(ctx, cg_i32_array("@lep.shape_nslots", ns, nslots))
+    cg_global(ctx, cg_i32_array("@lep.slot_off", ns, offs))
+    cg_global(ctx, cg_i32_array("@lep.slot_fids", total, slotf))
+done()
+
+(* the body chunks buffered so far, then the tail *)
+make cg_flush_body(ctx, out)
+    repeat
+        when ring::is_empty(ctx.chunks)
+            stop
+        done()
+        file::write(out, ring::get(ctx.chunks))
+    done()
+    file::write(out, ctx.cur)
+    ctx.cur = ""
+done()
+
+make cg_reset_fn(ctx)
+    ring::clear(ctx.locals)
+    ring::clear(ctx.chunks)
+    ctx.cur = ""
+    ctx.allocas = ""
+    ctx.terminated = false
+    ctx.break_label = ""
+    ctx.continue_label = ""
+done()
+
+(* true when a later `make` reuses this name - the host keeps the last
+   definition, so only that one is emitted *)
+make cg_is_shadowed(ctx, idx, name)
+    ensure n = ring::size(ctx.funcs)
+    suppose i = idx + 1
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure f = ring::peek(ctx.funcs, i)
+        when f.name == name
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make cg_function(ctx, arena, f, out)
+    ensure nl = text::from_code(10)
+    cg_reset_fn(ctx)
+    ctx.in_main = false
+    ensure pc = param_count(f.params)
+    suppose sig = ""
+    suppose pstores = ""
+    suppose pj = 0
+    repeat
+        when pj >= pc
+            stop
+        done()
+        ensure pname = param_at(f.params, pj)
+        cg_add_local(ctx, pname)
+        when pj > 0
+            sig = sig + ", "
+        done()
+        sig = sig + "i64 %a." + pname
+        pstores = pstores + "  store i64 %a." + pname + ", ptr %v." + pname + nl
+        pj = pj + 1
+    done()
+    cg_scan_locals(ctx, arena, f.body)
+    cg_label(ctx, "body")
+    cg_block(ctx, arena, f.body)
+    when not ctx.terminated
+        cg_ret(ctx, "10")
+    done()
+    suppose head = "define internal i64 @lf." + f.name + "(" + sig + ") {" + nl + "entry:" + nl + ctx.allocas + pstores
+    head = head + "  %dep0 = load i64, ptr @lep_depth" + nl + "  %dep1 = add i64 %dep0, 1" + nl + "  store i64 %dep1, ptr @lep_depth" + nl
+    head = head + "  %depx = icmp sgt i64 %dep1, 10000" + nl + "  br i1 %depx, label %depfail, label %body" + nl
+    head = head + "depfail:" + nl + "  %depn = ptrtoint ptr @.fn." + f.name + " to i64" + nl + "  call void @lep_depth_fail(i64 %depn)" + nl + "  unreachable" + nl
+    file::write(out, head)
+    cg_flush_body(ctx, out)
+    file::write(out, "}" + nl + nl)
+done()
+
+(* the top-level statements: `main` for a program; for a library,
+   `<lib>_init()`, which leaves the host process's stdout buffering and
+   argv alone *)
+make cg_main(ctx, arena, first, out, lib)
+    ensure nl = text::from_code(10)
+    cg_reset_fn(ctx)
+    ctx.in_main = true
+    cg_scan_locals(ctx, arena, first)
+    cg_label(ctx, "body")
+    cg_block(ctx, arena, first)
+    when not ctx.terminated
+        cg_emit(ctx, "call void @lep_finish()")
+        cg_emit(ctx, ctx.main_ret)
+    done()
+    suppose head = "define i32 @main(i32 %argc, ptr %argv) {" + nl + "entry:" + nl + "  call void @lep_init(i32 %argc, ptr %argv)" + nl
+    when lib != ""
+        head = "define void @" + lib + "_init() {" + nl + "entry:" + nl
+    done()
+    file::write(out, head + ctx.allocas + "  br label %body" + nl)
+    cg_flush_body(ctx, out)
+    file::write(out, "}" + nl + nl)
+done()
+
+(* a library's public entry point for one `make` function: same values
+   in and out (the i64 value encoding), stdout flushed after each call *)
+make cg_export(ctx, f, lib, out)
+    ensure nl = text::from_code(10)
+    ensure pc = param_count(f.params)
+    suppose sig = ""
+    suppose args = ""
+    suppose pj = 0
+    repeat
+        when pj >= pc
+            stop
+        done()
+        when pj > 0
+            sig = sig + ", "
+            args = args + ", "
+        done()
+        sig = sig + "i64 %a" + text::from_number(pj)
+        args = args + "i64 %a" + text::from_number(pj)
+        pj = pj + 1
+    done()
+    file::write(out, "define i64 @" + lib + "_" + f.name + "(" + sig + ") {" + nl + "entry:" + nl + "  %r = call i64 @lf." + f.name + "(" + args + ")" + nl + "  %fl = call i32 @fflush(ptr null)" + nl + "  ret i64 %r" + nl + "}" + nl + nl)
+done()
+
+make cg_flush_globals(ctx, out)
+    repeat
+        when ring::is_empty(ctx.gchunks)
+            stop
+        done()
+        file::write(out, ring::get(ctx.gchunks))
+    done()
+    file::write(out, ctx.gcur)
+    ctx.gcur = ""
+done()
+
+make codegen_program(source, ll_path)
+    done(codegen_module(source, ll_path, ""))
+done()
+
+(* a shared/static library: no main; every `make` function exported as
+   <lib>_<name>, the top-level statements as <lib>_init() *)
+make codegen_library(source, ll_path, lib)
+    done(codegen_module(source, ll_path, lib))
+done()
+
+make codegen_module(source, ll_path, lib)
+    ensure tok_buf = lex_all(source)
+    ensure cur = Cursor(pos = 0)
+    ensure cap = text::length(source) + 1
+    ensure arena = ring::create(cap)
+    ensure funcs = ring::create(cap)
+    ensure shapes = ring::create(cap)
+    ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
+    when has_parse_error(arena)
+        report_parse_errors(arena)
+        done(false)
+    done()
+    ensure ctv_sink = ring::create(cap)
+    ctv_check_program(arena, first, funcs, ctv_sink)
+    when not ring::is_empty(ctv_sink)
+        report_ctv_errors(ctv_sink)
+        done(false)
+    done()
+    ensure ctx = CgCtx(counter = 0, cur = "", chunks = ring::create(cap + 1000), gcur = "", gchunks = ring::create(cap + 1000), allocas = "", terminated = false, break_label = "", continue_label = "", failed = false, fids = ring::create(cap + 100), shapes = shapes, funcs = funcs, locals = ring::create(cap + 100), shared_names = ring::create(cap + 100), unit_table = build_unit_table(), in_main = false, main_ret = "ret i32 0")
+    cg_build_fids(ctx)
+    cg_scan_shared(ctx, arena, first)
+    ensure nfuncs = ring::size(funcs)
+    suppose fi = 0
+    repeat
+        when fi >= nfuncs
+            stop
+        done()
+        ensure fs = ring::peek(funcs, fi)
+        cg_scan_shared(ctx, arena, fs.body)
+        fi = fi + 1
+    done()
+    ensure out = file::open(ll_path, "w")
+    when file::error() != 0
+        show "lepthornc: cannot write " + ll_path
+        done(false)
+    done()
+    file::write(out, cg_rt_header())
+    suppose si = 0
+    repeat
+        when si >= ring::size(ctx.shared_names)
+            stop
+        done()
+        cg_global(ctx, "@g." + ring::peek(ctx.shared_names, si) + " = internal global i64 10")
+        si = si + 1
+    done()
+    suppose fj = 0
+    repeat
+        when fj >= nfuncs
+            stop
+        done()
+        ensure fd = ring::peek(funcs, fj)
+        when not cg_is_shadowed(ctx, fj, fd.name)
+            cg_text_global(ctx, "@.fn." + fd.name, fd.name)
+            cg_function(ctx, arena, fd, out)
+            when lib != ""
+                cg_export(ctx, fd, lib, out)
+            done()
+        done()
+        fj = fj + 1
+    done()
+    when lib != ""
+        ctx.main_ret = "ret void"
+    done()
+    cg_main(ctx, arena, first, out, lib)
+    cg_shape_tables(ctx)
+    cg_rt_all(ctx)
+    cg_flush_globals(ctx, out)
+    file::close(out)
+    done(not ctx.failed)
+done()

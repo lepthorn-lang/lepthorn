@@ -1,0 +1,39 @@
+shape Point
+    x: Number
+    y: Number
+done()
+
+shape Probe
+    name: Text
+    at: Point
+    mass: Number
+done()
+
+suppose p = Point(x = 3, y = 4)
+p.x = p.x + 10
+show "p:" p
+show "p == Point(13, 4):" p == Point(x = 13, y = 4)
+suppose probe = Probe(name = "alpha", at = p, mass = 2kg)
+show probe
+ensure at = probe.at
+show "probe x:" at.x "mass:" probe.mass
+
+suppose nums = [10, 20, 30]
+nums[1] = 25
+show "nums:" nums "len:" length(nums)
+ensure masses = [10kg, 25kg, 4kg]
+make total(items)
+    suppose sum = 0kg
+    suppose i = 0
+    repeat
+        when i >= length(items)
+            stop
+        done()
+        sum = sum + items[i]
+        i = i + 1
+    done()
+    done(sum)
+done()
+show "total mass:" total(masses)
+ensure grid = [[1, 2], [3, 4]]
+show "grid:" grid

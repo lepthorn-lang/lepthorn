@@ -1,0 +1,8 @@
+(* 08_mod_and_pow.lep - the % (modulo) and ** (exponent) operators. *)
+
+ensure a = 17
+ensure b = 5
+
+show "a % b (remainder):" (a % b)
+show "a ** 2 (squared):" (a ** 2)
+show "2 ** 10:" (2 ** 10)

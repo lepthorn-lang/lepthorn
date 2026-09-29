@@ -1,0 +1,20 @@
+(* 36_file_io.lep - files. The file functions do not stop the program
+   when they fail; file::error() gives the error code of the last call,
+   0 when it worked. The file is made in the current directory. *)
+
+ensure handle = file::open("lepthorn_example.txt", "w")
+show "Open error code (0 = success):" file::error()
+
+ensure bytes_written = file::write(handle, "Hello from Lepthorn!")
+show "Bytes written:" bytes_written
+show "Close result (0 = success):" file::close(handle)
+
+show "File exists now:" file::exists("lepthorn_example.txt")
+
+ensure read_handle = file::open("lepthorn_example.txt", "r")
+ensure content = file::load(read_handle, 1024)
+show "Content read back:" content
+file::close(read_handle)
+
+show "Delete result (0 = success):" file::delete("lepthorn_example.txt")
+show "File exists after delete:" file::exists("lepthorn_example.txt")

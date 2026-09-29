@@ -1,0 +1,11 @@
+use runtime::interpreter
+
+ensure newline = text::from_code(10)
+ensure quote = text::from_code(34)
+show "-- text: literals, concatenation, comparison, variables, functions, shape fields --"
+run_program("ensure greeting = " + quote + "hello" + quote + newline + "show greeting")
+run_program("ensure a = " + quote + "foo" + quote + newline + "ensure b = " + quote + "bar" + quote + newline + "show a + b")
+run_program("ensure a = " + quote + "x" + quote + newline + "ensure b = " + quote + "x" + quote + newline + "when a == b" + newline + "    show 111" + newline + "done()")
+run_program("make greet(name)" + newline + "    done(" + quote + "hi " + quote + " + name)" + newline + "done()" + newline + "show greet(" + quote + "lepthorn" + quote + ")")
+run_program("shape Person" + newline + "    name: Text" + newline + "    age: Number" + newline + "done()" + newline + "ensure p = Person(name = " + quote + "ali" + quote + ", age = 5)" + newline + "show p.name" + newline + "show p.age")
+run_program("suppose words = [" + quote + "a" + quote + ", " + quote + "b" + quote + "]" + newline + "show words[1]")

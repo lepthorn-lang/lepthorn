@@ -1,0 +1,13 @@
+(* 24_when_elseif_chain.lep - otherwise-when chains, like an else-if ladder. *)
+
+ensure battery = 65
+
+when battery > 80
+    show "Excellent"
+otherwise when battery > 40
+    show "Good"
+otherwise when battery > 10
+    show "Low"
+otherwise
+    show "Critical"
+done()

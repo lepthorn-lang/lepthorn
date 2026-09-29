@@ -1,0 +1,8 @@
+use runtime::interpreter
+
+ensure newline = text::from_code(10)
+show "-- CTV: undeclared variable, immutable reassignment, undefined function, wrong arity --"
+run_program("show missing_var")
+run_program("ensure x = 5" + newline + "x = 10")
+run_program("show ghost(1, 2)")
+run_program("make add(a, b)" + newline + "    done(a + b)" + newline + "done()" + newline + "show add(1, 2, 3)")

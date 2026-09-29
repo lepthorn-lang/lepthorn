@@ -1,0 +1,682 @@
+(* manifest.lep - reads manifest.lepm.
+
+   A line is a section header, [Package] [Target] [Test] [Profile]
+   [Target_Platform], or `key = value` belonging to the section above
+   it. [Target], [Profile] and [Target_Platform] may repeat. A value is
+   quoted text or a list of quoted texts, ["a", "b"]; a line starting
+   with # or // is a comment. Unknown sections and keys are errors, so a
+   misspelling never passes silently. Paths are relative to the project
+   root; absolute ones are refused. The older flat form (project/kind/
+   entry, no sections) is still read. *)
+
+shape MfEntry
+    block: Text
+    inst: Number
+    key: Text
+    value: Text
+    is_list: Boolean
+    line: Number
+done()
+
+shape Manifest
+    entries: Number
+done()
+
+shape MfState
+    block: Text
+    inst: Number
+    blocks: Number
+    legacy_line: Number
+done()
+
+make mf_fail(line, msg)
+    when line > 0
+        show "lepthornc: manifest.lepm:" + text::from_number(line) + ": " + msg
+    otherwise
+        show "lepthornc: manifest.lepm: " + msg
+    done()
+    sys::exit(2)
+done()
+
+make mf_word_in(word, words)
+    done(drv_contains(" " + words + " ", " " + word + " "))
+done()
+
+make mf_sections()
+    done("[Package] [Target] [Test] [Profile] [Target_Platform]")
+done()
+
+(* [Target_Platform] -> target_platform, the name used inside; "" if unknown *)
+make mf_section_kind(header)
+    when header == "[Package]"
+        done("package")
+    done()
+    when header == "[Target]"
+        done("target")
+    done()
+    when header == "[Test]"
+        done("test")
+    done()
+    when header == "[Profile]"
+        done("profile")
+    done()
+    when header == "[Target_Platform]"
+        done("target_platform")
+    done()
+    done("")
+done()
+
+make mf_section_name(kind)
+    when kind == "package"
+        done("[Package]")
+    done()
+    when kind == "target"
+        done("[Target]")
+    done()
+    when kind == "test"
+        done("[Test]")
+    done()
+    when kind == "profile"
+        done("[Profile]")
+    done()
+    done("[Target_Platform]")
+done()
+
+(* the keys each section takes *)
+make mf_keys(block)
+    when block == "package"
+        done("name version description authors license license_file readme repository homepage")
+    done()
+    when block == "target"
+        done("name kind source")
+    done()
+    when block == "test"
+        done("tests")
+    done()
+    when block == "profile"
+        done("name optimization")
+    done()
+    when block == "target_platform"
+        done("triple libc link libraries")
+    done()
+    done("")
+done()
+
+make mf_legacy_keys()
+    done("project version kind entry tests lepthorn")
+done()
+
+make mf_is_ident(s)
+    when s == ""
+        done(false)
+    done()
+    suppose i = 0
+    repeat
+        when i >= text::length(s)
+            stop
+        done()
+        ensure c = text::char_at(s, i)
+        when not (is_alnum(c) or c == "_")
+            done(false)
+        done()
+        i = i + 1
+    done()
+    done(true)
+done()
+
+(* names that become file names, symbols and -l flags: letters, digits,
+   _ . - but not starting with - or . *)
+make mf_is_name(s)
+    when s == ""
+        done(false)
+    done()
+    when drv_starts_with(s, "-") or drv_starts_with(s, ".")
+        done(false)
+    done()
+    suppose i = 0
+    repeat
+        when i >= text::length(s)
+            stop
+        done()
+        ensure c = text::char_at(s, i)
+        when not (is_alnum(c) or c == "_" or c == "-" or c == ".")
+            done(false)
+        done()
+        i = i + 1
+    done()
+    done(true)
+done()
+
+make mf_count(m, block)
+    suppose n = 0
+    suppose i = 0
+    repeat
+        when i >= ring::size(m.entries)
+            stop
+        done()
+        ensure e = ring::peek(m.entries, i)
+        when e.block == block and e.key == ""
+            n = n + 1
+        done()
+        i = i + 1
+    done()
+    done(n)
+done()
+
+make mf_entry_index(m, block, inst, key)
+    suppose i = 0
+    repeat
+        when i >= ring::size(m.entries)
+            stop
+        done()
+        ensure e = ring::peek(m.entries, i)
+        when e.block == block and e.inst == inst and e.key == key
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()
+
+make mf_has(m, block, inst, key)
+    done(mf_entry_index(m, block, inst, key) >= 0)
+done()
+
+(* a value, or "" when absent; list items come back one per line *)
+make mf_get(m, block, inst, key)
+    ensure i = mf_entry_index(m, block, inst, key)
+    when i < 0
+        done("")
+    done()
+    ensure e = ring::peek(m.entries, i)
+    done(e.value)
+done()
+
+(* the line to blame for a key, or for its block when the key is missing *)
+make mf_line(m, block, inst, key)
+    suppose i = mf_entry_index(m, block, inst, key)
+    when i < 0
+        i = mf_entry_index(m, block, inst, "")
+    done()
+    when i < 0
+        done(0)
+    done()
+    ensure e = ring::peek(m.entries, i)
+    done(e.line)
+done()
+
+(* the block of this kind whose `key` is `value`, or -1 *)
+make mf_find(m, block, key, value)
+    suppose inst = 0
+    repeat
+        when inst >= mf_count(m, block)
+            stop
+        done()
+        when mf_get(m, block, inst, key) == value
+            done(inst)
+        done()
+        inst = inst + 1
+    done()
+    done(0 - 1)
+done()
+
+(* `key` of every block of this kind, comma-separated, for messages *)
+make mf_names(m, block, key)
+    suppose outs = ""
+    suppose inst = 0
+    repeat
+        when inst >= mf_count(m, block)
+            stop
+        done()
+        when inst > 0
+            outs = outs + ", "
+        done()
+        outs = outs + mf_get(m, block, inst, key)
+        inst = inst + 1
+    done()
+    done(outs)
+done()
+
+make mf_items(value)
+    ensure items = ring::create(text::length(value) + 1)
+    when value == ""
+        done(items)
+    done()
+    ensure nl = text::from_code(10)
+    suppose start = 0
+    suppose i = 0
+    repeat
+        when i > text::length(value)
+            stop
+        done()
+        suppose at_break = i == text::length(value)
+        when not at_break
+            at_break = text::char_at(value, i) == nl
+        done()
+        when at_break
+            ring::write(items, text::slice(value, start, i))
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    done(items)
+done()
+
+make mf_skip_spaces(s, i)
+    suppose j = i
+    repeat
+        when j >= text::length(s)
+            stop
+        done()
+        when not drv_is_space(text::char_at(s, j))
+            stop
+        done()
+        j = j + 1
+    done()
+    done(j)
+done()
+
+make mf_text_value(raw, line)
+    ensure q = text::from_code(34)
+    ensure n = text::length(raw)
+    when n < 2
+        mf_fail(line, "expected a quoted value, got: " + raw)
+    done()
+    when text::char_at(raw, 0) != q or text::char_at(raw, n - 1) != q
+        mf_fail(line, "expected a quoted value, got: " + raw)
+    done()
+    ensure inner = text::slice(raw, 1, n - 1)
+    when drv_contains(inner, q)
+        mf_fail(line, "a value can't contain a quote: " + raw)
+    done()
+    done(inner)
+done()
+
+(* ["a", "b"] -> "a\nb" *)
+make mf_list_value(raw, line)
+    ensure q = text::from_code(34)
+    ensure n = text::length(raw)
+    when not drv_ends_with(raw, "]") or n < 2
+        mf_fail(line, "a list must end with ]: " + raw)
+    done()
+    ensure inner = text::slice(raw, 1, n - 1)
+    ensure m = text::length(inner)
+    suppose items = ""
+    suppose count = 0
+    suppose i = mf_skip_spaces(inner, 0)
+    repeat
+        when i >= m
+            stop
+        done()
+        when text::char_at(inner, i) != q
+            mf_fail(line, "list items must be quoted: " + raw)
+        done()
+        suppose close = i + 1
+        repeat
+            when close >= m
+                mf_fail(line, "unterminated quote in list: " + raw)
+            done()
+            when text::char_at(inner, close) == q
+                stop
+            done()
+            close = close + 1
+        done()
+        when count > 0
+            items = items + text::from_code(10)
+        done()
+        items = items + text::slice(inner, i + 1, close)
+        count = count + 1
+        i = mf_skip_spaces(inner, close + 1)
+        when i < m
+            when text::char_at(inner, i) != ","
+                mf_fail(line, "expected , between list items: " + raw)
+            done()
+            i = mf_skip_spaces(inner, i + 1)
+        done()
+    done()
+    done(items)
+done()
+
+make mf_handle_line(st, entries, line, lineno)
+    when line == "" or drv_starts_with(line, "#") or drv_starts_with(line, "//")
+        done(true)
+    done()
+    when drv_starts_with(line, "[")
+        ensure kind = mf_section_kind(line)
+        when kind == ""
+            mf_fail(lineno, "unknown section " + line + " (sections: " + mf_sections() + ")")
+        done()
+        ensure probe = Manifest(entries = entries)
+        ensure sinst = mf_count(probe, kind)
+        ring::write(entries, MfEntry(block = kind, inst = sinst, key = "", value = "", is_list = false, line = lineno))
+        st.block = kind
+        st.inst = sinst
+        st.blocks = st.blocks + 1
+        done(true)
+    done()
+    ensure eq = drv_first_index(line, "=")
+    when eq >= text::length(line)
+        mf_fail(lineno, "expected a [Section] or `key = value`, got: " + line)
+    done()
+    ensure key = drv_trim(text::slice(line, 0, eq))
+    ensure raw = drv_trim(text::slice(line, eq + 1, text::length(line)))
+    when not mf_is_ident(key)
+        mf_fail(lineno, "bad key: " + key)
+    done()
+    suppose inst = 0
+    when st.block != ""
+        inst = st.inst
+    done()
+    when st.block == ""
+        when not mf_word_in(key, mf_legacy_keys())
+            mf_fail(lineno, key + " must be inside a section (sections: " + mf_sections() + ")")
+        done()
+        when st.legacy_line == 0
+            st.legacy_line = lineno
+        done()
+    otherwise when not mf_word_in(key, mf_keys(st.block))
+        mf_fail(lineno, "unknown key " + key + " in " + mf_section_name(st.block) + " (keys: " + mf_keys(st.block) + ")")
+    done()
+    when mf_has(Manifest(entries = entries), st.block, inst, key)
+        mf_fail(lineno, key + " is set twice")
+    done()
+    ensure is_list = drv_starts_with(raw, "[")
+    when is_list != mf_word_in(key, "authors libraries")
+        when is_list
+            mf_fail(lineno, key + " takes quoted text, not a list")
+        done()
+        mf_fail(lineno, key + " takes a list, e.g. [" + text::from_code(34) + "..." + text::from_code(34) + "]")
+    done()
+    suppose value = ""
+    when is_list
+        value = mf_list_value(raw, lineno)
+    otherwise
+        value = mf_text_value(raw, lineno)
+    done()
+    ring::write(entries, MfEntry(block = st.block, inst = inst, key = key, value = value, is_list = is_list, line = lineno))
+    done(true)
+done()
+
+make mf_add(entries, block, inst, key, value)
+    ring::write(entries, MfEntry(block = block, inst = inst, key = key, value = value, is_list = false, line = 0))
+done()
+
+(* the flat form, rewritten as [Package], [Target] and [Test] *)
+make mf_from_legacy(m)
+    ensure entries = ring::create(16)
+    ensure kind = mf_get(m, "", 0, "kind")
+    suppose tkind = "bin"
+    when kind == "library"
+        tkind = "library"
+    otherwise when kind != "" and kind != "application"
+        mf_fail(mf_line(m, "", 0, "kind"), "kind must be application or library, got " + kind)
+    done()
+    mf_add(entries, "package", 0, "", "")
+    mf_add(entries, "package", 0, "name", mf_get(m, "", 0, "project"))
+    mf_add(entries, "package", 0, "version", mf_get(m, "", 0, "version"))
+    mf_add(entries, "target", 0, "", "")
+    mf_add(entries, "target", 0, "name", mf_get(m, "", 0, "project"))
+    mf_add(entries, "target", 0, "kind", tkind)
+    mf_add(entries, "target", 0, "source", mf_get(m, "", 0, "entry"))
+    when mf_has(m, "", 0, "tests")
+        mf_add(entries, "test", 0, "", "")
+        mf_add(entries, "test", 0, "tests", mf_get(m, "", 0, "tests"))
+    done()
+    done(Manifest(entries = entries))
+done()
+
+make mf_parse(body)
+    ensure entries = ring::create(text::length(body) + 16)
+    ensure st = MfState(block = "", inst = 0, blocks = 0, legacy_line = 0)
+    ensure nl = text::from_code(10)
+    ensure n = text::length(body)
+    suppose start = 0
+    suppose lineno = 0
+    suppose i = 0
+    repeat
+        when i > n
+            stop
+        done()
+        suppose at_break = i == n
+        when not at_break
+            at_break = text::char_at(body, i) == nl
+        done()
+        when at_break
+            lineno = lineno + 1
+            mf_handle_line(st, entries, drv_trim(text::slice(body, start, i)), lineno)
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    ensure m = Manifest(entries = entries)
+    when st.legacy_line > 0
+        when st.blocks > 0
+            mf_fail(st.legacy_line, "keys before the first section are the old flat form; put them in [Package], [Target] and [Test]")
+        done()
+        done(mf_from_legacy(m))
+    done()
+    done(m)
+done()
+
+(* -- validation -- *)
+
+make mf_require(m, block, inst, key)
+    ensure v = mf_get(m, block, inst, key)
+    when v == ""
+        mf_fail(mf_line(m, block, inst, key), mf_section_name(block) + " needs " + key)
+    done()
+    done(v)
+done()
+
+make mf_check_name(m, block, inst, key)
+    ensure v = mf_require(m, block, inst, key)
+    when not mf_is_name(v)
+        mf_fail(mf_line(m, block, inst, key), key + " may use only letters, digits, _ . and - (not first), got " + v)
+    done()
+    done(v)
+done()
+
+make mf_check_path(m, block, inst, key, must_exist)
+    ensure v = mf_get(m, block, inst, key)
+    when v == ""
+        done(v)
+    done()
+    when drv_starts_with(v, "/") or drv_starts_with(v, "~")
+        mf_fail(mf_line(m, block, inst, key), key + " must be relative to the project root, got " + v)
+    done()
+    when must_exist and not file::exists(v)
+        mf_fail(mf_line(m, block, inst, key), key + " " + v + " does not exist")
+    done()
+    done(v)
+done()
+
+make mf_check_unique(m, block, key)
+    suppose a = 0
+    repeat
+        when a >= mf_count(m, block)
+            stop
+        done()
+        suppose b = a + 1
+        repeat
+            when b >= mf_count(m, block)
+                stop
+            done()
+            when mf_get(m, block, a, key) == mf_get(m, block, b, key)
+                mf_fail(mf_line(m, block, b, key), "two " + mf_section_name(block) + " sections with " + key + " " + mf_get(m, block, b, key))
+            done()
+            b = b + 1
+        done()
+        a = a + 1
+    done()
+done()
+
+(* SPDX license expression syntax: ids joined by AND / OR, an id WITH an
+   exception, parentheses. Ids are not checked against the SPDX list. *)
+make mf_spdx_ok(expr)
+    suppose spaced = ""
+    suppose i = 0
+    repeat
+        when i >= text::length(expr)
+            stop
+        done()
+        ensure c = text::char_at(expr, i)
+        when c == "(" or c == ")"
+            spaced = spaced + " " + c + " "
+        otherwise
+            spaced = spaced + c
+        done()
+        i = i + 1
+    done()
+    suppose depth = 0
+    suppose want_id = true
+    suppose after_with = false
+    suppose tokens = 0
+    suppose start = 0
+    i = 0
+    repeat
+        when i > text::length(spaced)
+            stop
+        done()
+        suppose at_end = i == text::length(spaced)
+        when not at_end
+            at_end = text::char_at(spaced, i) == " "
+        done()
+        when at_end
+            ensure tok = text::slice(spaced, start, i)
+            start = i + 1
+            when tok != ""
+                tokens = tokens + 1
+                when tok == "("
+                    when not want_id or after_with
+                        done(false)
+                    done()
+                    depth = depth + 1
+                otherwise when tok == ")"
+                    when want_id or depth == 0
+                        done(false)
+                    done()
+                    depth = depth - 1
+                otherwise when tok == "AND" or tok == "OR" or tok == "WITH"
+                    when want_id
+                        done(false)
+                    done()
+                    want_id = true
+                    after_with = tok == "WITH"
+                otherwise
+                    when not want_id
+                        done(false)
+                    done()
+                    suppose idp = tok
+                    when drv_ends_with(tok, "+") and not after_with
+                        idp = text::slice(tok, 0, text::length(tok) - 1)
+                    done()
+                    when not mf_is_name(idp)
+                        done(false)
+                    done()
+                    want_id = false
+                    after_with = false
+                done()
+            done()
+        done()
+        i = i + 1
+    done()
+    done(tokens > 0 and not want_id and depth == 0)
+done()
+
+make mf_opt_ok(o)
+    done(mf_word_in(o, "none O0 O1 O2 O3 Os Oz"))
+done()
+
+(* checks everything that doesn't depend on the command being run;
+   run from the project root *)
+make mf_validate(m)
+    when mf_count(m, "package") == 0
+        mf_fail(0, "needs a [Package] section")
+    done()
+    when mf_count(m, "package") > 1
+        mf_fail(mf_line(m, "package", 1, ""), "only one [Package] section")
+    done()
+    mf_check_name(m, "package", 0, "name")
+    mf_require(m, "package", 0, "version")
+    ensure lic = mf_get(m, "package", 0, "license")
+    when lic != "" and not mf_spdx_ok(lic)
+        mf_fail(mf_line(m, "package", 0, "license"), "license must be an SPDX expression, e.g. Apache-2.0 or MIT OR Apache-2.0 (AND, OR, WITH in capitals), got " + lic)
+    done()
+    mf_check_path(m, "package", 0, "license_file", true)
+    mf_check_path(m, "package", 0, "readme", true)
+    when mf_count(m, "target") == 0
+        mf_fail(0, "needs at least one [Target] section (kind bin or library)")
+    done()
+    suppose t = 0
+    repeat
+        when t >= mf_count(m, "target")
+            stop
+        done()
+        mf_check_name(m, "target", t, "name")
+        ensure kind = mf_require(m, "target", t, "kind")
+        when kind != "bin" and kind != "library"
+            mf_fail(mf_line(m, "target", t, "kind"), "target kind must be bin or library, got " + kind)
+        done()
+        mf_require(m, "target", t, "source")
+        mf_check_path(m, "target", t, "source", true)
+        t = t + 1
+    done()
+    mf_check_unique(m, "target", "name")
+    when mf_count(m, "test") > 1
+        mf_fail(mf_line(m, "test", 1, ""), "only one [Test] section")
+    done()
+    mf_check_path(m, "test", 0, "tests", false)
+    t = 0
+    repeat
+        when t >= mf_count(m, "profile")
+            stop
+        done()
+        mf_check_name(m, "profile", t, "name")
+        ensure o = mf_require(m, "profile", t, "optimization")
+        when not mf_opt_ok(o)
+            mf_fail(mf_line(m, "profile", t, "optimization"), "optimization must be none, O0, O1, O2, O3, Os or Oz, got " + o)
+        done()
+        t = t + 1
+    done()
+    mf_check_unique(m, "profile", "name")
+    t = 0
+    repeat
+        when t >= mf_count(m, "target_platform")
+            stop
+        done()
+        ensure triple = mf_require(m, "target_platform", t, "triple")
+        ensure tl = mf_line(m, "target_platform", t, "triple")
+        when not drv_starts_with(triple, "x86_64-") or not drv_contains(triple, "-linux")
+            mf_fail(tl, "triple " + triple + ": the runtime supports x86-64 Linux only")
+        done()
+        ensure libc = mf_require(m, "target_platform", t, "libc")
+        when libc != "glibc" and libc != "musl"
+            mf_fail(mf_line(m, "target_platform", t, "libc"), "libc must be glibc or musl, got " + libc)
+        done()
+        when (libc == "musl") != drv_ends_with(triple, "musl")
+            mf_fail(mf_line(m, "target_platform", t, "libc"), "libc " + libc + " doesn't match triple " + triple)
+        done()
+        ensure link = mf_get(m, "target_platform", t, "link")
+        when link != "" and link != "static" and link != "dynamic"
+            mf_fail(mf_line(m, "target_platform", t, "link"), "link must be static or dynamic, got " + link)
+        done()
+        ensure libs = mf_items(mf_get(m, "target_platform", t, "libraries"))
+        repeat
+            when ring::is_empty(libs)
+                stop
+            done()
+            ensure lib = ring::get(libs)
+            when not mf_is_name(lib)
+                mf_fail(mf_line(m, "target_platform", t, "libraries"), "a library is a name like m, not a path or a flag: " + lib)
+            done()
+        done()
+        t = t + 1
+    done()
+    mf_check_unique(m, "target_platform", "triple")
+    done(true)
+done()
+
+(* for single-file commands: no project, every setting at its default *)
+make mf_empty()
+    done(Manifest(entries = ring::create(1)))
+done()

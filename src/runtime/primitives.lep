@@ -1,0 +1,64 @@
+(* primitives.lep - the parsed-program records shared by the verifier,
+   the interpreter and codegen: FuncDef/ShapeDef, and the comma-joined
+   name lists they store parameters and fields in. *)
+
+use core::ast::ast
+
+shape FuncDef
+    name: Text
+    params: Text
+    body: Number
+done()
+
+shape ShapeDef
+    name: Text
+    field_names: Text
+    field_count: Number
+done()
+
+(* the idx-th name of a comma-joined list ("a,b,c"), or "" *)
+make param_at(joined, idx)
+    when joined == ""
+        done("")
+    done()
+    ensure len = text::length(joined)
+    suppose seg_start = 0
+    suppose seg_idx = 0
+    suppose i = 0
+    repeat
+        when i >= len
+            when seg_idx == idx
+                done(text::slice(joined, seg_start, len))
+            done()
+            stop
+        done()
+        when text::char_at(joined, i) == ","
+            when seg_idx == idx
+                done(text::slice(joined, seg_start, i))
+            done()
+            seg_idx = seg_idx + 1
+            seg_start = i + 1
+        done()
+        i = i + 1
+    done()
+    done("")
+done()
+
+make param_count(joined)
+    when joined == ""
+        done(0)
+    done()
+    ensure len = text::length(joined)
+    suppose count = 1
+    suppose i = 0
+    repeat
+        when i >= len
+            stop
+        done()
+        when text::char_at(joined, i) == ","
+            count = count + 1
+        done()
+        i = i + 1
+    done()
+    done(count)
+done()

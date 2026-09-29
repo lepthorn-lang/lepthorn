@@ -1,0 +1,8 @@
+(* 14_text_concat.lep - + joins two Text values. It's the only arithmetic
+   operator defined for Text. *)
+
+ensure first_name = "Ali"
+ensure last_name = "Zain"
+suppose full_name = first_name + " " + last_name
+
+show "full_name:" full_name

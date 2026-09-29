@@ -1,0 +1,10 @@
+(* 27_repeat_until.lep - `repeat ... until cond` runs the body first, then
+   checks the condition (a do-until loop). *)
+
+suppose x = 0
+
+repeat
+    x += 1
+    show "x:" x
+until x == 4
+done()

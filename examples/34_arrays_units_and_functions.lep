@@ -1,0 +1,24 @@
+(* 34_arrays_units_and_functions.lep - arrays with units, passed to a
+   function. The items keep their units, so the sum is a mass. *)
+
+suppose masses = [10kg, 25kg, 4kg]
+
+make total_mass(items)
+    suppose sum = 0kg
+    suppose i = 0
+    repeat length(items)
+        sum = sum + items[i]
+        i = i + 1
+    done()
+    done(sum)
+done()
+
+show "Total mass:" total_mass(masses)
+
+(* Arrays can hold other arrays, like this 2x2 grid. grid[1][1] does not
+   work: only a plain name can be indexed. Read the row into its own
+   name first, then index that. *)
+suppose grid = [[1, 2], [3, 4]]
+show "First row:" grid[0]
+suppose second_row = grid[1]
+show "Second row, second value:" second_row[1]

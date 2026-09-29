@@ -1,0 +1,63 @@
+(* ast.lep - the AST arena: Node shape + arena helpers. No deps. *)
+
+shape Node
+    kind: Text
+    num_value: Number
+    bool_value: Boolean
+    text_value: Text
+    op: Text
+    params: Text
+    left: Number
+    right: Number
+    sibling: Number
+    alt: Number
+    arg2: Number
+done()
+
+(* Lepthorn has no unary minus, so -1 isn't writable as a literal -
+   none_idx() is the "no such index" sentinel everywhere below. *)
+make none_idx()
+    done(999999)
+done()
+
+make mk_node(kind, num_value, bool_value, op, left, right)
+    done(Node(kind = kind, num_value = num_value, bool_value = bool_value, text_value = "", op = op, params = "", left = left, right = right, sibling = none_idx(), alt = none_idx(), arg2 = 0))
+done()
+
+make arena_add(arena, node)
+    ensure idx = ring::size(arena)
+    ring::write(arena, node)
+    done(idx)
+done()
+
+make arena_get(arena, idx)
+    done(ring::peek(arena, idx))
+done()
+
+(* true when `op` contains "::" - the marker for a namespaced call
+   (`ring::create`, `text::char_at`, ...) in a CALL node's `op` field,
+   as opposed to a plain user-defined function name (identifiers never
+   contain ':'). Used by CTV and the interpreter to route around
+   ctv_func_lookup/func_lookup, which only know about target-program
+   `make`-defined functions, not host-delegated namespaced builtins. *)
+
+make op_is_namespaced(op)
+    ensure len = text::length(op)
+    suppose i = 0
+    suppose found = false
+    repeat
+        when i + 1 >= len
+            stop
+        done()
+        when found
+            stop
+        done()
+        when text::char_at(op, i) == ":"
+            when text::char_at(op, i + 1) == ":"
+                found = true
+            done()
+        done()
+        i = i + 1
+    done()
+    done(found)
+done()

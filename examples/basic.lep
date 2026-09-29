@@ -1,0 +1,21 @@
+(* basic.lep - a small tour: units, shapes, functions, collections. *)
+
+shape Drone
+    name: Text
+    mass: Number
+    thrust: Number
+done()
+
+make lift_margin(d)
+    done(d.thrust - force::gravity(d.mass))
+done()
+
+ensure scout = Drone(name = "scout", mass = 1.2kg, thrust = 20N)
+show "drone:" scout.name "mass:" scout.mass
+show "lift margin:" lift_margin(scout)
+
+ensure log = ring::create(3)
+repeat 4
+    ring::write(log, ring::size(log))
+done()
+show "log:" log "oldest:" ring::peek(log, 0)

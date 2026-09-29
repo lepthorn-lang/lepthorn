@@ -1,0 +1,17 @@
+(* 33_arrays_basic.lep - arrays: a literal, reading an item, length(),
+   and changing an item of a `suppose` array. *)
+
+suppose scores = [70, 85, 90, 60]
+
+show "First score:" scores[0]
+show "Third score:" scores[2]
+show "How many scores:" length(scores)
+
+(* Fix a typo in the second score. *)
+scores[1] = 88
+show "Corrected second score:" scores[1]
+
+(* `ensure` stops the name from getting a new array. The items of the
+   array can still be changed. *)
+ensure fixed_points = [10, 20, 30]
+show "A fixed point:" fixed_points[1]

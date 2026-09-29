@@ -1,0 +1,68 @@
+(* 40_shared_variables.lep - shared variables and ensure!/suppose!
+   blocks. `shared` decides where a variable is visible (everywhere);
+   ensure/suppose decide whether it can change. The two are separate
+   choices. *)
+
+(* -- ensure!/suppose! blocks: several declarations, one keyword -- *)
+ensure!
+    system_name = "drone"
+    max_speed = 12
+done()
+show "system:" system_name
+show "max speed:" max_speed
+
+suppose!
+    x = 1
+    y = 30
+    x = x + y
+done()
+show "x after block reassignment:" x
+
+(* -- shared ensure: immutable, visible across function/task boundaries -- *)
+shared ensure gain = 1.5
+
+make apply_gain(value)
+    done(value * gain)
+done()
+
+show "apply_gain(10):" apply_gain(10)
+
+(* -- shared suppose: mutable, visible across function/task boundaries -- *)
+shared suppose counter = 0
+
+make bump()
+    atomic
+        counter = counter + 1
+    done()
+done()
+
+(* two workers, both touching the same shared counter through a
+   function call - only safe because the write is inside `atomic` *)
+parallel
+    priority 10
+        bump()
+    done()
+
+    priority 5
+        bump()
+    done()
+done()
+
+show "counter after two parallel workers:" counter
+
+(* -- shared suppose!: the block form composes with shared too -- *)
+shared suppose!
+    total = 100
+    events = 0
+done()
+
+make record_event()
+    events = events + 1
+done()
+
+record_event()
+record_event()
+record_event()
+
+show "total (untouched):" total
+show "events recorded:" events
