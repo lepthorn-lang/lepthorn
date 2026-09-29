@@ -12,17 +12,17 @@ exists, read [../INTRODUCTION.md](../INTRODUCTION.md) first.
 
 ## Get the compiler
 
-The compiler is one file, `bin/lepthornc`, in this repository. Copy it
-to a directory on your `PATH`. With `just`:
+The compiler is one file, `bin/lepthornc`, in this repository. Install
+it on your system. With `just`:
 
 ```sh
-just install        # copies bin/lepthornc to ~/.local/bin
+sudo just install        # copies bin/lepthornc to /usr/local/bin
 ```
 
 Or by hand:
 
 ```sh
-cp bin/lepthornc ~/.local/bin/
+sudo install -m 755 bin/lepthornc /usr/local/bin/
 ```
 
 Check that it works:

@@ -62,7 +62,7 @@ targets other than x86-64 Linux. The details are in
 You need x86-64 Linux, Clang, and glibc or musl.
 
 ```sh
-just install                          # or: cp bin/lepthornc ~/.local/bin/
+sudo just install                     # installs bin/lepthornc to /usr/local/bin
 lepthornc version
 lepthornc eval examples/gravity.lep   # run a program
 lepthornc run examples/gravity.lep    # compile it natively, then run it

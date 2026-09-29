@@ -23,15 +23,38 @@ Lepthorn by copying a `lepthornc` binary.
 
 Nothing else: no OCaml, no C source, no network.
 
+## Install the compiler first
+
+The compiler is built with the `lepthornc` installed on your system, not
+with the file in the repository. The repository's `bin/lepthornc` is the
+copy you install from. Install it once:
+
+```sh
+sudo just install        # copies bin/lepthornc to /usr/local/bin/lepthornc
+lepthornc version
+```
+
+Without `just`: `sudo install -m 755 bin/lepthornc /usr/local/bin/`.
+
+To install somewhere else, set `LEPTHORN_PREFIX`: with
+`LEPTHORN_PREFIX=$HOME/.local just install` it goes to
+`~/.local/bin/lepthornc`, and no `sudo` is needed. Make sure that
+directory is on your `PATH`, and that no older `lepthornc` comes before
+it on the `PATH` (`which lepthornc` shows which one runs).
+
 ## Build the compiler
 
 From the repository root:
 
 ```sh
-bin/lepthornc build --release        # makes build/release/bin/lepthornc
-build/release/bin/lepthornc test     # the new compiler passes the tests
-bin/lepthornc promote --release      # checks it, then copies it to bin/lepthornc
+lepthornc build --release              # makes build/release/bin/lepthornc
+build/release/bin/lepthornc test       # the new compiler passes the tests
+lepthornc promote --release            # checks it, then copies it to bin/lepthornc
+sudo just install                      # installs the new bin/lepthornc on the system
 ```
+
+`just update` does the last three steps in one go (it asks for `sudo`
+at the end).
 
 `promote` refuses a compiler that does not rebuild itself exactly.
 Right after the compiler's source has changed, the new build was made
@@ -42,8 +65,8 @@ it with itself, and promotes that rebuild once it reproduces itself.
 
 ```sh
 rm -rf build
-bin/lepthornc test
-bin/lepthornc build --release
+lepthornc test
+lepthornc build --release
 build/release/bin/lepthornc test
 build/release/bin/lepthornc build --release
 cmp build/release/bin/lepthornc build/release/rebuild/bin/lepthornc
@@ -58,8 +81,8 @@ The tests `compiler_self_build` and `rebuild_fixed_point` in
 ## glibc and musl
 
 ```sh
-bin/lepthornc build --release --target x86_64-linux-gnu
-bin/lepthornc build --release --target x86_64-linux-musl
+lepthornc build --release --target x86_64-linux-gnu
+lepthornc build --release --target x86_64-linux-musl
 ```
 
 These write `build/release/x86_64-linux-gnu/bin/lepthornc` and
@@ -84,20 +107,17 @@ is `/usr/bin/clang`, musl is looked for in `/usr/x86_64-linux-musl`.
 
 `lepthornc manifest` prints what it found on the current machine.
 
-## Install
-
-`lepthornc` is one file. Copy it to a directory on your `PATH`:
-
-```sh
-just install     # copies bin/lepthornc to $LEPTHORN_BINDIR, or ~/.local/bin
-```
-
-or `cp bin/lepthornc ~/.local/bin/`.
-
 ## The justfile
 
-The `justfile` runs `lepthornc` from your `PATH`, or the one named in
-`LEPTHORNC`.
+The `justfile` runs the `lepthornc` on your `PATH`. Three settings
+change what it does. Set them in the environment, or on the command
+line (`just sysroot=/opt/musl musl`):
+
+| Setting | Environment variable | Default |
+|---|---|---|
+| `lepthornc` | `LEPTHORNC` | `lepthornc` on `PATH` |
+| `prefix` | `LEPTHORN_PREFIX` | `/usr/local` (installs to `/usr/local/bin`) |
+| `sysroot` | `LEPTHORN_SYSROOT` | empty: the compiler finds the other libc itself |
 
 | Recipe | What it does |
 |---|---|
@@ -107,7 +127,8 @@ The `justfile` runs `lepthornc` from your `PATH`, or the one named in
 | `just test` | run the tests |
 | `just fixed-point` | release build, then check that it rebuilds itself |
 | `just promote` | release build, then promote it to `bin/` |
-| `just install` | copy `bin/lepthornc` to the install directory |
+| `just install` | copy `bin/lepthornc` to `<prefix>/bin`, with `sudo` if needed |
+| `just uninstall` | remove `<prefix>/bin/lepthornc` |
 | `just update` | promote, then install |
 | `just verify` | the full check above, plus both targets |
 | `just clean` | remove `build/` |

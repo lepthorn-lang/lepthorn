@@ -1,12 +1,18 @@
 # Lepthorn compiler tasks.
 #
-# The compiler used is `lepthornc` from PATH (put there by `just install`),
-# or whatever LEPTHORNC names. The libc is found by lepthornc itself from
-# clang; a target builds for a specific one. No paths outside this project
-# are assumed: the install directory is LEPTHORN_BINDIR, else ~/.local/bin.
+# Builds use the lepthornc installed on the system (found on PATH), not
+# the copy in bin/. Settings, all optional:
+#   LEPTHORNC          the compiler to use (default: lepthornc on PATH)
+#   LEPTHORN_PREFIX    where to install (default: /usr/local, so /usr/local/bin)
+#   LEPTHORN_SYSROOT   where the other libc lives, for --target builds
+# The same names work on the command line, e.g. `just sysroot=/opt/musl musl`.
 
 lepthornc := env("LEPTHORNC", "lepthornc")
-bindir := env("LEPTHORN_BINDIR", home_directory() / ".local" / "bin")
+prefix := env("LEPTHORN_PREFIX", "/usr/local")
+sysroot := env("LEPTHORN_SYSROOT", "")
+bindir := prefix / "bin"
+
+export LEPTHORN_SYSROOT := sysroot
 
 # list the recipes
 default:
@@ -31,7 +37,7 @@ musl:
 # both libc builds
 targets: gnu musl
 
-# run tests/ with the compiler on PATH
+# run the tests with the installed compiler
 test:
     {{lepthornc}} test
 
@@ -41,18 +47,21 @@ fixed-point: release
     cmp build/release/bin/lepthornc build/release/rebuild/bin/lepthornc
     @echo "fixed point: build/release/bin/lepthornc rebuilds itself identically"
 
-# verify the release build and make it the project's bin/lepthornc
+# check the release build and copy it to bin/lepthornc
 promote: release
     build/release/bin/lepthornc promote --release
 
-# copy bin/lepthornc to the install directory (on PATH)
+# copy bin/lepthornc to the system (asks for sudo when the directory needs it)
 install:
-    mkdir -p "{{bindir}}"
-    cp -f bin/lepthornc "{{bindir}}/lepthornc.new"
-    mv -f "{{bindir}}/lepthornc.new" "{{bindir}}/lepthornc"
+    if [ -w "{{bindir}}" ]; then install -m 755 bin/lepthornc "{{bindir}}/lepthornc"; else sudo install -m 755 bin/lepthornc "{{bindir}}/lepthornc"; fi
     @echo "installed {{bindir}}/lepthornc"
+    @"{{bindir}}/lepthornc" version
 
-# build, fixed-point check, promote to bin/, install
+# remove the installed compiler
+uninstall:
+    if [ -w "{{bindir}}" ]; then rm -f "{{bindir}}/lepthornc"; else sudo rm -f "{{bindir}}/lepthornc"; fi
+
+# build, check, promote to bin/, then install on the system
 update: promote install
 
 # the full check from a clean tree
@@ -67,5 +76,6 @@ verify:
     {{lepthornc}} build --release --target x86_64-linux-musl
     @echo "verified: tests pass, the compiler rebuilds itself identically, glibc and musl builds done"
 
+# remove build/
 clean:
     rm -rf build

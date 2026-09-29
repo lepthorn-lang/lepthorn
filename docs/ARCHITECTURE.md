@@ -92,9 +92,9 @@ and compiled programs give the same output.
 
 ## Building the compiler
 
-The compiler is built by `bin/lepthornc`. How to build, check and
-install it, and how it finds Clang and the libc, is in
-[BUILDING.md](BUILDING.md).
+The compiler is built by the `lepthornc` installed on the system. How
+to build, check and install it, and how it finds Clang and the libc, is
+in [BUILDING.md](BUILDING.md).
 
 The generated IR always says `source_filename = "lepthorn"`, so a
 compiled program does not depend on the directory it was built in.

@@ -109,6 +109,6 @@ runtime error, or the number given to `sys::exit`.
 | `LEPTHORN_CC` | the Clang to use |
 | `LEPTHORN_SYSROOT` | where the other libc lives, for `--target` builds |
 | `LEPTHORNC` | set by `lepthornc test`: the compiler running the tests |
-| `LEPTHORN_BINDIR` | used by `just install`: where to copy `lepthornc` |
+| `LEPTHORN_PREFIX` | used by `just install`: installs to `<prefix>/bin` (default `/usr/local`) |
 
 If no Clang variable is set, `lepthornc` uses `clang` from your `PATH`.
