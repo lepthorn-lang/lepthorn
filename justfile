@@ -90,15 +90,15 @@ stage1: check
     lc="$(command -v {{lepthornc}})"; \
     if fresh {{stage1}} "$lc"; then say "stage 1" "up to date ({{stage1}})"; exit 0; fi; \
     quiet {{lepthornc}} build --release -o {{stage1}} || { echo "error: stage 1 failed: $lc could not build this source (errors above)"; exit 1; }; \
-    say "stage 1" "{{stage1}} (built by $lc)"
+    say "stage 1" "{{stage1}}"
 
 # debug build for this system's libc: build/debug/bin/lepthornc
 build: stage1
-    @{{sh}} stage2 {{stage1}} build/debug/bin/lepthornc && say ready "build/debug/bin/lepthornc (debug, $(hostlibc): this system's libc)"
+    @{{sh}} stage2 {{stage1}} build/debug/bin/lepthornc && say ready "build/debug/bin/lepthornc (debug, $(hostlibc))"
 
 # release build for this system's libc only: build/release/bin/lepthornc
 release: stage1
-    @{{sh}} stage2 {{stage1}} build/release/bin/lepthornc --release && say ready "build/release/bin/lepthornc ($(hostlibc): this system's libc)"
+    @{{sh}} stage2 {{stage1}} build/release/bin/lepthornc --release && say ready "build/release/bin/lepthornc ($(hostlibc))"
 
 # glibc build, dynamic: build/release/x86_64-linux-gnu/bin/lepthornc
 gnu: (_target "x86_64-linux-gnu") stage1
@@ -106,7 +106,7 @@ gnu: (_target "x86_64-linux-gnu") stage1
 
 # musl build, static: build/release/x86_64-linux-musl/bin/lepthornc
 musl: (_target "x86_64-linux-musl") stage1
-    @{{sh}} o=build/release/x86_64-linux-musl/bin/lepthornc; stage2 {{stage1}} $o --release --target x86_64-linux-musl && say ready "$o (musl, static, runs on any x86-64 Linux)"
+    @{{sh}} o=build/release/x86_64-linux-musl/bin/lepthornc; stage2 {{stage1}} $o --release --target x86_64-linux-musl && say ready "$o (musl, static)"
 
 # both libc builds
 targets: gnu musl

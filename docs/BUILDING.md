@@ -74,9 +74,9 @@ check     lepthornc  lepthornc 1.0.0 (/usr/local/bin/lepthornc)
 check     clang      22.1.8 (/usr/bin/clang)
 check     libc       glibc (x86_64-redhat-linux-gnu)
 check     toolchain  builds and runs programs
-stage 1   build/stage1/bin/lepthornc (built by /usr/local/bin/lepthornc)
+stage 1   build/stage1/bin/lepthornc
 stage 2   build/release/bin/lepthornc
-ready     build/release/bin/lepthornc (glibc: this system's libc)
+ready     build/release/bin/lepthornc (glibc)
 ```
 
 The check stops with a clear message when something is missing:
