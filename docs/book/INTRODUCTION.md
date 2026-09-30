@@ -30,7 +30,8 @@ lepthornc version
 ```
 
 ```text
-lepthorn 1.0.0
+lepthornc 1.0.0
+Lepthorn Programming Language
 ```
 
 ## Your first program

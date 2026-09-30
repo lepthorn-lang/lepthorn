@@ -70,7 +70,7 @@ uses). For glibc or musl by name, use `just gnu`, `just musl` or
 `just release` prints one line per step:
 
 ```text
-check     lepthornc  lepthorn 1.0.0 (/usr/local/bin/lepthornc)
+check     lepthornc  lepthornc 1.0.0 (/usr/local/bin/lepthornc)
 check     clang      22.1.8 (/usr/bin/clang)
 check     libc       glibc (x86_64-redhat-linux-gnu)
 check     toolchain  builds and runs programs

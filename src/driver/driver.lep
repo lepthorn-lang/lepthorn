@@ -1341,7 +1341,8 @@ make lepthornc_main()
         sys::setenv("LEPTHORN_OUTPUT", "unicode")
     done()
     when cmd == "version" or cmd == "--version"
-        show "lepthorn 1.0.0"
+        show "lepthornc 1.0.0"
+        show "Lepthorn Programming Language"
         sys::exit(0)
     done()
     when cmd == "help" or cmd == "--help" or cmd == "-h"

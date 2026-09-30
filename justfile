@@ -67,7 +67,7 @@ default:
 check:
     @{{sh}} \
     lc="$(command -v {{lepthornc}})" || { echo "error: {{lepthornc}} not found on PATH; install a lepthornc binary first (docs/BUILDING.md) or set lepthornc in the justfile"; exit 1; }; \
-    say check "lepthornc  $({{lepthornc}} version) ($lc)"; \
+    say check "lepthornc  $({{lepthornc}} version | head -n 1) ($lc)"; \
     cc="${LEPTHORN_CLANG:-clang}"; \
     ccp="$(command -v "$cc")" || { echo "error: $cc not found; install clang (LLVM) or set clang in the justfile"; exit 1; }; \
     ver="$("$cc" --version | sed -n 's/.*clang version \([0-9][0-9.]*\).*/\1/p;q')"; \
@@ -131,7 +131,7 @@ install: fixed-point
     if [ -w "{{bindir}}" ]; then install -Dm 755 build/release/bin/lepthornc "$dest"; \
     else say install "{{bindir}} is not writable, using sudo"; sudo install -Dm 755 build/release/bin/lepthornc "$dest"; fi \
     || { echo "error: could not write $dest"; exit 1; }; \
-    say installed "$dest ($("$dest" version))"
+    say installed "$dest ($("$dest" version | head -n 1))"
 
 # remove <prefix>/bin/lepthornc
 uninstall:
