@@ -12,7 +12,13 @@ shape Node
     sibling: Number
     alt: Number
     arg2: Number
+    pos: Number
 done()
+
+(* where the parser is in the source: the offset of the last character
+   of the last token it read. Every node records it, so an error can
+   say which line it is on. *)
+shared suppose parse_pos = 0
 
 (* Lepthorn has no unary minus, so -1 isn't writable as a literal -
    none_idx() is the "no such index" sentinel everywhere below. *)
@@ -21,7 +27,7 @@ make none_idx()
 done()
 
 make mk_node(kind, num_value, bool_value, op, left, right)
-    done(Node(kind = kind, num_value = num_value, bool_value = bool_value, text_value = "", op = op, params = "", left = left, right = right, sibling = none_idx(), alt = none_idx(), arg2 = 0))
+    done(Node(kind = kind, num_value = num_value, bool_value = bool_value, text_value = "", op = op, params = "", left = left, right = right, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos))
 done()
 
 make arena_add(arena, node)

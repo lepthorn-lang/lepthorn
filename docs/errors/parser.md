@@ -10,7 +10,20 @@ show -5
 ```
 
 ```text
-LEC2001: unexpected token '-' (OP)
+main.lep:1: LEC2001: expected a value, found '-'
+    show -5
+```
+
+An expression that stops too early:
+
+```lepthorn
+ensure speed = 5
+show speed +
+```
+
+```text
+main.lep:2: LEC2001: expected a value, found the end of the line
+    show speed +
 ```
 
 Common causes:

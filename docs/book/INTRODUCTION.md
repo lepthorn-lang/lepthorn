@@ -30,7 +30,7 @@ lepthornc version
 ```
 
 ```text
-lepthornc 1.0.0 (self-hosted, native)
+lepthorn 1.0.0
 ```
 
 ## Your first program

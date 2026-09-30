@@ -124,7 +124,7 @@ make skip_comment(source, j, n)
         done()
         (* past the end: lex_all turns n + 1 into an error token *)
         when k >= n
-            show "LEC1001: unterminated comment"
+            src_error(source, j - 2, "LEC1001: unterminated comment")
             done(n + 1)
         done()
         ensure c = text::char_at(source, k)
@@ -194,7 +194,7 @@ make skip_trivia(source, i, n)
                garbage tokens. *)
             when j + 1 < n
                 when text::char_at(source, j + 1) == "/"
-                    show "LEC1002: '//' line comments are not supported - use (* ... *) instead"
+                    src_error(source, j, "LEC1002: '//' line comments are not supported - use (* ... *) instead")
                     suppose k = j + 2
                     repeat
                         when k >= n
@@ -512,6 +512,9 @@ done()
 make cur_take(tok_buf, cur)
     ensure t = cur_current(tok_buf, cur)
     cur.pos = cur.pos + 1
+    when t.kind != "EOF"
+        parse_pos = t.next_index - 1
+    done()
     done(t)
 done()
 
@@ -569,3 +572,140 @@ done()
    context: left/right are expr operands for BINOP, but body/otherwise
    for WHEN_STMT etc.; next chains a statement to the next one in its
    block; arg2 is a CALL's third argument. *)
+
+(* -- where an offset is in the program's files. The driver puts a
+   marker line `(*@ <file> <line> *)` wherever the joined source moves
+   to another file; the line after a marker is <line> of <file>. -- *)
+
+make src_is_marker(source, m)
+    when m + 4 > text::length(source)
+        done(false)
+    done()
+    done(text::slice(source, m, m + 4) == "(*@ ")
+done()
+
+(* "file:line" for an offset, or "line N" when there is no marker *)
+make src_where(source, offset)
+    ensure nl = text::from_code(10)
+    suppose o = offset
+    when o > text::length(source)
+        o = text::length(source)
+    done()
+    when o < 0
+        o = 0
+    done()
+    suppose m = o
+    repeat
+        when m <= 0
+            stop
+        done()
+        when text::char_at(source, m - 1) == nl
+            stop
+        done()
+        m = m - 1
+    done()
+    suppose lines = 0
+    repeat
+        when src_is_marker(source, m)
+            done(src_marker_where(source, m, lines))
+        done()
+        when m <= 0
+            stop
+        done()
+        m = m - 1
+        repeat
+            when m <= 0
+                stop
+            done()
+            when text::char_at(source, m - 1) == nl
+                stop
+            done()
+            m = m - 1
+        done()
+        lines = lines + 1
+    done()
+    done("line " + text::from_number(lines + 1))
+done()
+
+(* a marker at m, `lines` lines above the offset *)
+make src_marker_where(source, m, lines)
+    suppose e = m + 4
+    repeat
+        when e + 2 >= text::length(source)
+            stop
+        done()
+        when text::slice(source, e, e + 3) == " *)"
+            stop
+        done()
+        e = e + 1
+    done()
+    ensure body = text::slice(source, m + 4, e)
+    suppose sp = text::length(body) - 1
+    repeat
+        when sp <= 0
+            stop
+        done()
+        when text::char_at(body, sp) == " "
+            stop
+        done()
+        sp = sp - 1
+    done()
+    ensure first = text::to_number(text::slice(body, sp + 1, text::length(body)))
+    suppose line = first
+    when lines > 0
+        line = first + lines - 1
+    done()
+    done(text::slice(body, 0, sp) + ":" + text::from_number(line))
+done()
+
+(* the source line holding an offset, without its newline *)
+make src_line_text(source, offset)
+    ensure nl = text::from_code(10)
+    ensure n = text::length(source)
+    suppose a = offset
+    when a > n
+        a = n
+    done()
+    when a < 0
+        a = 0
+    done()
+    suppose b = a
+    repeat
+        when a <= 0
+            stop
+        done()
+        when text::char_at(source, a - 1) == nl
+            stop
+        done()
+        a = a - 1
+    done()
+    repeat
+        when b >= n
+            stop
+        done()
+        when text::char_at(source, b) == nl
+            stop
+        done()
+        b = b + 1
+    done()
+    repeat
+        when a >= b
+            stop
+        done()
+        ensure c = text::char_at(source, a)
+        when c != " " and c != text::from_code(9)
+            stop
+        done()
+        a = a + 1
+    done()
+    done(text::slice(source, a, b))
+done()
+
+(* an error message with where it is, then the line itself *)
+make src_error(source, offset, msg)
+    show src_where(source, offset) + ": " + msg
+    ensure line = src_line_text(source, offset)
+    when line != ""
+        show "    " + line
+    done()
+done()

@@ -64,6 +64,16 @@ make digit_prefix_len(word)
     done(j)
 done()
 
+(* a parse error at the current token *)
+make perr(tok_buf, cur, msg)
+    ensure node = mk_node("PARSE_ERROR", 0, false, msg, 0, 0)
+    ensure t = cur_current(tok_buf, cur)
+    when t.kind != "EOF"
+        node.pos = t.next_index - 1
+    done()
+    done(node)
+done()
+
 make parse_primary(tok_buf, cur, arena)
     ensure kind = token_kind(tok_buf, cur)
     ensure val = token_value(tok_buf, cur)
@@ -110,7 +120,7 @@ make parse_primary(tok_buf, cur, arena)
             when token_value(tok_buf, cur) == "."
                 cur_take(tok_buf, cur)
                 ensure field_tok = cur_take(tok_buf, cur)
-                node = Node(kind = "FIELD_ACCESS", num_value = 0, bool_value = false, text_value = "", op = val, params = field_tok.value, left = 0, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                node = Node(kind = "FIELD_ACCESS", num_value = 0, bool_value = false, text_value = "", op = val, params = field_tok.value, left = 0, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
                 done(arena_add(arena, node))
             done()
             when token_value(tok_buf, cur) == "["
@@ -135,7 +145,13 @@ make parse_primary(tok_buf, cur, arena)
             done(parse_array_literal(tok_buf, cur, arena))
         done()
     done()
-    node = mk_node("PARSE_ERROR", 0, false, "unexpected token '" + val + "' (" + kind + ")", 0, 0)
+    suppose found = "'" + val + "'"
+    when kind == "NEWLINE"
+        found = "the end of the line"
+    otherwise when kind == "EOF"
+        found = "the end of the file"
+    done()
+    node = perr(tok_buf, cur, "expected a value, found " + found)
     when not cur_is_empty(tok_buf, cur)
         cur_take(tok_buf, cur)
     done()
@@ -421,7 +437,7 @@ make parse_shape_construct(tok_buf, cur, arena, shape_name)
                 ensure fname_tok = cur_take(tok_buf, cur)
                 cur_take(tok_buf, cur)
                 ensure vexpr = parse_or(tok_buf, cur, arena)
-                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
                 ensure fidx = arena_add(arena, fnode)
                 when first == none_idx()
                     first = fidx
@@ -441,7 +457,7 @@ make parse_shape_construct(tok_buf, cur, arena, shape_name)
         done()
     done()
     cur_take(tok_buf, cur)
-    ensure node = Node(kind = "SHAPE_CONSTRUCT", num_value = 0, bool_value = false, text_value = "", op = shape_name, params = "", left = first, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+    ensure node = Node(kind = "SHAPE_CONSTRUCT", num_value = 0, bool_value = false, text_value = "", op = shape_name, params = "", left = first, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
     done(arena_add(arena, node))
 done()
 
@@ -692,7 +708,19 @@ make parse_bang_block(tok_buf, cur, arena, is_ensure, is_shared)
     done(first)
 done()
 
+(* a statement's position is its first token, so an error in it names
+   the line it starts on *)
 make parse_statement(tok_buf, cur, arena)
+    ensure first = cur_current(tok_buf, cur)
+    ensure idx = parse_statement_at(tok_buf, cur, arena)
+    ensure st = arena_get(arena, idx)
+    when first.kind != "EOF" and st.kind != "PARSE_ERROR"
+        st.pos = first.next_index - 1
+    done()
+    done(idx)
+done()
+
+make parse_statement_at(tok_buf, cur, arena)
     ensure kind = token_kind(tok_buf, cur)
     suppose node = mk_node("", 0, false, "", 0, 0)
     suppose name_tok = LexResult(next_index = 0, kind = "", value = "")
@@ -882,7 +910,7 @@ make parse_statement(tok_buf, cur, arena)
         cur_take(tok_buf, cur)
         name_tok = cur_take(tok_buf, cur)
         when name_tok.kind != "IDENT"
-            node = mk_node("PARSE_ERROR", 0, false, "`take`/`read` needs a variable name", 0, 0)
+            node = perr(tok_buf, cur, "`take`/`read` needs a variable name")
             done(arena_add(arena, node))
         done()
         node = mk_node(kind + "_STMT", 0, false, name_tok.value, 0, 0)
@@ -921,7 +949,7 @@ make parse_statement(tok_buf, cur, arena)
         when token_kind(tok_buf, cur) == "NEWLINE" or token_kind(tok_buf, cur) == "EOF"
             (* the body is still parsed, so this is the only error *)
             hz_form = "missing"
-            expr_idx = arena_add(arena, mk_node("PARSE_ERROR", 0, false, "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz", 0, 0))
+            expr_idx = arena_add(arena, perr(tok_buf, cur, "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz"))
         done()
         when hz_form == "missing"
         otherwise when hz_form == "paren"
@@ -975,7 +1003,7 @@ make parse_statement(tok_buf, cur, arena)
         cur_take(tok_buf, cur)
         body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
         cur_take(tok_buf, cur)
-        node = Node(kind = "INTERRUPT_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = "", left = 0, right = body_idx, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+        node = Node(kind = "INTERRUPT_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = "", left = 0, right = body_idx, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
         done(arena_add(arena, node))
     done()
     when kind == "IDENT"
@@ -986,7 +1014,7 @@ make parse_statement(tok_buf, cur, arena)
                 ensure field_tok = cur_take(tok_buf, cur)
                 cur_take(tok_buf, cur)
                 expr_idx = parse_or(tok_buf, cur, arena)
-                node = Node(kind = "FIELD_ASSIGN_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = field_tok.value, left = expr_idx, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0)
+                node = Node(kind = "FIELD_ASSIGN_STMT", num_value = 0, bool_value = false, text_value = "", op = name_tok.value, params = field_tok.value, left = expr_idx, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
                 done(arena_add(arena, node))
             done()
             when token_value(tok_buf, cur) == "["
@@ -1075,7 +1103,8 @@ make parse_statement(tok_buf, cur, arena)
         node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, expr_idx, 0)
         done(arena_add(arena, node))
     done()
-    node = mk_node("PARSE_ERROR", 0, false, "unexpected statement starting with kind " + kind, 0, 0)
+    ensure bad = cur_current(tok_buf, cur)
+    node = perr(tok_buf, cur, "a statement cannot start with '" + bad.value + "'")
     when not cur_is_empty(tok_buf, cur)
         cur_take(tok_buf, cur)
     done()
@@ -1125,7 +1154,7 @@ make parse_choose(tok_buf, cur, arena)
             when lk == "NUMBER" or lk == "STRING" or lk == "TRUE" or lk == "FALSE"
                 label_idx = parse_primary(tok_buf, cur, arena)
             otherwise
-                arena_add(arena, mk_node("PARSE_ERROR", 0, false, "a case label must be a number, quoted Text, true or false, got '" + label_text + "'", 0, 0))
+                arena_add(arena, perr(tok_buf, cur, "a case label must be a number, quoted Text, true or false, got '" + label_text + "'"))
                 cur_take(tok_buf, cur)
             done()
             cur_take(tok_buf, cur)

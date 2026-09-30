@@ -57,6 +57,8 @@ lepthornc resolve               # show what manifest.lepm means on this machine
 | `version` | print the version |
 | `help` | print the list of commands |
 
+`lepthornc help` (or `-h`, `--help`) prints the commands and options.
+
 ## Options
 
 | Option | Used with | Meaning |
@@ -70,6 +72,28 @@ lepthornc resolve               # show what manifest.lepm means on this machine
 | `--cc <program>` | every command | the Clang to use |
 | `--ascii` | `run`, `eval`, `test` | print units in ASCII |
 | `--unicode` | `run`, `eval` | print units in Unicode (the default) |
+
+## How errors look
+
+Errors found before the program runs (lexer, parser and verifier) start
+with the file and line, and show the line below:
+
+```text
+main.lep:2: LEC2001: expected a value, found the end of the line
+    show speed +
+```
+
+When the error is in a file pulled in with `use`, that file is named:
+
+```text
+src/physics/drag.lep:14: LEC3001: undeclared variable 'area'
+    done(0.5 * rho * v * v * area)
+```
+
+Every error in the program is printed, not only the first, and nothing
+runs. The codes are explained in [errors/](errors/). Errors while the
+program runs (`LEC8xxx`) are printed as
+`lepthorn: runtime error: <message>`.
 
 ## How units are printed
 

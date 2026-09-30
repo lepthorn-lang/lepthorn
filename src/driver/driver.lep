@@ -247,6 +247,11 @@ make drv_resolve_uses(st, src_root, visited, path)
     ensure nl = text::from_code(10)
     ensure tb = tb_new()
     ensure n = text::length(raw)
+    ensure shown = drv_relative(path)
+    (* a marker names the file and line that follow it, so errors can
+       say where they are (src_where) *)
+    tb_add(tb, drv_marker(shown, 1) + nl)
+    suppose line_no = 0
     suppose start = 0
     suppose i = 0
     suppose first = true
@@ -259,6 +264,7 @@ make drv_resolve_uses(st, src_root, visited, path)
             at_break = text::char_at(raw, i) == nl
         done()
         when at_break
+            line_no = line_no + 1
             ensure line = text::slice(raw, start, i)
             ensure u = drv_extract_use(line)
             suppose piece = line
@@ -278,12 +284,61 @@ make drv_resolve_uses(st, src_root, visited, path)
                         piece = drv_resolve_uses(st, src_root, visited, resolved)
                     done()
                 done()
+                piece = piece + nl + drv_marker(shown, line_no + 1)
             done()
             when not first
                 tb_add(tb, nl)
             done()
             tb_add(tb, piece)
             first = false
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    done(tb_text(tb))
+done()
+
+make drv_marker(shown, line)
+    done("(*@ " + shown + " " + text::from_number(line) + " *)")
+done()
+
+(* a path under the current directory, without the directory *)
+make drv_relative(path)
+    ensure here = sys::cwd() + "/"
+    when drv_starts_with(path, here)
+        done(text::slice(path, text::length(here), text::length(path)))
+    done()
+    when drv_starts_with(path, "./")
+        done(drv_relative(text::slice(path, 2, text::length(path))))
+    done()
+    done(path)
+done()
+
+(* the resolved source as the user wrote it: without the markers *)
+make drv_strip_markers(source)
+    ensure nl = text::from_code(10)
+    ensure tb = tb_new()
+    ensure n = text::length(source)
+    suppose start = 0
+    suppose i = 0
+    suppose first = true
+    repeat
+        when i > n
+            stop
+        done()
+        suppose at_break = i == n
+        when not at_break
+            at_break = text::char_at(source, i) == nl
+        done()
+        when at_break
+            ensure line = text::slice(source, start, i)
+            when not drv_starts_with(line, "(*@ ")
+                when not first
+                    tb_add(tb, nl)
+                done()
+                tb_add(tb, line)
+                first = false
+            done()
             start = i + 1
         done()
         i = i + 1
@@ -692,34 +747,61 @@ done()
 make drv_usage()
     show "lepthornc - the Lepthorn compiler"
     show ""
-    show "usage:"
-    show "  lepthornc compile <file.lep> [-o <out>] [--release] [--target <t>] [--emit-llvm]"
-    show "  lepthornc run <file.lep> [--release] [--target <t>] [--ascii]   compile natively, then run"
-    show "  lepthornc eval <file.lep> [--ascii]   interpret, no binary"
-    show "  lepthornc check <file.lep>        lex, parse and verify only"
-    show "  lepthornc resolve <file.lep>      print the source with every use pulled in"
-    show "  lepthornc resolve [manifest.lepm] show what a project's manifest means on this machine"
-    show ""
-    show "  in a project (the nearest manifest.lepm, from here upward):"
-    show "  lepthornc build [--release | --profile <p>] [--target <t>] [--bin <n> | --lib <n>]"
-    show "                  [-o <out>] [--emit-llvm]"
-    show "                                    a bin target to build/<profile>[/<t>]/bin/<n>,"
-    show "                                    a library to build/<profile>[/<t>]/lib/lib<n>.so and .a"
-    show "  lepthornc test [--release | --profile <p>] [--target <t>] [--ascii]"
-    show "  lepthornc promote [--release | --profile <p>] [--target <t>] [--bin <n>]"
-    show "                                    verify built bin targets and copy them to bin/"
-    show "  lepthornc new <name> [--lib]      create a project (bin, or a library)"
+    show "Usage:"
+    show "  lepthornc compile <file.lep> [options]"
+    show "  lepthornc run <file.lep> [options]"
+    show "  lepthornc eval <file.lep> [--ascii]"
+    show "  lepthornc check <file.lep>"
+    show "  lepthornc resolve [<file.lep> | manifest.lepm]"
+    show "  lepthornc build [options]"
+    show "  lepthornc test [options]"
+    show "  lepthornc promote [options]"
+    show "  lepthornc new <name> [--lib]"
     show "  lepthornc version"
+    show "  lepthornc help"
     show ""
-    show "targets: x86_64-linux-gnu (glibc), x86_64-linux-musl (musl), or the manifest's"
-    show "[Target_Platform] sections. Without one, programs are built for whatever clang"
-    show "builds for here. clang is --cc, else LEPTHORN_CLANG, else LEPTHORN_CC, else clang"
-    show "on PATH. A cross target's sysroot is LEPTHORN_SYSROOT, else <clang's dir>/../<target>."
+    show "Commands:"
+    show "  compile     Compile a file to a program"
+    show "  run         Compile a file, then run it"
+    show "  eval        Run a file in the interpreter; no program is made"
+    show "  check       Lex, parse and verify only"
+    show "  resolve     Show a file with every use pulled in, or show the project"
+    show "  build       Build the project (from manifest.lepm)"
+    show "  test        Run the project's tests"
+    show "  promote     Check the built programs, then copy them to bin/"
+    show "  new         Make a new project"
+    show "  version     Show the version"
+    show "  help        Show this help"
     show ""
-    show "units display in Unicode (kg·m/s² (N)); --ascii or LEPTHORN_OUTPUT=ascii gives"
-    show "kg*m/s^2 (N). Compiled programs read LEPTHORN_OUTPUT themselves."
+    show "Options:"
+    show "  -o <out>              Output file"
+    show "  --release             Optimized build (-O2)"
+    show "  --profile <p>         Use a [Profile] from manifest.lepm"
+    show "  --target <t>          Build for a target below"
+    show "  --bin <n>             Build only this bin target"
+    show "  --lib <n>             Build only this library target"
+    show "  --emit-llvm           Keep the LLVM IR (<out>.ll)"
+    show "  --ascii               Show units in ASCII (kg*m/s^2)"
+    show "  --cc <clang>          The clang to use"
+    show "  -h, --help            Show this help"
     show ""
-    show "exit status: 0 success, 1 failure, 2 invalid command or configuration"
+    show "Targets:"
+    show "  x86_64-linux-gnu      glibc, dynamic"
+    show "  x86_64-linux-musl     musl, static"
+    show ""
+    show "Environment:"
+    show "  LEPTHORN_CLANG        The clang to use (--cc comes first)"
+    show "  LEPTHORN_SYSROOT      Where the other libc is, for --target"
+    show "  LEPTHORN_OUTPUT       Set to ascii to show units in ASCII"
+    show ""
+    show "Examples:"
+    show "  lepthornc run main.lep"
+    show "  lepthornc compile app.lep -o app --release"
+    show "  lepthornc build --release"
+    show "  lepthornc build --release --target x86_64-linux-musl"
+    show "  lepthornc test"
+    show "  lepthornc new myproject"
+    show "  lepthornc new mylib --lib"
 done()
 
 make drv_has_flag(flag)
@@ -1259,10 +1341,10 @@ make lepthornc_main()
         sys::setenv("LEPTHORN_OUTPUT", "unicode")
     done()
     when cmd == "version" or cmd == "--version"
-        show "lepthornc 1.0.0 (self-hosted, native)"
+        show "lepthorn 1.0.0"
         sys::exit(0)
     done()
-    when cmd == "help" or cmd == "--help"
+    when cmd == "help" or cmd == "--help" or cmd == "-h"
         drv_usage()
         sys::exit(0)
     done()
@@ -1290,18 +1372,23 @@ make lepthornc_main()
             drv_cmd_resolve_project()
         done()
     done()
+    ensure known = cmd == "compile" or cmd == "run" or cmd == "eval" or cmd == "check" or cmd == "resolve" or cmd == "new"
+    when not known
+        show "lepthornc: unknown command '" + cmd + "'"
+        show "Run 'lepthornc help' to see the commands."
+        sys::exit(2)
+    done()
     when argc < 3
-        drv_usage()
+        when cmd == "new"
+            show "lepthornc: new needs a name: lepthornc new <name> [--lib]"
+        otherwise
+            show "lepthornc: " + cmd + " needs a file: lepthornc " + cmd + " <file.lep>"
+        done()
         sys::exit(2)
     done()
     ensure src = sys::arg(2)
     when cmd == "new"
         drv_cmd_new(src)
-    done()
-    when not (cmd == "compile" or cmd == "run" or cmd == "eval" or cmd == "check" or cmd == "resolve")
-        show "lepthornc: unknown command '" + cmd + "'"
-        drv_usage()
-        sys::exit(2)
     done()
     when not file::exists(src)
         show "lepthornc: no such file: " + src
@@ -1342,7 +1429,7 @@ make lepthornc_main()
         done()
         sys::exit(1)
     done()
-    show source
+    show drv_strip_markers(source)
     sys::exit(0)
 done()
 

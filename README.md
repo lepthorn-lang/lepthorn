@@ -40,8 +40,8 @@ business software. It is for software that controls machines.
 
 ## Status
 
-`lepthornc 1.0.0 (self-hosted, native)`: the compiler is written in
-Lepthorn and compiles itself. It needs no OCaml, no C source, no seed
+Lepthorn 1.0.0. The compiler is written in Lepthorn and compiles
+itself. It needs no OCaml, no C source, no seed
 and no bootstrap compiler.
 
 Working today: variables with units, text and true/false, all

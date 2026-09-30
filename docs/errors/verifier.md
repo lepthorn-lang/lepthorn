@@ -31,7 +31,8 @@ x = 6
 ```
 
 ```text
-LEC3001: cannot reassign 'x' - declared with ensure (immutable)
+main.lep:2: LEC3001: cannot reassign 'x' - declared with ensure (immutable)
+    x = 6
 ```
 
 A loop in the caller does not count for `stop` and `next` inside a

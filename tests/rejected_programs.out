@@ -1,14 +1,27 @@
 stop_at_top eval: 1 check: 1
-LEC3001: `stop` used outside a loop
+build/test/rejected/stop_at_top.lep:2: LEC3001: `stop` used outside a loop
+    stop
 next_in_function eval: 1 check: 1
-LEC3001: `next` used outside a loop
+build/test/rejected/next_in_function.lep:2: LEC3001: `next` used outside a loop
+    next
 open_comment eval: 1 check: 1
-LEC1001: unterminated comment
+build/test/rejected/open_comment.lep:2: LEC1001: unterminated comment
+    (* never closed
 loop_hz_zero eval: 1 check: 1
-LEC3001: loop_hz expects a positive frequency in Hz, got 0Hz
+build/test/rejected/loop_hz_zero.lep:1: LEC3001: loop_hz expects a positive frequency in Hz, got 0Hz
+    loop_hz 0Hz
 loop_hz_period eval: 1 check: 1
-LEC3001: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
+build/test/rejected/loop_hz_period.lep:1: LEC3001: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
+    loop_hz 10ms
 case_mixed eval: 1 check: 1
-LEC3001: `choose`: case labels must all be the same kind - "b" is not like the first label
+build/test/rejected/case_mixed.lep:4: LEC3001: `choose`: case labels must all be the same kind - "b" is not like the first label
+    case "b"
 case_twice eval: 1 check: 1
-LEC3001: `choose`: case 1 appears twice
+build/test/rejected/case_twice.lep:4: LEC3001: `choose`: case 1 appears twice
+    case 1
+syntax_error eval: 1 check: 1
+build/test/rejected/syntax_error.lep:2: LEC2001: expected a value, found the end of the line
+    show a +
+error_in_used_file eval: 1 check: 1
+build/test/rejected/helper.lep:2: LEC3001: undeclared variable 'missing'
+    done(n * missing)
