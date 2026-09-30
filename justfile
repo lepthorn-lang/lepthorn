@@ -1,29 +1,47 @@
 # Lepthorn compiler tasks.
 #
-# Every build has two stages. Stage 1: the lepthornc installed on the
-# system (found on PATH) builds this source into build/stage1/. Stage 2:
-# that stage-1 compiler builds the source again. So the result is always
-# made by a compiler built from this same source, never by an older one.
+# The compiler is built by the lepthornc installed on the system (found
+# on PATH); this repository has no compiler binary of its own. Every
+# build has two stages. Stage 1: the installed lepthornc builds this
+# source into build/stage1/. Stage 2: that stage-1 compiler builds the
+# source again. So the result is always made by a compiler built from
+# this same source, never by an older one. `just install` puts the
+# checked stage-2 compiler on the system.
 # A stage is skipped when its output is newer than every file in src/,
 # manifest.lepm and the compiler that builds it; `just clean` forces all.
-#
-# Settings, all optional:
-#   LEPTHORNC          the installed compiler (default: lepthornc on PATH)
-#   LEPTHORN_PREFIX    where to install (default: /usr/local, so /usr/local/bin)
-#   LEPTHORN_SYSROOT   where the other libc lives, for --target builds
-# The same names work on the command line, e.g. `just sysroot=/opt/musl musl`.
 
-lepthornc := env("LEPTHORNC", "lepthornc")
-prefix := env("LEPTHORN_PREFIX", "/usr/local")
-sysroot := env("LEPTHORN_SYSROOT", "")
+# ------------------------------------------------------------------
+# Settings: edit these for your system. Each can also be given once on
+# the command line, e.g. `just sysroot=/usr/lib/musl musl`.
+# ------------------------------------------------------------------
+
+# Where the other libc lives, for --target builds (the one your system
+# does not use). Leave empty to let lepthornc look next to clang.
+# Examples: Fedora "/usr/x86_64-linux-musl" (found without setting it),
+# Debian, Ubuntu and Arch with the musl package "/usr/lib/musl".
+sysroot := ""
+
+# The clang to use. Leave empty for `clang` on PATH. Example: "clang-19".
+clang := ""
+
+# The installed compiler that builds stage 1.
+lepthornc := "lepthornc"
+
+# `just install` puts the new lepthornc in <prefix>/bin.
+prefix := "/usr/local"
+
+# ------------------------------------------------------------------
+
+# the settings reach lepthornc as environment variables
+export LEPTHORN_SYSROOT := sysroot
+export LEPTHORN_CLANG := clang
+
 bindir := prefix / "bin"
 stage1 := "build/stage1/bin/lepthornc"
 
 # `fresh OUT FILE...` succeeds when OUT exists and nothing in src/,
-# manifest.lepm or the given files is newer than it
-fresh := 'fresh() { out="$1"; shift; [ -x "$out" ] && [ -z "$(find src manifest.lepm "$@" -newer "$out" -print -quit)" ]; }; '
-
-export LEPTHORN_SYSROOT := sysroot
+# manifest.lepm, this justfile or the given files is newer than it
+fresh := 'fresh() { out="$1"; shift; [ -x "$out" ] && [ -z "$(find src manifest.lepm justfile "$@" -newer "$out" -print -quit)" ]; }; '
 
 # list the recipes
 default:
@@ -62,22 +80,15 @@ fixed-point: release
     cmp build/release/bin/lepthornc build/release/rebuild/bin/lepthornc
     @echo "fixed point: build/release/bin/lepthornc rebuilds itself identically"
 
-# check the new compiler and copy it to bin/lepthornc
-promote: release
-    build/release/bin/lepthornc promote --release
-
-# copy bin/lepthornc to the system (asks for sudo when the directory needs it)
-install:
-    if [ -w "{{bindir}}" ]; then install -m 755 bin/lepthornc "{{bindir}}/lepthornc"; else sudo install -m 755 bin/lepthornc "{{bindir}}/lepthornc"; fi
+# check the new compiler rebuilds itself, then copy it to <prefix>/bin (sudo only if needed)
+install: fixed-point
+    if [ -w "{{bindir}}" ]; then install -m 755 build/release/bin/lepthornc "{{bindir}}/lepthornc"; else sudo install -m 755 build/release/bin/lepthornc "{{bindir}}/lepthornc"; fi
     @echo "installed {{bindir}}/lepthornc"
     @"{{bindir}}/lepthornc" version
 
 # remove the installed compiler
 uninstall:
     if [ -w "{{bindir}}" ]; then rm -f "{{bindir}}/lepthornc"; else sudo rm -f "{{bindir}}/lepthornc"; fi
-
-# build, check, promote to bin/, then install on the system
-update: promote install
 
 # the full check from a clean tree
 verify:

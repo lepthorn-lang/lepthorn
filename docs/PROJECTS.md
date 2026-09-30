@@ -125,7 +125,9 @@ uses.
 To build for the other libc, its files must be installed. On Fedora,
 for example, the musl packages put musl in `/usr/x86_64-linux-musl`,
 next to Clang's `/usr/bin`, where `lepthornc` finds it. If it is
-somewhere else, set `LEPTHORN_SYSROOT`.
+somewhere else, set `LEPTHORN_SYSROOT` to that directory (Debian,
+Ubuntu and Arch with the musl package use `/usr/lib/musl`). In the
+compiler's own repository, set `sysroot` in the justfile instead.
 
 ## Tests
 
@@ -198,5 +200,6 @@ lepthornc build --release
 lepthornc promote --release     # build/release/bin/rover -> bin/rover
 ```
 
-For the compiler itself, `promote` also checks that the new compiler
-rebuilds itself exactly (see [BUILDING.md](BUILDING.md)).
+The compiler's own repository does not use `promote`: it installs the
+new compiler on the system with `just install` (see
+[BUILDING.md](BUILDING.md)).

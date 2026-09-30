@@ -61,8 +61,8 @@ targets other than x86-64 Linux. The details are in
 You need x86-64 Linux, Clang, and glibc or musl.
 
 ```sh
-sudo just install                     # installs bin/lepthornc to /usr/local/bin
-lepthornc version
+lepthornc version                     # a lepthornc must be installed first (see docs/BUILDING.md)
+just install                          # build this compiler in two stages and install it
 lepthornc eval examples/gravity.lep   # run a program
 lepthornc run examples/gravity.lep    # compile it natively, then run it
 

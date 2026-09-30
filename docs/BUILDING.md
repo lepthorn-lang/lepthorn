@@ -2,45 +2,40 @@
 
 ## Self-hosting
 
-Lepthorn is self-hosted and natively compiled. The canonical compiler,
-`bin/lepthornc`, is written in Lepthorn and compiles the Lepthorn
-compiler source directly. Normal development and release builds do not
-need OCaml, C source, a repository seed, or a separate bootstrap
-compiler. The compiler can rebuild itself and produce an equivalent
-native compiler binary. Separate target builds are supported for glibc
-and musl systems.
+Lepthorn is self-hosted and natively compiled. The canonical compiler is
+the `lepthornc` installed on your system. It is written in Lepthorn and
+compiles the Lepthorn compiler source directly. Normal development and
+release builds do not need OCaml, C source, a repository seed, or a
+separate bootstrap compiler. The compiler can rebuild itself and produce
+an equivalent native compiler binary. Separate target builds are
+supported for glibc and musl systems.
 
-There is no way to build the compiler on a machine that has no Lepthorn
-compiler at all. This was removed on purpose: a new machine gets
-Lepthorn by copying a `lepthornc` binary.
+This repository holds only the source, not a compiler binary. There is
+no way to build the compiler on a machine that has no Lepthorn compiler
+at all; this was removed on purpose. A new machine gets Lepthorn by
+installing a `lepthornc` binary built on another machine. The static
+musl build (`build/release/x86_64-linux-musl/bin/lepthornc`) runs on any
+x86-64 Linux, so it is the one to copy.
 
 ## What you need
 
 - x86-64 Linux
 - Clang (tested with 22.1.8; version 15 or newer should work)
 - glibc or musl (tested with glibc 2.43 and musl 1.2.5)
+- a `lepthornc` installed on your `PATH`
 - `just`, if you want to use the `justfile` (not required)
 
 Nothing else: no OCaml, no C source, no network.
 
-## Install the compiler first
-
-The compiler is built with the `lepthornc` installed on your system, not
-with the file in the repository. The repository's `bin/lepthornc` is the
-copy you install from. Install it once:
+To install a `lepthornc` binary you were given:
 
 ```sh
-sudo just install        # copies bin/lepthornc to /usr/local/bin/lepthornc
+sudo install -m 755 lepthornc /usr/local/bin/lepthornc
 lepthornc version
 ```
 
-Without `just`: `sudo install -m 755 bin/lepthornc /usr/local/bin/`.
-
-To install somewhere else, set `LEPTHORN_PREFIX`: with
-`LEPTHORN_PREFIX=$HOME/.local just install` it goes to
-`~/.local/bin/lepthornc`, and no `sudo` is needed. Make sure that
-directory is on your `PATH`, and that no older `lepthornc` comes before
-it on the `PATH` (`which lepthornc` shows which one runs).
+Make sure no older `lepthornc` comes before it on your `PATH`
+(`which lepthornc` shows which one runs).
 
 ## Build the compiler: always two stages
 
@@ -57,31 +52,30 @@ even when the installed compiler is older.
 
 With `just`, every build recipe does both stages. A stage is skipped
 when its output is already newer than every file in `src/`,
-`manifest.lepm` and the compiler that builds it, so running
-`just test` and then `just promote` does not build the compiler twice.
-`just clean` removes `build/` and forces a full build.
+`manifest.lepm`, the justfile and the compiler that builds it, so
+running `just test` and then `just install` does not build the compiler
+twice. `just clean` removes `build/` and forces a full build.
 
 ```sh
 just release          # stage 1, then stage 2: build/release/bin/lepthornc
 just test             # the same, then runs the tests with the new compiler
-just promote          # the same, then checks it and copies it to bin/lepthornc
-sudo just install     # installs bin/lepthornc on the system
+just install          # checks that it rebuilds itself, then copies it to /usr/local/bin
 ```
 
-`just update` does `promote` and then `install` (it asks for `sudo` at
-the end). By hand:
+`just install` asks for your password only for the copy, when the
+install directory needs it. Run it as yourself, not with `sudo`, so the
+files in `build/` stay yours.
+
+By hand:
 
 ```sh
 lepthornc build --release -o build/stage1/bin/lepthornc    # stage 1
 build/stage1/bin/lepthornc build --release                 # stage 2
 build/release/bin/lepthornc test
-build/release/bin/lepthornc promote --release
-sudo just install
+build/release/bin/lepthornc build --release                # rebuild check
+cmp build/release/bin/lepthornc build/release/rebuild/bin/lepthornc
+sudo install -m 755 build/release/bin/lepthornc /usr/local/bin/lepthornc
 ```
-
-`promote` refuses a compiler that does not rebuild itself exactly. A
-stage-2 compiler always passes this, because it was built by a compiler
-made from the same source.
 
 If the new source uses syntax or a built-in function that the installed
 compiler does not know, stage 1 fails. See the last section of this
@@ -136,7 +130,7 @@ including Alpine.
 | the project | the nearest `manifest.lepm`, from the current directory upward |
 | Clang | `--cc`, else `LEPTHORN_CLANG`, else `LEPTHORN_CC`, else `clang` on `PATH` |
 | the system's libc | Clang's own target (`clang -print-target-triple`) |
-| the other libc | `LEPTHORN_SYSROOT`, else `<Clang's directory>/../<triple>` |
+| the other libc | `LEPTHORN_SYSROOT` (the justfile's `sysroot`), else `<Clang's directory>/../<triple>` |
 | its own path (for tests) | how it was started (`argv[0]`), then `PATH` |
 
 The other libc's library files are looked for in `lib64`, `lib`,
@@ -147,15 +141,27 @@ is `/usr/bin/clang`, musl is looked for in `/usr/x86_64-linux-musl`.
 
 ## The justfile
 
-The `justfile` runs the `lepthornc` on your `PATH`. Three settings
-change what it does. Set them in the environment, or on the command
-line (`just sysroot=/opt/musl musl`):
+The `justfile` starts with a settings block. Edit it once for your
+system; nothing has to be set in the environment:
 
-| Setting | Environment variable | Default |
+```just
+sysroot := ""            # where the other libc lives, for --target builds
+clang := ""              # the clang to use; empty means `clang` on PATH
+lepthornc := "lepthornc" # the installed compiler that builds stage 1
+prefix := "/usr/local"   # `just install` puts lepthornc in <prefix>/bin
+```
+
+| Setting | Default | When to change it |
 |---|---|---|
-| `lepthornc` | `LEPTHORNC` | `lepthornc` on `PATH` |
-| `prefix` | `LEPTHORN_PREFIX` | `/usr/local` (installs to `/usr/local/bin`) |
-| `sysroot` | `LEPTHORN_SYSROOT` | empty: the compiler finds the other libc itself |
+| `sysroot` | empty: lepthornc looks next to clang | your system keeps the other libc somewhere else, e.g. `"/usr/lib/musl"` on Debian, Ubuntu or Arch with the musl package |
+| `clang` | empty: `clang` on `PATH` | your clang has another name, e.g. `"clang-19"` |
+| `lepthornc` | `lepthornc` on `PATH` | you want stage 1 built by another compiler |
+| `prefix` | `/usr/local` | you want to install somewhere else, e.g. `"/home/you/.local"` (then no `sudo` is needed) |
+
+The justfile hands `sysroot` and `clang` to lepthornc as
+`LEPTHORN_SYSROOT` and `LEPTHORN_CLANG`. A setting can also be given
+once on the command line: `just sysroot=/usr/lib/musl musl`. Changing
+the justfile makes the next build start again from stage 1.
 
 | Recipe | What it does |
 |---|---|
@@ -165,10 +171,8 @@ line (`just sysroot=/opt/musl musl`):
 | `just gnu`, `just musl`, `just targets` | stage 1, then release builds for glibc, musl, or both |
 | `just test` | release build, then run the tests with it |
 | `just fixed-point` | release build, then check that it rebuilds itself |
-| `just promote` | release build, then promote it to `bin/` |
-| `just install` | copy `bin/lepthornc` to `<prefix>/bin`, with `sudo` if needed |
+| `just install` | release build, check that it rebuilds itself, then copy it to `<prefix>/bin` (with `sudo` only if needed) |
 | `just uninstall` | remove `<prefix>/bin/lepthornc` |
-| `just update` | promote, then install |
 | `just verify` | from a clean `build/`: both stages, tests, the rebuild check, both targets, and the musl tests |
 | `just clean` | remove `build/` |
 
@@ -181,8 +185,8 @@ know it yet, so it cannot build stage 1. Then:
 1. Copy the source somewhere outside the repository, and in the copy
    write those few places the old way.
 2. Build the copy with the installed compiler. This is stage 1.
-3. Use it to build the real source (stage 2), then `promote` and
-   install as usual.
+3. Use it to build the real source (stage 2), check it, and install it
+   (`just lepthornc=<the stage-1 compiler> install`).
 
 After that, the installed compiler knows the new feature and the normal
 two-stage build works again.

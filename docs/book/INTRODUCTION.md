@@ -12,18 +12,16 @@ exists, read [../INTRODUCTION.md](../INTRODUCTION.md) first.
 
 ## Get the compiler
 
-The compiler is one file, `bin/lepthornc`, in this repository. Install
-it on your system. With `just`:
+The compiler is one file, `lepthornc`. Lepthorn is written in Lepthorn,
+so you need a `lepthornc` binary to start: copy one from a machine that
+has it (the static musl build runs on any x86-64 Linux) and install it:
 
 ```sh
-sudo just install        # copies bin/lepthornc to /usr/local/bin
+sudo install -m 755 lepthornc /usr/local/bin/
 ```
 
-Or by hand:
-
-```sh
-sudo install -m 755 bin/lepthornc /usr/local/bin/
-```
+After that, `just install` in the compiler's repository builds the
+compiler from source and installs the new one.
 
 Check that it works:
 
