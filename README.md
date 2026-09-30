@@ -7,7 +7,6 @@ engineering, scientific, real-time, embedded, robotics and autonomous
 systems. It is for software where a wrong result, a unit mistake, a bad
 memory access or a late answer can make a real machine fail.
 
-Lepthorn is made by **Ali Zain**.
 
 ```lepthorn
 ensure mass = 25kg
