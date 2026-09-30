@@ -50,16 +50,46 @@ So the compiler you get is always made by a compiler built from the
 same source. The code generator and runtime inside it are the new ones,
 even when the installed compiler is older.
 
-With `just`, every build recipe does both stages. A stage is skipped
-when its output is already newer than every file in `src/`,
-`manifest.lepm`, the justfile and the compiler that builds it, so
-running `just test` and then `just install` does not build the compiler
-twice. `just clean` removes `build/` and forces a full build.
+With `just`, every build recipe first checks the tools, then does both
+stages. A stage is skipped when its output is already newer than every
+file in `src/`, `manifest.lepm`, the justfile and the compiler that
+builds it, so running `just test` and then `just install` does not
+build the compiler twice. `just clean` removes `build/` and forces a
+full build.
 
 ```sh
-just release          # stage 1, then stage 2: build/release/bin/lepthornc
+just release          # check, stage 1, stage 2: build/release/bin/lepthornc
 just test             # the same, then runs the tests with the new compiler
 just install          # checks that it rebuilds itself, then copies it to /usr/local/bin
+```
+
+`just release` builds for this system's libc only (the one your Clang
+uses). For glibc or musl by name, use `just gnu`, `just musl` or
+`just targets` (see below).
+
+`just release` prints one line per step:
+
+```text
+check     lepthornc  lepthorn 1.0.0 (/usr/local/bin/lepthornc)
+check     clang      22.1.8 (/usr/bin/clang)
+check     libc       glibc (x86_64-redhat-linux-gnu)
+check     toolchain  builds and runs programs
+stage 1   build/stage1/bin/lepthornc (built by /usr/local/bin/lepthornc)
+stage 2   build/release/bin/lepthornc
+ready     build/release/bin/lepthornc (glibc: this system's libc)
+```
+
+The check stops with a clear message when something is missing:
+`lepthornc`, `clang` (LLVM), or, for `just gnu` and `just musl`, the
+libc of that target. The compiler's own output is shown only when a
+step fails. Errors in the compiler's source look like errors in any
+program, with the file and line:
+
+```text
+src/core/ctv/ctv.lep:250: LEC2001: a statement cannot start with '+'
+    ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'") +
+lepthornc: compilation failed
+error: stage 1 failed: /usr/local/bin/lepthornc could not build this source (errors above)
 ```
 
 `just install` asks for your password only for the copy, when the
@@ -165,10 +195,11 @@ the justfile makes the next build start again from stage 1.
 
 | Recipe | What it does |
 |---|---|
+| `just check` | check that `lepthornc`, `clang` (LLVM) and this system's libc work; every build runs it first |
 | `just stage1` | stage 1 only: the installed compiler builds `build/stage1/bin/lepthornc` |
 | `just build` | stage 1, then a debug build |
-| `just release` | stage 1, then a release build |
-| `just gnu`, `just musl`, `just targets` | stage 1, then release builds for glibc, musl, or both |
+| `just release` | stage 1, then a release build for this system's libc |
+| `just gnu`, `just musl`, `just targets` | check that the target's libc is installed, stage 1, then release builds for glibc, musl, or both |
 | `just test` | release build, then run the tests with it |
 | `just fixed-point` | release build, then check that it rebuilds itself |
 | `just install` | release build, check that it rebuilds itself, then copy it to `<prefix>/bin` (with `sudo` only if needed) |
