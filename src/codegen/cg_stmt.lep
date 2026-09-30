@@ -268,21 +268,34 @@ make cg_stmt(ctx, arena, node)
     done(false)
 done()
 
-(* the subject must be Text; the first case whose label equals it runs,
-   else the `otherwise` block if there is one *)
+(* every label is checked against the value first (same kind, same
+   unit), then the first case whose label equals the value runs, else
+   the `otherwise` block if there is one. The labels are computed once,
+   before any branch, so the second pass can reuse them. *)
 make cg_choose(ctx, arena, node)
     ensure subj = cg_expr(ctx, arena, node.left)
-    cg_emit(ctx, "call void @lep_choose_check(i64 " + subj + ")")
     ensure end_l = cg_newlabel(ctx, "endchoose")
+    ensure labels = ring::create(cg_chain_len(arena, node.right) + 1)
     suppose cidx = node.right
     repeat
         when cidx == none_idx()
             stop
         done()
+        ensure lnode = arena_get(arena, cidx)
+        ensure lbl = cg_expr(ctx, arena, lnode.left)
+        cg_emit(ctx, "call void @lep_choose_check(i64 " + subj + ", i64 " + lbl + ")")
+        ring::write(labels, lbl)
+        cidx = lnode.sibling
+    done()
+    cidx = node.right
+    repeat
+        when cidx == none_idx()
+            stop
+        done()
         ensure cnode = arena_get(arena, cidx)
-        ensure lbl = cg_text_value(ctx, cnode.op)
+        ensure lreg = ring::get(labels)
         ensure eqv = cg_tmp(ctx)
-        cg_emit(ctx, eqv + " = call i64 @lep_eq(i64 " + subj + ", i64 " + lbl + ")")
+        cg_emit(ctx, eqv + " = call i64 @lep_eq(i64 " + subj + ", i64 " + lreg + ")")
         ensure hit = cg_tmp(ctx)
         cg_emit(ctx, hit + " = icmp eq i64 " + eqv + ", 7")
         ensure case_l = cg_newlabel(ctx, "case")

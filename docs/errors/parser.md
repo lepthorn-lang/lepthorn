@@ -22,5 +22,7 @@ Common causes:
 | `show a, b` | `show` arguments are not separated by commas | `show a b` |
 | `a < b < c` | comparisons cannot be chained | `a < b and b < c` |
 | `ensure x = 5;` | there are no semicolons | `ensure x = 5` |
+| `case mode` | a case label must be a literal | `case 1`, `case "auto"`, `case true` |
+| `loop_hz` with nothing after it | it needs a frequency | `loop_hz 100Hz` or `loop_hz(100)` |
 
 The exact syntax is in [../GRAMMAR.md](../GRAMMAR.md).

@@ -13,6 +13,16 @@ loop_hz(50)
 done()
 show "Ticks:" ticks
 
+(* the same loop, with the frequency written as a unit *)
+suppose hz_ticks = 0
+loop_hz 50Hz
+    hz_ticks = hz_ticks + 1
+    when hz_ticks >= 3
+        stop
+    done()
+done()
+show "Ticks at 50Hz:" hz_ticks
+
 (* deadline: a temporal contract, not automatic cancellation - the
    body always runs to completion; a miss is a warning, not a crash. *)
 deadline 50ms

@@ -1,0 +1,43 @@
+(* choose works on numbers, units, Text and Booleans *)
+ensure mode = 2
+choose mode
+case 1
+    show "manual"
+case 2
+    show "automatic"
+otherwise
+    show "unknown mode"
+done()
+
+ensure armed = true
+choose armed
+case true
+    show "armed"
+case false
+    show "safe"
+done()
+
+ensure speed = 10mps
+choose speed
+case 5mps
+    show "slow"
+case 10mps
+    show "cruise"
+otherwise
+    show "other"
+done()
+
+ensure name = "scout"
+choose name
+case "rover"
+    show "ground"
+case "scout"
+    show "air"
+done()
+
+choose 7
+case 1
+    show "one"
+otherwise
+    show "no case matched"
+done()

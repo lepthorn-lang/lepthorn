@@ -123,7 +123,7 @@ A full control loop is meant to look like this (these libraries do not
 exist yet):
 
 ```lepthorn
-loop_hz(100)
+loop_hz 100Hz
     ensure position = sensor::read_position()
     ensure command = control::step(position)
     actuator::write(command)

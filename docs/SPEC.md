@@ -301,19 +301,47 @@ The condition must be a Boolean. There can be any number of
 ### choose
 
 ```lepthorn
+ensure mode = 1
+
 choose mode
-case "AUTO"
-    show "autonomous"
-case "MANUAL"
+case 1
     show "manual"
+case 2
+    show "automatic"
 otherwise
     show "unknown mode"
 done()
 ```
 
-The value after `choose` must be Text. Each `case` label must be quoted
-text. The first matching case runs. `otherwise` runs when no case
-matches. There is no fall-through.
+```text
+manual
+```
+
+- The value after `choose` can be a Number (with or without a unit),
+  Text or a Boolean. It is worked out once.
+- Each `case` label is a literal of the same kind: a number (`1`,
+  `10mps`), quoted Text (`"AUTO"`) or `true`/`false`.
+- The first case whose label equals the value runs. `otherwise` runs
+  when no case matches, and it is optional. There is no fall-through.
+- A case ends at the next `case`, at `otherwise`, or at the final
+  `done()`. There is no `done()` after each case.
+
+Checked before the program runs (`LEC3001`):
+
+- all labels must be of one kind (not `case 1` and `case "b"` together),
+- the same label cannot appear twice,
+- a label must be a literal, not a name or an expression (`LEC2001`).
+
+Checked when `choose` starts, for every label, before any case runs
+(`LEC8029`):
+
+- the label must be of the same kind as the value (`choose mode` with
+  a Number `mode` cannot have `case "1"`),
+- a number label must have the same unit as the value.
+
+```text
+lepthorn: runtime error: LEC8029: `choose`: case label type mismatch - the value is Number, case label is Text
+```
 
 ## 8. Loops
 
@@ -350,16 +378,41 @@ every 10ms
     done()
 done()
 
-loop_hz(50)
+loop_hz 100Hz
+    ...
+done()
+
+loop_hz(100)
     ...
 done()
 ```
 
 `every` runs its body again and again, once per period. The period is
-a time (`10ms`) or a frequency (`100Hz`). `loop_hz(n)` is the same with
-a frequency given as a plain number. The start times stay on a fixed
-grid: if the body takes longer one time, the next start is not moved
-later. Use `stop` to leave these loops.
+a time (`10ms`) or a frequency (`100Hz`).
+
+`loop_hz` runs its body at a frequency. There are two ways to write it,
+and they mean the same:
+
+- `loop_hz 100Hz`: a frequency with a unit (`Hz` or `kHz`), or any
+  expression whose value is a frequency: `loop_hz rate`.
+- `loop_hz(100)`: a plain number of times per second. It is read as
+  `100 * 1Hz`.
+
+Both run the body 100 times per second, a period of 10ms. `loop_hz 100Hz`
+and `every 10ms` give the same timing.
+
+The frequency must be a positive frequency. A literal that is not
+(`loop_hz 0Hz`, `loop_hz 10ms`, `loop_hz 100kg`, `loop_hz 100`,
+`loop_hz(100Hz)`) is an error before the program runs (`LEC3001`).
+Any other value is checked when the loop starts:
+
+```text
+lepthorn: runtime error: loop_hz expects a positive frequency in Hz, got 0.01 s (for a period, use every)
+```
+
+The start times stay on a fixed grid: if the body takes longer one
+time, the next start is not moved later. Use `stop` to leave these
+loops.
 
 ## 9. Functions
 

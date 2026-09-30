@@ -1,0 +1,32 @@
+(* resolve prints a source file with its uses pulled in, or, given the
+   manifest or nothing, what the project means *)
+ensure lc = sys::getenv("LEPTHORNC")
+when lc == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+sys::mkdir("build/test/resolve")
+
+make first_line(lc, args)
+    ensure q = text::from_code(34)
+    ensure log = "build/test/resolve/out.txt"
+    ensure status = sys::run(q + lc + q + " " + args + " > " + log + " 2>&1")
+    ensure h = file::open(log, "r")
+    ensure out = file::load(h, sys::file_size(log))
+    file::close(h)
+    suppose i = 0
+    repeat
+        when i >= text::length(out)
+            stop
+        done()
+        when text::char_at(out, i) == text::from_code(10)
+            stop
+        done()
+        i = i + 1
+    done()
+    show args "->" status text::slice(out, 0, i)
+done()
+
+first_line(lc, "resolve manifest.lepm")
+first_line(lc, "resolve")
+first_line(lc, "resolve examples/gravity.lep")
+first_line(lc, "resolve other.lepm")

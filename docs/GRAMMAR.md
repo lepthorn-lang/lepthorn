@@ -173,6 +173,7 @@ statement   = 'ensure' IDENT '=' expr
             | 'done' '(' expr ')'
             | 'every' expr NEWLINE block DONE_EMPTY
             | 'loop_hz' '(' expr ')' NEWLINE block DONE_EMPTY
+            | 'loop_hz' expr NEWLINE block DONE_EMPTY
             | 'wait' expr
             | 'deadline' expr NEWLINE block DONE_EMPTY
             | 'timeout' expr NEWLINE block DONE_EMPTY
@@ -197,9 +198,10 @@ repeat_stmt = 'repeat' NEWLINE block DONE_EMPTY
             | 'repeat' expr NEWLINE block DONE_EMPTY
 
 choose_stmt = 'choose' expr NEWLINE
-                  { 'case' STRING NEWLINE block | NEWLINE }
+                  { 'case' label NEWLINE block | NEWLINE }
                   [ 'otherwise' NEWLINE block ]
               DONE_EMPTY
+label       = NUMBER | STRING | 'true' | 'false'
 
 task        = 'priority' expr NEWLINE block DONE_EMPTY
             | statement
@@ -209,7 +211,12 @@ Notes:
 
 - `x += e` means `x = x + e`. The same goes for every compound
   operator.
-- `case` labels must be quoted text.
+- A `case` label is a literal: a number (with or without a unit),
+  quoted Text, `true` or `false`. All labels of one `choose` are of the
+  same kind, and none appears twice.
+- `loop_hz(n)` becomes the frequency `n * 1Hz`, so both forms give the
+  same loop. Without brackets the expression must itself be a frequency
+  (`100Hz`, `2kHz`, or a variable holding one).
 - Only a plain name can be indexed or have a field: `a[i]`, `p.x`. You
   cannot write `a[i][j]`, `p.pos.x` or `list[0].x`. Read the inner value
   into its own name first.

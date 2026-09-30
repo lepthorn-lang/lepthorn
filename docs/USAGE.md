@@ -37,7 +37,7 @@ lepthornc build                # build every target
 lepthornc build --release      # build with optimisation
 lepthornc test                 # run the tests
 lepthornc promote --release    # copy a checked build to bin/
-lepthornc manifest             # show what manifest.lepm means on this machine
+lepthornc resolve               # show what manifest.lepm means on this machine
 ```
 
 ## All commands
@@ -48,11 +48,11 @@ lepthornc manifest             # show what manifest.lepm means on this machine
 | `run <file>` | compile one file, then run it |
 | `eval <file>` | run one file in the interpreter |
 | `check <file>` | lex, parse and check one file, without running it |
-| `resolve <file>` | print the source with every `use` included |
+| `resolve <file.lep>` | print the source with every `use` included |
+| `resolve [manifest.lepm]` | show what the project's manifest means on this machine: settings, targets, the Clang in use, the system's libc. With no file, the nearest `manifest.lepm` is used |
 | `build` | build the project's targets |
 | `test` | run the project's tests |
 | `promote` | copy the project's built programs to `bin/` |
-| `manifest` | show the project settings, the Clang in use and the system's libc |
 | `new <name> [--lib]` | make a new project |
 | `version` | print the version |
 | `help` | print the list of commands |

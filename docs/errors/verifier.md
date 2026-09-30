@@ -16,6 +16,12 @@ All verifier errors use the code `LEC3001`:
 | `'x' is a shared suppose value, reassigned inside parallel without atomic` | wrap the change in `atomic` |
 | `` `stop` used outside a loop `` | `stop` is not inside `repeat`, `every` or `loop_hz` |
 | `` `next` used outside a loop `` | the same for `next` |
+| `loop_hz expects a positive frequency in Hz, got 0Hz` | a literal frequency of 0 |
+| `loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms` | a time where a frequency is needed |
+| `loop_hz expects a frequency in Hz, got 100; write loop_hz 100Hz or loop_hz(100)` | a plain number without brackets |
+| `loop_hz(n) takes a plain number of times per second, got 100Hz; ...` | a unit inside the brackets |
+| `` `choose`: case labels must all be the same kind - ... `` | e.g. `case 1` and `case "b"` in one `choose` |
+| `` `choose`: case 1 appears twice `` | the same label twice |
 
 Example:
 

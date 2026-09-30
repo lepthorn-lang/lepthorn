@@ -1,0 +1,4 @@
+resolve manifest.lepm -> 0 package: lepthornc 1.0.0
+resolve -> 0 package: lepthornc 1.0.0
+resolve examples/gravity.lep -> 0 ensure mass = 25kg
+resolve other.lepm -> 2 lepthornc: no such project file: other.lepm (a project file is called manifest.lepm)

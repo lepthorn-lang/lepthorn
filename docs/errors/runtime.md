@@ -134,6 +134,28 @@ on.
 LEC8027: runtime error: exponent must be dimensionless
 ```
 
+### LEC8029: choose label does not fit the value
+
+When `choose` starts, every `case` label is compared with the value
+before any case runs. A label of another kind, or a number label with
+another unit, stops the program:
+
+```lepthorn
+ensure mode = 1
+choose mode
+case "1"
+    show "one"
+done()
+```
+
+```text
+lepthorn: runtime error: LEC8029: `choose`: case label type mismatch - the value is Number, case label is Text
+```
+
+```text
+lepthorn: runtime error: LEC8029: `choose`: case label 10 m has a different unit than the value 10 m/s
+```
+
 ### LEC8028: sys::fail
 
 `sys::fail(reason)` stops the program on purpose.
@@ -163,14 +185,13 @@ These also stop the program, with exit status 1:
 | `` `when` condition must be Boolean ... `` | also `until` and `wait` |
 | `` `&` requires dimensionless whole-number operands `` | a bitwise operator got a unit or a fraction |
 | `` `**`: a dimensioned base requires a whole-number exponent ... `` | e.g. `(2m) ** 0.5` |
-| `` `choose` subject must be Text `` | |
 | `... must be a dimensionless Number ...` | an index, count or capacity with a unit |
 | `ring::peek: index ... is out of bounds ...` | |
 | `... capacity must be a positive whole Number ...` | `ring::create(0)` and similar |
 | `f: maximum recursion depth (10000) exceeded` | a function called itself too deeply |
 | `f: this function never reaches done(value) ...` | using the result of a function that returns nothing |
 | `` `every` requires a time (e.g. 10ms) or frequency (e.g. 100Hz) quantity `` | |
-| `loop_hz: frequency must be greater than zero` | |
+| `loop_hz expects a positive frequency in Hz, got ... (for a period, use every)` | the value given to `loop_hz` is not a positive frequency |
 | `force::gravity: argument must have mass dimension [kg]` | and the other physics functions |
 | `` `take`: could not parse input '...' `` | `take` read something that is not a number |
 | `end of input` | `take` or `read` at the end of input |

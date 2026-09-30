@@ -97,8 +97,8 @@ them when it runs: Clang from `--cc`, `LEPTHORN_CLANG`, `LEPTHORN_CC`
 or `PATH`, and the other libc from `LEPTHORN_SYSROOT` or next to Clang.
 See [BUILDING.md](BUILDING.md).
 
-`lepthornc manifest` shows what the manifest means on the current
-machine:
+`lepthornc resolve manifest.lepm` (or just `lepthornc resolve` inside
+the project) shows what the manifest means on the current machine:
 
 ```text
 package: lepthornc 1.0.0
@@ -107,7 +107,7 @@ authors: Ali Zain
 license: Apache-2.0 (LICENSE)
 readme: README.md
 target: lepthornc (bin) src/main.lep
-tests: tests/ (19 files)
+tests: tests/ (23 files)
 profile: debug -O0
 profile: release -O2
 platform: x86_64-linux-gnu glibc dynamic -lm

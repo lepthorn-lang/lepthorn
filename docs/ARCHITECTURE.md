@@ -26,7 +26,7 @@ source files
 | `driver/` | `manifest.lep`: reads and checks `manifest.lepm`. `driver.lep`: the commands, `use` handling, profiles, targets, and calling clang. |
 | `main.lep` | Pulls in everything and calls `lepthornc_main()`. |
 
-Project commands (`build`, `test`, `promote`, `manifest`) first move to
+Project commands (`build`, `test`, `promote`, `resolve` without a file) first move to
 the project root: the nearest directory, from the current one upward,
 that has a `manifest.lepm`.
 

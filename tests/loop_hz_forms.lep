@@ -1,0 +1,35 @@
+(* loop_hz(n) and loop_hz <frequency> are the same loop *)
+suppose a = 0
+loop_hz(200)
+    a += 1
+    when a >= 3
+        stop
+    done()
+done()
+
+suppose b = 0
+loop_hz 200Hz
+    b += 1
+    when b >= 3
+        stop
+    done()
+done()
+
+suppose c = 0
+loop_hz 0.2kHz
+    c += 1
+    when c >= 2
+        stop
+    done()
+done()
+
+ensure rate = 250Hz
+suppose d = 0
+loop_hz rate
+    d += 1
+    when d >= 2
+        stop
+    done()
+done()
+
+show "rounds:" a b c d

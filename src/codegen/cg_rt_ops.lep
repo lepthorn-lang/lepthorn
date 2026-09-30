@@ -73,8 +73,9 @@ make cg_rt_ops(ctx)
     rt(ctx, "define internal i64 @lep.whole(i64 %v, ptr %what) {|entry:|  %n = call i1 @lep.isnum(i64 %v)|  br i1 %n, label %ok, label %bad|ok:|  %d = call double @lep.dec(i64 %v)|  %i = fptosi double %d to i64|  ret i64 %i|bad:|  %kn = call ptr @lep.kname(i64 %v)|  call void @lep.die2(ptr @.rt.f_whole, ptr %what, ptr %kn)|  unreachable|}")
     rt(ctx, "define internal i64 @lep_count(i64 %v) {|entry:|  %r = call i64 @lep.whole(i64 %v, ptr @.rt.w_repeat)|  ret i64 %r|}")
     cg_rt_bitwise(ctx)
-    rt_str(ctx, "m_choose", "`choose` subject must be Text")
-    rt(ctx, "define internal void @lep_choose_check(i64 %v) {|entry:|  %k = call i32 @lep.kind(i64 %v)|  %t = icmp eq i32 %k, 1|  br i1 %t, label %ok, label %bad|ok:|  ret void|bad:|  call void @lep.die(ptr @.rt.m_choose)|  unreachable|}")
+    rt_str(ctx, "f_choose_kind", "LEC8029: `choose`: case label type mismatch - the value is %s, case label is %s")
+    rt_str(ctx, "f_choose_unit", "LEC8029: `choose`: case label %s has a different unit than the value %s")
+    rt(ctx, "define internal void @lep_choose_check(i64 %v, i64 %l) {|entry:|  %pv = alloca double|  %pd = alloca [8 x i32]|  %qv = alloca double|  %qd = alloca [8 x i32]|  %kv = call ptr @lep.kname(i64 %v)|  %kl = call ptr @lep.kname(i64 %l)|  %c = call i32 @strcmp(ptr %kv, ptr %kl)|  %same = icmp eq i32 %c, 0|  br i1 %same, label %kind_ok, label %bad_kind|bad_kind:|  call void @lep.die2(ptr @.rt.f_choose_kind, ptr %kv, ptr %kl)|  unreachable|kind_ok:|  %g1 = call i1 @lep.getq(i64 %v, ptr %pv, ptr %pd)|  br i1 %g1, label %num, label %ok|num:|  %g2 = call i1 @lep.getq(i64 %l, ptr %qv, ptr %qd)|  %e = call i1 @lep.dimeq(ptr %pd, ptr %qd)|  br i1 %e, label %ok, label %bad_unit|bad_unit:|  %fl = call i64 @lep.format(i64 %l)|  %fv = call i64 @lep.format(i64 %v)|  %pl = call ptr @lep.tchars(i64 %fl)|  %pw = call ptr @lep.tchars(i64 %fv)|  call void @lep.die2(ptr @.rt.f_choose_unit, ptr %pl, ptr %pw)|  unreachable|ok:|  ret void|}")
 done()
 
 (* bitwise operators: dimensionless whole-number operands only, 64-bit

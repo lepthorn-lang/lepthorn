@@ -359,6 +359,7 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "LOOP_HZ_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_loop_hz(arena, sink, node)
             ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "DEADLINE_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
@@ -376,6 +377,7 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
             ctv_check_block(arena, decls, shared_decls, sink, funcs, node.right, needs_atomic, true)
         otherwise when node.kind == "CHOOSE_STMT"
             ctv_check_expr(arena, decls, sink, funcs, node.left)
+            ctv_check_case_labels(arena, sink, node.right)
             suppose cidx = node.right
             repeat
                 when cidx == none_idx()
@@ -402,6 +404,88 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
         done()
         idx = node.sibling
     done()
+done()
+
+(* a literal frequency is checked here; any other expression is checked
+   by the runtime when the loop starts *)
+make ctv_check_loop_hz(arena, sink, node)
+    ensure freq = arena_get(arena, node.left)
+    when node.params == "paren"
+        (* loop_hz(n) arrived as n * 1Hz *)
+        ensure times = arena_get(arena, freq.left)
+        when times.kind == "NUM"
+            ensure written = text::from_number(times.num_value) + times.op
+            when times.op != ""
+                ctv_error(sink, "loop_hz(n) takes a plain number of times per second, got " + written + "; write loop_hz " + written + " for a frequency with a unit")
+            otherwise when times.num_value <= 0
+                ctv_error(sink, "loop_hz expects a positive frequency in Hz, got " + written)
+            done()
+        done()
+        done(true)
+    done()
+    when freq.kind == "NUM"
+        ensure lit = text::from_number(freq.num_value) + freq.op
+        when freq.op == "Hz" or freq.op == "kHz"
+            when freq.num_value <= 0
+                ctv_error(sink, "loop_hz expects a positive frequency in Hz, got " + lit)
+            done()
+        otherwise when freq.op == "s" or freq.op == "ms" or freq.op == "min" or freq.op == "h"
+            ctv_error(sink, "loop_hz expects a frequency in Hz, got " + lit + "; for a period use every " + lit)
+        otherwise when freq.op == ""
+            ctv_error(sink, "loop_hz expects a frequency in Hz, got " + lit + "; write loop_hz " + lit + "Hz or loop_hz(" + lit + ")")
+        otherwise
+            ctv_error(sink, "loop_hz expects a frequency in Hz, got " + lit)
+        done()
+    done()
+    done(true)
+done()
+
+(* case labels: all of one kind (number, Text or Boolean), none twice *)
+make ctv_check_case_labels(arena, sink, first)
+    suppose kind = ""
+    suppose a = first
+    repeat
+        when a == none_idx()
+            stop
+        done()
+        ensure ca = arena_get(arena, a)
+        when ca.left != none_idx()
+            ensure la = arena_get(arena, ca.left)
+            when kind == ""
+                kind = la.kind
+            otherwise when la.kind != kind
+                ctv_error(sink, "`choose`: case labels must all be the same kind - " + ca.op + " is not like the first label")
+            done()
+            suppose b = ca.sibling
+            repeat
+                when b == none_idx()
+                    stop
+                done()
+                ensure cb = arena_get(arena, b)
+                when cb.left != none_idx()
+                    when ctv_same_label(la, arena_get(arena, cb.left))
+                        ctv_error(sink, "`choose`: case " + cb.op + " appears twice")
+                    done()
+                done()
+                b = cb.sibling
+            done()
+        done()
+        a = ca.sibling
+    done()
+    done(true)
+done()
+
+make ctv_same_label(x, y)
+    when x.kind != y.kind
+        done(false)
+    done()
+    when x.kind == "NUM"
+        done(x.num_value == y.num_value and x.op == y.op)
+    done()
+    when x.kind == "TEXT"
+        done(x.text_value == y.text_value)
+    done()
+    done(x.bool_value == y.bool_value)
 done()
 
 (* mirrors ctv_collect_tasks: each TASK's priority expr is a real

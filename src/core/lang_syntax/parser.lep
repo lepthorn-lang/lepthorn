@@ -906,15 +906,38 @@ make parse_statement(tok_buf, cur, arena)
         node = mk_node("WAIT_STMT", 0, false, "", expr_idx, 0)
         done(arena_add(arena, node))
     done()
+    (* loop_hz(n) is n times per second, so it becomes n * 1Hz: both
+       forms reach the checker, interpreter and code generator as one
+       frequency. params only tells the checker which form was written,
+       for its messages. *)
     when kind == "LOOP_HZ"
         cur_take(tok_buf, cur)
-        cur_take(tok_buf, cur)
-        expr_idx = parse_or(tok_buf, cur, arena)
-        cur_take(tok_buf, cur)
+        suppose hz_form = ""
+        when token_kind(tok_buf, cur) == "OP"
+            when token_value(tok_buf, cur) == "("
+                hz_form = "paren"
+            done()
+        done()
+        when token_kind(tok_buf, cur) == "NEWLINE" or token_kind(tok_buf, cur) == "EOF"
+            (* the body is still parsed, so this is the only error *)
+            hz_form = "missing"
+            expr_idx = arena_add(arena, mk_node("PARSE_ERROR", 0, false, "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz", 0, 0))
+        done()
+        when hz_form == "missing"
+        otherwise when hz_form == "paren"
+            cur_take(tok_buf, cur)
+            ensure times = parse_or(tok_buf, cur, arena)
+            cur_take(tok_buf, cur)
+            ensure one_hz = arena_add(arena, mk_node("NUM", 1, false, "Hz", 0, 0))
+            expr_idx = arena_add(arena, mk_node("BINOP", 0, false, "*", times, one_hz))
+        otherwise
+            expr_idx = parse_or(tok_buf, cur, arena)
+        done()
         cur_take(tok_buf, cur)
         body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
         cur_take(tok_buf, cur)
         node = mk_node("LOOP_HZ_STMT", 0, false, "", expr_idx, body_idx)
+        node.params = hz_form
         done(arena_add(arena, node))
     done()
     when kind == "DEADLINE"
@@ -1068,9 +1091,10 @@ make parse_block(tok_buf, cur, arena, stop1, stop2)
     done(parse_block3(tok_buf, cur, arena, stop1, stop2, stop2))
 done()
 
-(* `choose subject` then `case "LABEL"` blocks and an optional
-   `otherwise` block, closed by done(). CHOOSE_STMT: left = subject,
-   right = CASE chain (op = label, right = body), alt = otherwise body. *)
+(* `choose value` then `case <literal>` blocks and an optional
+   `otherwise` block, closed by done(). CHOOSE_STMT: left = value,
+   right = CASE chain (left = label node, op = label as written,
+   right = body), alt = otherwise body. *)
 make parse_choose(tok_buf, cur, arena)
     cur_take(tok_buf, cur)
     ensure subject = parse_or(tok_buf, cur, arena)
@@ -1092,17 +1116,21 @@ make parse_choose(tok_buf, cur, arena)
             cur_take(tok_buf, cur)
         otherwise when k == "CASE"
             cur_take(tok_buf, cur)
-            ensure label_tok = cur_take(tok_buf, cur)
-            suppose label = ""
-            when label_tok.kind == "STRING"
-                label = text::slice(label_tok.value, 1, text::length(label_tok.value) - 1)
+            (* a label is a literal: a number (with or without a unit),
+               quoted Text, true or false. op keeps it as written, for
+               messages. *)
+            ensure lk = token_kind(tok_buf, cur)
+            ensure label_text = token_value(tok_buf, cur)
+            suppose label_idx = none_idx()
+            when lk == "NUMBER" or lk == "STRING" or lk == "TRUE" or lk == "FALSE"
+                label_idx = parse_primary(tok_buf, cur, arena)
             otherwise
-                ensure bad = mk_node("PARSE_ERROR", 0, false, "case labels must be quoted Text", 0, 0)
-                arena_add(arena, bad)
+                arena_add(arena, mk_node("PARSE_ERROR", 0, false, "a case label must be a number, quoted Text, true or false, got '" + label_text + "'", 0, 0))
+                cur_take(tok_buf, cur)
             done()
             cur_take(tok_buf, cur)
             ensure body = parse_block3(tok_buf, cur, arena, "CASE", "OTHERWISE", "DONE_EMPTY")
-            ensure cnode = mk_node("CASE", 0, false, label, 0, body)
+            ensure cnode = mk_node("CASE", 0, false, label_text, label_idx, body)
             ensure cidx = arena_add(arena, cnode)
             when first == none_idx()
                 first = cidx

@@ -4,3 +4,11 @@ next_in_function eval: 1 check: 1
 LEC3001: `next` used outside a loop
 open_comment eval: 1 check: 1
 LEC1001: unterminated comment
+loop_hz_zero eval: 1 check: 1
+LEC3001: loop_hz expects a positive frequency in Hz, got 0Hz
+loop_hz_period eval: 1 check: 1
+LEC3001: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
+case_mixed eval: 1 check: 1
+LEC3001: `choose`: case labels must all be the same kind - "b" is not like the first label
+case_twice eval: 1 check: 1
+LEC3001: `choose`: case 1 appears twice

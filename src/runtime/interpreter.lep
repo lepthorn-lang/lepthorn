@@ -962,7 +962,7 @@ make exec_stmt2(st, env, node)
     done()
     when k == "LOOP_HZ_STMT"
         suppose lsig = st.normal
-        loop_hz(eval_node(st, env, node.left))
+        loop_hz eval_node(st, env, node.left)
             lsig = exec_block(st, env, node.right)
             when lsig.kind == "STOP" or lsig.kind == "RETURN"
                 stop
@@ -1003,16 +1003,24 @@ make exec_stmt2(st, env, node)
     done()
     when k == "CHOOSE_STMT"
         ensure subject = eval_node(st, env, node.left)
-        when sys::kind(subject) != "Text"
-            ifail("`choose` subject must be Text")
-        done()
+        (* every label is checked before any case runs, so a wrong label
+           is found whichever case matches *)
         suppose cidx = node.right
         repeat
             when cidx == none_idx()
                 stop
             done()
+            ensure lnode = arena_get(st.arena, cidx)
+            choose_check(subject, eval_node(st, env, lnode.left))
+            cidx = lnode.sibling
+        done()
+        cidx = node.right
+        repeat
+            when cidx == none_idx()
+                stop
+            done()
             ensure cnode = arena_get(st.arena, cidx)
-            when cnode.op == subject
+            when subject == eval_node(st, env, cnode.left)
                 done(exec_block(st, env, cnode.right))
             done()
             cidx = cnode.sibling
@@ -1024,6 +1032,50 @@ make exec_stmt2(st, env, node)
     done()
     ifail("unsupported statement kind '" + k + "'")
     done(st.normal)
+done()
+
+(* the same check, and the same messages, as the runtime's
+   lep_choose_check: same kind, and for numbers the same unit *)
+make choose_check(value, label)
+    ensure kv = kind_name(value)
+    ensure kl = kind_name(label)
+    when kv != kl
+        ifail("LEC8029: `choose`: case label type mismatch - the value is " + kv + ", case label is " + kl)
+    done()
+    when kv == "Number"
+        when unit_text(value) != unit_text(label)
+            ifail("LEC8029: `choose`: case label " + text::format(label) + " has a different unit than the value " + text::format(value))
+        done()
+    done()
+done()
+
+(* kind names as the runtime writes them *)
+make kind_name(v)
+    ensure k = sys::kind(v)
+    when k == "TShape"
+        done("shape")
+    done()
+    when k == "TArray"
+        done("Array")
+    done()
+    done(k)
+done()
+
+(* the unit part of a printed number ("" for none); equal units print
+   the same *)
+make unit_text(v)
+    ensure t = text::format(v)
+    suppose i = 0
+    repeat
+        when i >= text::length(t)
+            stop
+        done()
+        when text::char_at(t, i) == " "
+            done(text::slice(t, i + 1, text::length(t)))
+        done()
+        i = i + 1
+    done()
+    done("")
 done()
 
 (* every argument evaluated first, then one space-joined line *)

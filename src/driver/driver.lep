@@ -697,7 +697,8 @@ make drv_usage()
     show "  lepthornc run <file.lep> [--release] [--target <t>] [--ascii]   compile natively, then run"
     show "  lepthornc eval <file.lep> [--ascii]   interpret, no binary"
     show "  lepthornc check <file.lep>        lex, parse and verify only"
-    show "  lepthornc resolve <file.lep>      print the use-resolved source"
+    show "  lepthornc resolve <file.lep>      print the source with every use pulled in"
+    show "  lepthornc resolve [manifest.lepm] show what a project's manifest means on this machine"
     show ""
     show "  in a project (the nearest manifest.lepm, from here upward):"
     show "  lepthornc build [--release | --profile <p>] [--target <t>] [--bin <n> | --lib <n>]"
@@ -707,7 +708,6 @@ make drv_usage()
     show "  lepthornc test [--release | --profile <p>] [--target <t>] [--ascii]"
     show "  lepthornc promote [--release | --profile <p>] [--target <t>] [--bin <n>]"
     show "                                    verify built bin targets and copy them to bin/"
-    show "  lepthornc manifest                show what manifest.lepm resolves to"
     show "  lepthornc new <name> [--lib]      create a project (bin, or a library)"
     show "  lepthornc version"
     show ""
@@ -1101,7 +1101,7 @@ make drv_cmd_test()
     sys::exit(0)
 done()
 
-(* -- manifest: what manifest.lepm resolves to on this machine -- *)
+(* -- resolve on a project: what manifest.lepm means on this machine -- *)
 
 make drv_show_field(label, value)
     when value != ""
@@ -1132,7 +1132,7 @@ make drv_show_platform(m, pf, declared)
     show line
 done()
 
-make drv_cmd_manifest()
+make drv_cmd_resolve_project()
     ensure m = drv_load_project()
     show "package: " + mf_get(m, "package", 0, "name") + " " + mf_get(m, "package", 0, "version")
     drv_show_field("description", mf_get(m, "package", 0, "description"))
@@ -1275,8 +1275,20 @@ make lepthornc_main()
     when cmd == "promote"
         drv_cmd_promote()
     done()
-    when cmd == "manifest"
-        drv_cmd_manifest()
+    (* resolve with no file, or with a manifest, describes the project *)
+    when cmd == "resolve"
+        when argc < 3
+            drv_cmd_resolve_project()
+        done()
+        ensure target = sys::arg(2)
+        when drv_ends_with(target, ".lepm")
+            when drv_basename(target) != "manifest.lepm" or not file::exists(target)
+                show "lepthornc: no such project file: " + target + " (a project file is called manifest.lepm)"
+                sys::exit(2)
+            done()
+            sys::chdir(drv_dirname(target))
+            drv_cmd_resolve_project()
+        done()
     done()
     when argc < 3
         drv_usage()

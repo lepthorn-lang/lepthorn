@@ -1,0 +1,7 @@
+(* a label of another kind than the value is an error at run time *)
+ensure mode = 1
+show "before"
+choose mode
+case "1"
+    show "one"
+done()

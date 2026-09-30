@@ -1,5 +1,6 @@
-(* 29_choose_case.lep - pattern selection, replacing switch/match. Case
-   labels are quoted Text, not bare identifiers. *)
+(* 29_choose_case.lep - choose runs the case whose label equals the
+   value. Labels are literals of one kind: numbers, quoted Text, or
+   true/false. *)
 
 ensure mode = "AUTO"
 
@@ -10,4 +11,15 @@ case "MANUAL"
     show "Under manual control"
 otherwise
     show "Unknown mode"
+done()
+
+ensure gear = 2
+
+choose gear
+case 1
+    show "First gear"
+case 2
+    show "Second gear"
+otherwise
+    show "No gear"
 done()
