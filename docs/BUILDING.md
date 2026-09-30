@@ -42,31 +42,63 @@ To install somewhere else, set `LEPTHORN_PREFIX`: with
 directory is on your `PATH`, and that no older `lepthornc` comes before
 it on the `PATH` (`which lepthornc` shows which one runs).
 
-## Build the compiler
+## Build the compiler: always two stages
 
-From the repository root:
+A compiler build has two stages:
+
+1. **Stage 1:** the `lepthornc` installed on the system builds this
+   source into `build/stage1/bin/lepthornc`.
+2. **Stage 2:** that stage-1 compiler builds the source again, into
+   `build/release/bin/lepthornc`.
+
+So the compiler you get is always made by a compiler built from the
+same source. The code generator and runtime inside it are the new ones,
+even when the installed compiler is older.
+
+With `just`, every build recipe does both stages. A stage is skipped
+when its output is already newer than every file in `src/`,
+`manifest.lepm` and the compiler that builds it, so running
+`just test` and then `just promote` does not build the compiler twice.
+`just clean` removes `build/` and forces a full build.
 
 ```sh
-lepthornc build --release              # makes build/release/bin/lepthornc
-build/release/bin/lepthornc test       # the new compiler passes the tests
-lepthornc promote --release            # checks it, then copies it to bin/lepthornc
-sudo just install                      # installs the new bin/lepthornc on the system
+just release          # stage 1, then stage 2: build/release/bin/lepthornc
+just test             # the same, then runs the tests with the new compiler
+just promote          # the same, then checks it and copies it to bin/lepthornc
+sudo just install     # installs bin/lepthornc on the system
 ```
 
-`just update` does the last three steps in one go (it asks for `sudo`
-at the end).
+`just update` does `promote` and then `install` (it asks for `sudo` at
+the end). By hand:
 
-`promote` refuses a compiler that does not rebuild itself exactly.
-Right after the compiler's source has changed, the new build was made
-by the older compiler, so it is not yet exact. `promote` then rebuilds
-it with itself, and promotes that rebuild once it reproduces itself.
+```sh
+lepthornc build --release -o build/stage1/bin/lepthornc    # stage 1
+build/stage1/bin/lepthornc build --release                 # stage 2
+build/release/bin/lepthornc test
+build/release/bin/lepthornc promote --release
+sudo just install
+```
+
+`promote` refuses a compiler that does not rebuild itself exactly. A
+stage-2 compiler always passes this, because it was built by a compiler
+made from the same source.
+
+If the new source uses syntax or a built-in function that the installed
+compiler does not know, stage 1 fails. See the last section of this
+document for what to do then.
 
 ## Check that it rebuilds itself
 
 ```sh
+just verify
+```
+
+or by hand:
+
+```sh
 rm -rf build
-lepthornc test
-lepthornc build --release
+lepthornc build --release -o build/stage1/bin/lepthornc
+build/stage1/bin/lepthornc build --release
 build/release/bin/lepthornc test
 build/release/bin/lepthornc build --release
 cmp build/release/bin/lepthornc build/release/rebuild/bin/lepthornc
@@ -81,13 +113,19 @@ The tests `compiler_self_build` and `rebuild_fixed_point` in
 ## glibc and musl
 
 ```sh
-lepthornc build --release --target x86_64-linux-gnu
-lepthornc build --release --target x86_64-linux-musl
+just gnu      # stage 1, then build/release/x86_64-linux-gnu/bin/lepthornc
+just musl     # stage 1, then build/release/x86_64-linux-musl/bin/lepthornc
 ```
 
-These write `build/release/x86_64-linux-gnu/bin/lepthornc` and
-`build/release/x86_64-linux-musl/bin/lepthornc`. The musl compiler is
-linked statically and runs on any x86-64 Linux, including Alpine.
+By hand, after stage 1:
+
+```sh
+build/stage1/bin/lepthornc build --release --target x86_64-linux-gnu
+build/stage1/bin/lepthornc build --release --target x86_64-linux-musl
+```
+
+The musl compiler is linked statically and runs on any x86-64 Linux,
+including Alpine.
 
 ## How tools are found
 
@@ -105,7 +143,7 @@ The other libc's library files are looked for in `lib64`, `lib`,
 `usr/lib64` and `usr/lib` under that directory. For example, when Clang
 is `/usr/bin/clang`, musl is looked for in `/usr/x86_64-linux-musl`.
 
-`lepthornc manifest` prints what it found on the current machine.
+`lepthornc resolve` prints what it found on the current machine.
 
 ## The justfile
 
@@ -121,28 +159,33 @@ line (`just sysroot=/opt/musl musl`):
 
 | Recipe | What it does |
 |---|---|
-| `just build` | debug build |
-| `just release` | release build |
-| `just gnu`, `just musl`, `just targets` | release builds for glibc, musl, or both |
-| `just test` | run the tests |
+| `just stage1` | stage 1 only: the installed compiler builds `build/stage1/bin/lepthornc` |
+| `just build` | stage 1, then a debug build |
+| `just release` | stage 1, then a release build |
+| `just gnu`, `just musl`, `just targets` | stage 1, then release builds for glibc, musl, or both |
+| `just test` | release build, then run the tests with it |
 | `just fixed-point` | release build, then check that it rebuilds itself |
 | `just promote` | release build, then promote it to `bin/` |
 | `just install` | copy `bin/lepthornc` to `<prefix>/bin`, with `sudo` if needed |
 | `just uninstall` | remove `<prefix>/bin/lepthornc` |
 | `just update` | promote, then install |
-| `just verify` | the full check above, plus both targets |
+| `just verify` | from a clean `build/`: both stages, tests, the rebuild check, both targets, and the musl tests |
 | `just clean` | remove `build/` |
 
-## Adding a built-in function the compiler uses
+## When stage 1 fails: new syntax or built-ins in the compiler
 
-The compiler is written in Lepthorn, so when its own source starts using
-a new built-in function, the running compiler does not know that
-function yet. This takes two builds:
+The compiler is written in Lepthorn. When its own source starts using a
+new built-in function or new syntax, the installed compiler does not
+know it yet, so it cannot build stage 1. Then:
 
-1. Copy the source somewhere else and replace the new function's uses
-   with an existing one. Build that copy with `bin/lepthornc`.
-2. Use the compiler from step 1 to build the real source.
-3. `promote` as usual.
+1. Copy the source somewhere outside the repository, and in the copy
+   write those few places the old way.
+2. Build the copy with the installed compiler. This is stage 1.
+3. Use it to build the real source (stage 2), then `promote` and
+   install as usual.
+
+After that, the installed compiler knows the new feature and the normal
+two-stage build works again.
 
 How the compiler works inside is described in
 [ARCHITECTURE.md](ARCHITECTURE.md).
