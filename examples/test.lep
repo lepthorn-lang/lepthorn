@@ -1,2 +1,0 @@
-ensure mass = 10kg
-show "weight:" force::gravity(mass)
