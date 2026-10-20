@@ -1,5 +1,21 @@
+# build output (any build/ folder, also examples/build/)
 build/
 bin/
+
+# files the compiler and clang can leave next to a source file
+*.ll
+*.o
+*.a
+*.so
+
+# editors and operating systems
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# not published
 docs/ROADMAP.md
 CLAUDE.md
 .claude/
