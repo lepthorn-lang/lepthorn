@@ -1,0 +1,2 @@
+ensure mass = 2kg
+show "mass:" mass

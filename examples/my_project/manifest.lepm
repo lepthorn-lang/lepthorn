@@ -1,0 +1,11 @@
+[Package]
+    name = "my_project"
+    version = "0.1.0"
+
+[Target]
+    name = "my_project"
+    kind = "bin"
+    source = "src/main.lep"
+
+[Test]
+    tests = "tests/"
