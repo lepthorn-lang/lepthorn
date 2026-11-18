@@ -1,7 +1,9 @@
 # Lepthorn
 
+> Code that knows its physics, timing, and limits
+
 Lepthorn is a correctness-first systems language for
-real-time and autonomous machines.
+real-time and autonomous systems.
 
 It is designed for robots, drones, vehicles, embedded
 controllers, and engineering systems where physical
@@ -36,3 +38,29 @@ A: Does it keep numeric behavior accurate and explicit?
 N: Can it fail silently? If yes, redesign it.
 C: Can correctness be checked before deployment?
 E: Is it useful for real machines and real-time systems?
+
+lepthorn code:
+
+ensure mass = 25kg
+suppose force = force::gravity(mass)
+show "Force is:" force
+
+output:
+
+Force is: 245.166 kg·m/s² (N)
+
+## Quick start
+
+You need x86-64 Linux, Clang, and glibc or musl.
+
+```sh
+lepthornc version                     # a lepthornc must be installed first (see docs/BUILDING.md)
+just install                          # build this compiler in two stages and install it
+lepthornc eval examples/gravity.lep   # run a program
+lepthornc run examples/gravity.lep    # compile it natively, then run it
+
+lepthornc new rover                   # make a project
+cd rover
+lepthornc build
+lepthornc test
+```
