@@ -27,13 +27,34 @@ prints the result with its unit.
   rejected, not run with a guessed meaning.
 - **Physical quantities.** Units and dimensions are part of the core
   language.
-- **Memory safety.** No pointers in user code, checked array access,
-  and no "unsafe" escape hatch.
+- **Memory safety.** No pointers and no borrows in user code, checked
+  array access, and no "unsafe" escape hatch.
+- **No garbage collector.** No collector threads and no
+  stop-the-world pauses that could make a control loop late.
 - **Real-time.** Timing is part of the language: `every`, `loop_hz`,
   `deadline`, `timeout`, `parallel`, `priority`, `atomic`, `shared`.
 - **Native code.** Programs compile to native code through LLVM.
 - **A small core.** Maths, physics, engineering and autonomous-system
   features live in engines and libraries, not in the core.
+
+## ROMANCE
+
+Lepthorn is guided by ROMANCE:
+
+- **R**eliability before release.
+- **O**rder in every operation.
+- **M**eaning in every measurement.
+- **A**ccuracy in every algorithm.
+- **N**o silent failure.
+- **C**orrectness in every calculation.
+- **E**ngineering for every machine.
+
+## What the name means
+
+Lepthorn is a made-up name. "Lep" stands for precision, lightness and
+low overhead. "Thorn" stands for protection, boundaries and resistance
+to unsafe behavior. Together: a precise, protective language for real
+machines.
 
 Lepthorn is not a language for web sites, mobile apps, databases or
 business software. It is for software that controls machines.
@@ -52,8 +73,10 @@ programs for glibc and musl Linux. `lepthornc eval` runs the same
 programs without compiling, with the same results.
 
 Not done yet: unit checks before the program runs (units are checked
-while it runs), real threads, the engines beyond a few functions, and
-targets other than x86-64 Linux. The details are in
+while it runs), freeing memory (there is no garbage collector, and
+today memory is never freed), real threads, the engines beyond a
+few functions, ROS 2, and targets other than x86-64 Linux. The plan is in
+[ROADMAP.md](ROADMAP.md). The details are in
 [docs/INTRODUCTION.md](docs/INTRODUCTION.md).
 
 ## Quick start

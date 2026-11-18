@@ -3,6 +3,28 @@
 This file tracks the Lepthorn compiler, `lepthornc`, and the steps
 toward a Lepthorn release.
 
+## Design principles: ROMANCE
+
+Every language decision is checked against these seven rules:
+
+- **R**eliability before release.
+- **O**rder in every operation.
+- **M**eaning in every measurement.
+- **A**ccuracy in every algorithm.
+- **N**o silent failure.
+- **C**orrectness in every calculation.
+- **E**ngineering for every machine.
+
+## Direction
+
+- Native code close to the machine, and as fast as Rust.
+- No pointers and no borrows in user code.
+- No garbage collector: no collector threads and no stop-the-world
+  pauses. Memory and resources are released at points the program
+  makes clear.
+- A small core. Engines and libraries (ROS 2 among them) are built on
+  top of it, not inside the compiler.
+
 ## Completed features: lepthornc 1.0.0
 
 1. Complete LLVM native code generation written in Lepthorn.
@@ -57,6 +79,7 @@ toward a Lepthorn release.
 2. Define clear rules for all language features.
 3. Make syntax and behavior consistent.
 4. Lock the core language specification before adding new features.
+5. Check every rule against ROMANCE.
 
 Covers:
 1. Final lexical rules
@@ -73,6 +96,17 @@ Covers:
 12. CTV rules
 13. Native/eval conformance tests
 14. Documentation synchronization
+15. ROMANCE written into the spec, and `lepthornc romance`, a command
+    that prints the seven rules (a command, not a keyword).
+16. `error "message"`: stops the current path with a clear runtime
+    error and a non-zero exit status. The message must be Text.
+17. Decide before the grammar is locked:
+    - the syntax for a block that releases its memory and resources
+      when it ends (not `use`, which already means "include a file");
+    - whether to add sized number types (`i32`, `u8`, `f64`) and
+      typed parameters, needed for FFI;
+    - error codes: `LEC` for compiler errors, `LER` for runtime and
+      real-time errors (today runtime errors are `LEC80xx`).
 
 ### Phase 1
 *Units, dimensions and quantities complete: unit awareness everywhere*
@@ -93,19 +127,48 @@ Covers:
 
 ### Phase 2
 *Memory, resource and real-time correctness model*
+
+#### 2A. Zero-GC memory model
+1. No garbage collector, no collector threads, no stop-the-world
+   pauses.
+2. Memory is freed (today it never is), at fixed points: when a scope
+   or region ends.
+3. Region (arena) allocation, with bounded memory use for real-time
+   code.
+4. No pointers and no borrows for the user; the compiler does the
+   bookkeeping.
+
+#### 2B. Resource model
+1. Files, sockets, device handles and ROS 2 handles are released in a
+   fixed order when their block ends.
+2. A resource that is not released, or used after release, is an
+   error.
+
+#### 2C. Real-time correctness
 1. `every` and `loop_hz` keep exact timing (fixed release points, no
    drift), measured and tested.
 2. `deadline` and `timeout` are checked and reported correctly.
 3. `parallel` runs on real OS threads in compiled programs, with
    `priority`, `atomic` and `shared`.
 4. `watch` and `interrupt` run on real events.
-5. Memory is freed (today it never is), with bounded memory use for
-   real-time code.
-6. Deterministic behavior: the same input gives the same output, in
+5. No hidden allocation inside `loop_hz` or `deadline`: allocation
+   there is a compile error, unless the code says so with an
+   `allow allocation` block.
+6. `error CODE "message"` with fixed codes (for example
+   `SENSOR_STALE`, `DEADLINE_MISSED`, `ACTUATOR_RANGE`).
+7. `on error` handlers that run a fixed fallback (for example a safe
+   stop), with no hidden stack unwinding.
+8. Deterministic behavior: the same input gives the same output, in
    eval and native alike.
 
 ### Phase 3
 *Stable native ABI and FFI*
+1. `extern` declarations for C functions.
+2. C-compatible integer and float types.
+3. Opaque handles for foreign objects (no raw pointers for the user).
+4. C-compatible struct layout.
+5. Static and dynamic linking.
+6. Foreign error codes turned into Lepthorn errors.
 
 ### Phase 4A and Phase 4B (in parallel)
 Both need Phase 3 and can be done at the same time.
@@ -116,20 +179,45 @@ Both need Phase 3 and can be done at the same time.
 #### Phase 4B
 *ROS 2: ros2::init, node, spin*
 
+ROS 2 support is a separate official library, `ros2`, not part of the
+compiler. It wraps the ROS 2 C API (`rcl`), which sits on `rmw` and
+DDS. A Lepthorn node is a normal native program, built in a ROS 2
+package and started with `ros2 run`. The user sees only the Lepthorn
+API (`ros2::init`, `ros2::node`, `ros2::spin`, `ros2::spin_once`,
+`ros2::shutdown`); the raw `rcl` calls stay inside the library.
+
 ### Phase 5
 *Publisher/subscriber support*
 
 ### Phase 6
 *Units-aware ROS message wrappers*
 
+A publisher for `Velocity` rejects a value in `kg` before the program
+runs. Plain ROS messages are converted to typed values explicitly.
+Data from the network is checked (unit, frame, range, age) before the
+control code uses it.
+
 ### Phase 7
 *QoS, timing, deterministic executor support*
+
+Typed QoS settings (reliability, history, depth, deadline). A
+deterministic executor (`rclc`-style) for hard real-time code; the
+standard ROS 2 executor is not treated as real-time.
 
 ### Phase 8
 *Services/actions/parameters/TF2*
 
+Also lifecycle nodes, launch files, diagnostics and rosbag.
+
 ### Phase 9
 *ament/CMake/package integration*
 
+`package.xml` and `CMakeLists.txt` with an ament bridge first; later
+perhaps a `lepthornc ros2 build` command. Built with `colcon build`.
+
 ### Phase 10
 *Autonomous ROS 2 demonstration*
+
+A simulated differential-drive robot: IMU and odometry in, a 100 Hz
+Lepthorn PID controller, `/cmd_vel` out, and a safe stop when sensor
+data is stale or out of range.
