@@ -5,34 +5,51 @@
     authors = ["Ali Zain | heyalizain@gmail.com"]
     license = "Apache-2.0"
     license_file = "LICENSE"
-    readme = "README.md"
-
+    readme = "README"
 
 [Target]
-    name = "lepthornc"
-    kind = "bin"
+    name   = "lepthornc"
+    kind   = "bin"
     source = "src/main.lep"
 
-[Test]
+(* Tests can include specific files too:
+   tests = "tests/"
+   tests = "tests/parser.lep"
+   tests = "tests/units.lep"
+*)
 
+[Test]
     tests = "tests/"
 
 [Profile]
-    name = "debug"
+    name         = "debug"
     optimization = "none"
 
 [Profile]
-    name = "release"
+    name         = "release"
     optimization = "O2"
 
 
-[Target_Platform]
+(*
+    Target platforms define the systems for which a target
+    can be built.
+
+    The section name must begin with `Target_` and must
+    match the declared target triple.
+
+    Example:
+        [Target_x86_64-linux-gnu]
+*)
+
+
+
+[Target_x86_64-linux-gnu]
     triple = "x86_64-linux-gnu"
     libc = "glibc"
     link = "dynamic"
     libraries = ["m"]
 
-[Target_Platform]
+[Target_x86_64-linux-musl]
     triple = "x86_64-linux-musl"
     libc = "musl"
     link = "static"
