@@ -19,6 +19,24 @@ to unsafe behavior.
 
 > Lepthorn: a precise, protective language for real machines.
 
+Why Lepthorn?
+==============
+
+In real-time and autonomous systems, correctness is not
+only about producing the right numerical result.
+
+The right answer at the wrong time is still a failure.
+
+A control loop that computes the correct command after its
+deadline can destabilize a robot. A sensor value without
+clear physical units can cause an invalid control decision.
+A failed conversion that silently becomes zero can hide a
+dangerous fault.
+
+Lepthorn is designed to make the right answer, at the right
+time, with the right physical meaning.
+
+
 PHILOSOPHY
 ===========
 
