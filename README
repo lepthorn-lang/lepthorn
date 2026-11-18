@@ -1,4 +1,5 @@
-# Lepthorn
+Lepthorn
+=========
 
 > Code that knows its physics, timing, and limits
 
@@ -9,7 +10,8 @@ It is designed for robots, drones, vehicles, embedded
 controllers, and engineering systems where physical
 meaning, timing, reliability, and safety matter.
 
-## Lepthorn Means
+Lepthorn Means
+===============
 
 **Lep** suggests precision, lightness, and low overhead.
 **Thorn** suggests protection, boundaries, and resistance
@@ -17,9 +19,10 @@ to unsafe behavior.
 
 > Lepthorn: a precise, protective language for real machines.
 
-## ROMANCE
+PHILOSOPHY
+===========
 
-Lepthorn is guided by ROMANCE:
+Lepthorn is guided by ROMANCE Philosophy:
 
 - **R**eliability before release.
 - **O**rder in every operation.
@@ -29,7 +32,9 @@ Lepthorn is guided by ROMANCE:
 - **C**orrectness in every calculation.
 - **E**ngineering for every machine.
 
+
 Every new logic checked before compile by these rules:
+===================================
 
 R: Does it improve reliability?
 O: Is execution order explicit and predictable?
@@ -40,21 +45,25 @@ C: Can correctness be checked before deployment?
 E: Is it useful for real machines and real-time systems?
 
 lepthorn code:
+==============
 
 ensure mass = 25kg
 suppose force = force::gravity(mass)
 show "Force is:" force
 
 output:
+========
 
 Force is: 245.166 kg·m/s² (N)
 
-## Quick start
+_______________________________
 
+Quick start
+============
 You need x86-64 Linux, Clang, and glibc or musl.
 
-```sh
-lepthornc version                     # a lepthornc must be installed first (see docs/BUILDING.md)
+
+lepthornc version                     # a  lepthornc must be installed first
 just install                          # build this compiler in two stages and install it
 lepthornc eval examples/gravity.lep   # run a program
 lepthornc run examples/gravity.lep    # compile it natively, then run it
