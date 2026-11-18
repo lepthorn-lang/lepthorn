@@ -1,0 +1,38 @@
+# Lepthorn
+
+Lepthorn is a correctness-first systems language for
+real-time and autonomous machines.
+
+It is designed for robots, drones, vehicles, embedded
+controllers, and engineering systems where physical
+meaning, timing, reliability, and safety matter.
+
+## Lepthorn Means
+
+**Lep** suggests precision, lightness, and low overhead.
+**Thorn** suggests protection, boundaries, and resistance
+to unsafe behavior.
+
+> Lepthorn: a precise, protective language for real machines.
+
+## ROMANCE
+
+Lepthorn is guided by ROMANCE:
+
+- **R**eliability before release.
+- **O**rder in every operation.
+- **M**eaning in every measurement.
+- **A**ccuracy in every algorithm.
+- **N**o silent failure.
+- **C**orrectness in every calculation.
+- **E**ngineering for every machine.
+
+Every new logic checked before compile by these rules:
+
+R: Does it improve reliability?
+O: Is execution order explicit and predictable?
+M: Does it preserve physical meaning?
+A: Does it keep numeric behavior accurate and explicit?
+N: Can it fail silently? If yes, redesign it.
+C: Can correctness be checked before deployment?
+E: Is it useful for real machines and real-time systems?
