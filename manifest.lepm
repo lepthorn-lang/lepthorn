@@ -2,7 +2,7 @@
     name = "lepthornc"
     version = "1.0.0"
     description = "The native compiler for Lepthorn."
-    authors = ["Ali Zain"]
+    authors = ["Ali Zain | heyalizain@gmail.com"]
     license = "Apache-2.0"
     license_file = "LICENSE"
     readme = "README.md"
