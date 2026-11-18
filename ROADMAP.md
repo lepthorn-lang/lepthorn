@@ -3,7 +3,7 @@
 This file tracks the Lepthorn compiler, `lepthornc`, and the steps
 toward a Lepthorn release.
 
-## Design principles: ROMANCE
+## Design principles Philosophy: ROMANCE
 
 Every language decision is checked against these seven rules:
 
@@ -82,8 +82,9 @@ Every language decision is checked against these seven rules:
 5. Check every rule against ROMANCE.
 
 Covers:
-1. Final lexical rules
-2. Nested comments
+1. Final lexical rules and Nested comments
+2. Number: ( Dimensioned N, Dimensionless N with semantic N , Registers like 0x12345) 
+(* Note: Numbers have any value*)
 3. Identifiers and reserved words
 4. Literals
 5. ensure/suppose
@@ -110,7 +111,7 @@ Covers:
 
 ### Phase 1
 *Units, dimensions and quantities complete: unit awareness everywhere*
-1. Units
+1. Units /src/core/units/general_units, IEEE, American alls goes to there own folders 
 2. Dimensions
 3. Quantities
 4. Arithmetic and unit algebra
