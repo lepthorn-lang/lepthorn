@@ -83,12 +83,18 @@ Every language decision is checked against these seven rules:
 
 Covers:
 1. Final lexical rules and nested comments
-2. Numbers, in three kinds:
-   - dimensioned numbers, with a unit (`25kg`, `10ms`);
-   - dimensionless numbers that still have a meaning (a count, a
-     ratio, a gain);
-   - register values written in hex (`0x12345`).
-   A Number can hold any of these values.
+2. Numbers. Every number has a value and one of four kinds:
+   - **Dimensioned quantity**: a value with a unit (`23kg`, `23m`,
+     `23s`, `23A`). `1m` and `100cm` have the same dimension and
+     convert to each other.
+   - **Dimensionless value**: all SI exponents are 0 (the SI unit is
+     1). A plain `23` is dimensionless; it never becomes a mass or a
+     length by itself. `10m / 2m` is dimensionless.
+   - **Semantic scalar**: dimensionless, but with its own meaning, so
+     two of them do not mix freely: ratio, probability, angle (`rad`,
+     `deg`).
+   - **Machine value**: not a physical quantity: index, count, bit
+     mask, register value, address (`23u32`, `23usize`, `0x12345`).
 3. Identifiers and reserved words
 4. Literals
 5. ensure/suppose
@@ -108,8 +114,10 @@ Covers:
 17. Decide before the grammar is locked:
     - the syntax for a block that releases its memory and resources
       when it ends (not `use`, which already means "include a file");
-    - whether to add sized number types (`i32`, `u8`, `f64`) and
-      typed parameters, needed for FFI;
+    - the syntax for machine values (`23u32`, `23usize`, `0x12345`)
+      and sized types (`i32`, `u8`, `f64`), needed for FFI;
+    - whether parameters can name their kind (`mass: Mass`), or the
+      checker infers it;
     - error codes: `LEC` for compiler errors, `LER` for runtime and
       real-time errors (today runtime errors are `LEC80xx`).
 
@@ -129,7 +137,15 @@ Covers:
    return values, array items, shape fields, `take`/`read` input,
    `choose`, `every` and `loop_hz`.
 9. Conversion and display for every supported unit.
-10. Native/eval conformance tests for units.
+10. Engine functions declare what they take and give, for example
+    `force::gravity`: takes a Mass, gives a Force. `force::gravity(10m)`
+    is an error before the program runs. A plain number is still
+    allowed as a factor: `mass * 9.81` is a mass. The error comes only
+    when a value goes where a different kind is declared.
+11. Dimensions are checked at compile time and cost nothing at run
+    time. A unit is kept at run time only where it is needed: printing,
+    input, dynamic values and error messages.
+12. Native/eval conformance tests for units.
 
 ### Phase 2
 *Memory, resource and real-time correctness model*
