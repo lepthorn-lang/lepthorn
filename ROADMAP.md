@@ -110,7 +110,10 @@ Covers:
 15. ROMANCE written into the spec, and `lepthornc romance`, a command
     that prints the seven rules (a command, not a keyword).
 16. `error "message"`: stops the current path with a clear runtime
-    error and a non-zero exit status. The message must be Text.
+    error and a non-zero exit status. Rules: allowed only inside a
+    function, task or block; the message must be Text; the same input
+    always gives the same error (deterministic). `logical_error` is
+    not a keyword.
 17. Decide before the grammar is locked:
     - the syntax for a block that releases its memory and resources
       when it ends (not `use`, which already means "include a file");
@@ -176,11 +179,39 @@ Covers:
 5. No hidden allocation inside `loop_hz` or `deadline`: allocation
    there is a compile error, unless the code says so with an
    `allow allocation` block.
-6. `error CODE "message"` with fixed codes (for example
-   `SENSOR_STALE`, `DEADLINE_MISSED`, `ACTUATOR_RANGE`).
+6. `error CODE "message"` with fixed codes: `SENSOR_STALE`,
+   `SENSOR_INVALID`, `SENSOR_UNAVAILABLE`, `ACTUATOR_RANGE`,
+   `ACTUATOR_UNAVAILABLE`, `DEADLINE_MISSED`, `TIMEOUT`,
+   `RESOURCE_EXHAUSTED`, `BOUNDS_VIOLATION`, `UNIT_MISMATCH`,
+   `CONCURRENCY_VIOLATION`.
 7. `on error` handlers that run a fixed fallback (for example a safe
-   stop), with no hidden stack unwinding.
-8. Deterministic behavior: the same input gives the same output, in
+   stop), with no hidden stack unwinding: control moves to the handler
+   in a fixed, known way.
+   ```
+   realtime
+       on error
+           actuator::safe_stop()
+       done()
+       loop_hz 100Hz
+           ensure sample = sensor::read()
+           when sample.age > 50ms
+               error SENSOR_STALE "sensor data is older than 50ms"
+           done()
+           control::step(sample)
+       done()
+   done()
+   ```
+   A runtime error prints its code, message, task and action:
+   ```
+   LER6101: SENSOR_STALE
+   message: sensor data is older than 50ms
+   task: control_loop
+   action: safe_stop
+   ```
+8. A missed deadline becomes a `DEADLINE_MISSED` error (today it is
+   only a warning, `LEC8016`). Build the recovery grammar only after
+   its behavior is written down exactly.
+9. Deterministic behavior: the same input gives the same output, in
    eval and native alike.
 
 ### Phase 3
