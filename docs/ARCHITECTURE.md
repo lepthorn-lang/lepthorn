@@ -1,7 +1,8 @@
 # How the Compiler Works
 
 `lepthornc` is written in Lepthorn and compiles itself. One program
-does all the work:
+does all the work. [DESIGN.md](DESIGN.md) explains every stage in
+detail.
 
 ```text
 source files
