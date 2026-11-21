@@ -523,7 +523,7 @@ shape Platform
     libs: Text
 done()
 
-(* a [Target_Platform] when the manifest declares any; otherwise the two
+(* a [Target_<triple>] when the manifest declares any; otherwise the two
    the runtime supports: glibc linked dynamically, musl statically (so
    it runs on any Linux) *)
 make drv_platform(m, triple)
@@ -549,7 +549,7 @@ make drv_platform(m, triple)
     when triple == "x86_64-linux-musl"
         done(Platform(triple = triple, libc = "musl", link = "static", libs = ""))
     done()
-    show "lepthornc: unknown target " + triple + " (x86_64-linux-gnu, x86_64-linux-musl, or a [Target_Platform] in manifest.lepm)"
+    show "lepthornc: unknown target " + triple + " (x86_64-linux-gnu, x86_64-linux-musl, or a [Target_<triple>] in manifest.lepm)"
     sys::exit(2)
 done()
 

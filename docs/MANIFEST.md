@@ -17,7 +17,9 @@ the systems it can be built for. How to use a project is in
   after it belongs to that section, until the next one.
 - A value is quoted text, or a list of quoted texts.
 - Indentation and blank lines do not matter.
-- A line starting with `#` or `//` is a comment.
+- `(* ... *)` is a comment. It can cover many lines and can be nested.
+  A line starting with `#` or `//` is a comment too. An unclosed `(*`
+  or a `*)` with no `(*` before it is an error.
 - Section and key names must be spelled exactly as below. A wrong name
   is an error, with its line number:
 
@@ -74,7 +76,10 @@ targets cannot have the same name.
 declared. A declared profile with the same name replaces them. Pick a
 profile with `--release` or `--profile <name>`.
 
-### [Target_Platform] (any number)
+### [Target_<triple>] (any number)
+
+The section name is `Target_` followed by the triple, for example
+`[Target_x86_64-linux-musl]`. It must match the `triple` key below.
 
 | Key | Required | Meaning |
 |---|---|---|
@@ -103,9 +108,9 @@ the project) shows what the manifest means on the current machine:
 ```text
 package: lepthornc 1.0.0
 description: The native compiler for Lepthorn.
-authors: Ali Zain
+authors: Ali Zain | heyalizain@gmail.com
 license: Apache-2.0 (LICENSE)
-readme: README.md
+readme: README
 target: lepthornc (bin) src/main.lep
 tests: tests/ (23 files)
 profile: debug -O0
@@ -125,34 +130,54 @@ This is the compiler's own manifest:
     name = "lepthornc"
     version = "1.0.0"
     description = "The native compiler for Lepthorn."
-    authors = ["Ali Zain"]
+    authors = ["Ali Zain | heyalizain@gmail.com"]
     license = "Apache-2.0"
     license_file = "LICENSE"
-    readme = "README.md"
+    readme = "README"
 
 [Target]
-    name = "lepthornc"
-    kind = "bin"
+    name   = "lepthornc"
+    kind   = "bin"
     source = "src/main.lep"
+
+(* Tests can include specific files too:
+   tests = "tests/"
+   tests = "tests/parser.lep"
+   tests = "tests/units.lep"
+*)
 
 [Test]
     tests = "tests/"
 
 [Profile]
-    name = "debug"
+    name         = "debug"
     optimization = "none"
 
 [Profile]
-    name = "release"
+    name         = "release"
     optimization = "O2"
 
-[Target_Platform]
+
+(*
+    Target platforms define the systems for which a target
+    can be built.
+
+    The section name must begin with `Target_` and must
+    match the declared target triple.
+
+    Example:
+        [Target_x86_64-linux-gnu]
+*)
+
+
+
+[Target_x86_64-linux-gnu]
     triple = "x86_64-linux-gnu"
     libc = "glibc"
     link = "dynamic"
     libraries = ["m"]
 
-[Target_Platform]
+[Target_x86_64-linux-musl]
     triple = "x86_64-linux-musl"
     libc = "musl"
     link = "static"

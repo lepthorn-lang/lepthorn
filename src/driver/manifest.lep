@@ -1,10 +1,11 @@
 (* manifest.lep - reads manifest.lepm.
 
    A line is a section header, [Package] [Target] [Test] [Profile]
-   [Target_Platform], or `key = value` belonging to the section above
-   it. [Target], [Profile] and [Target_Platform] may repeat. A value is
-   quoted text or a list of quoted texts, ["a", "b"]; a line starting
-   with # or // is a comment. Unknown sections and keys are errors, so a
+   [Target_<triple>], or `key = value` belonging to the section above
+   it. [Target], [Profile] and [Target_<triple>] may repeat; the name
+   of a [Target_<triple>] must match its `triple`. A value is quoted
+   text or a list of quoted texts, ["a", "b"]. Comments are (* ... *),
+   which may span lines and nest, or a line starting with # or //. Unknown sections and keys are errors, so a
    misspelling never passes silently. Paths are relative to the project
    root; absolute ones are refused. The older flat form (project/kind/
    entry, no sections) is still read. *)
@@ -43,10 +44,11 @@ make mf_word_in(word, words)
 done()
 
 make mf_sections()
-    done("[Package] [Target] [Test] [Profile] [Target_Platform]")
+    done("[Package] [Target] [Test] [Profile] [Target_<triple>]")
 done()
 
-(* [Target_Platform] -> target_platform, the name used inside; "" if unknown *)
+(* [Target_x86_64-linux-gnu] -> target_platform, the name used inside;
+   "" if unknown *)
 make mf_section_kind(header)
     when header == "[Package]"
         done("package")
@@ -60,7 +62,7 @@ make mf_section_kind(header)
     when header == "[Profile]"
         done("profile")
     done()
-    when header == "[Target_Platform]"
+    when drv_starts_with(header, "[Target_") and drv_ends_with(header, "]") and text::length(header) > 9
         done("target_platform")
     done()
     done("")
@@ -79,7 +81,7 @@ make mf_section_name(kind)
     when kind == "profile"
         done("[Profile]")
     done()
-    done("[Target_Platform]")
+    done("[Target_<triple>]")
 done()
 
 (* the keys each section takes *)
@@ -348,7 +350,12 @@ make mf_handle_line(st, entries, line, lineno)
         done()
         ensure probe = Manifest(entries = entries)
         ensure sinst = mf_count(probe, kind)
-        ring::write(entries, MfEntry(block = kind, inst = sinst, key = "", value = "", is_list = false, line = lineno))
+        (* a [Target_<triple>] header keeps its <triple> as its value *)
+        suppose sname = ""
+        when kind == "target_platform"
+            sname = text::slice(line, 8, text::length(line) - 1)
+        done()
+        ring::write(entries, MfEntry(block = kind, inst = sinst, key = "", value = sname, is_list = false, line = lineno))
         st.block = kind
         st.inst = sinst
         st.blocks = st.blocks + 1
@@ -425,7 +432,66 @@ make mf_from_legacy(m)
     done(Manifest(entries = entries))
 done()
 
-make mf_parse(body)
+(* blanks out (* ... *) comments, nested, keeping every newline so line
+   numbers stay right; a (* or *) inside a quoted value is not a comment *)
+make mf_strip_comments(body)
+    ensure q = text::from_code(34)
+    ensure nl = text::from_code(10)
+    ensure n = text::length(body)
+    suppose outs = ""
+    suppose depth = 0
+    suppose in_quote = false
+    suppose line = 1
+    suppose open_line = 0
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure c = text::char_at(body, i)
+        suppose pair = ""
+        when i + 1 < n
+            pair = text::slice(body, i, i + 2)
+        done()
+        when c == nl
+            outs = outs + nl
+            line = line + 1
+            in_quote = false
+            i = i + 1
+        otherwise when depth == 0 and c == q
+            in_quote = not in_quote
+            outs = outs + c
+            i = i + 1
+        otherwise when not in_quote and pair == "(*"
+            when depth == 0
+                open_line = line
+            done()
+            depth = depth + 1
+            outs = outs + "  "
+            i = i + 2
+        otherwise when not in_quote and pair == "*)"
+            when depth == 0
+                mf_fail(line, "*) without a (* before it")
+            done()
+            depth = depth - 1
+            outs = outs + "  "
+            i = i + 2
+        otherwise when depth > 0
+            outs = outs + " "
+            i = i + 1
+        otherwise
+            outs = outs + c
+            i = i + 1
+        done()
+    done()
+    when depth > 0
+        mf_fail(open_line, "this (* comment is never closed with *)")
+    done()
+    done(outs)
+done()
+
+make mf_parse(text_in)
+    ensure body = mf_strip_comments(text_in)
     ensure entries = ring::create(text::length(body) + 16)
     ensure st = MfState(block = "", inst = 0, blocks = 0, legacy_line = 0)
     ensure nl = text::from_code(10)
@@ -646,6 +712,10 @@ make mf_validate(m)
         done()
         ensure triple = mf_require(m, "target_platform", t, "triple")
         ensure tl = mf_line(m, "target_platform", t, "triple")
+        ensure sname = mf_get(m, "target_platform", t, "")
+        when sname != triple
+            mf_fail(mf_line(m, "target_platform", t, ""), "section [Target_" + sname + "] has triple " + triple + "; name it [Target_" + triple + "]")
+        done()
         when not drv_starts_with(triple, "x86_64-") or not drv_contains(triple, "-linux")
             mf_fail(tl, "triple " + triple + ": the runtime supports x86-64 Linux only")
         done()
