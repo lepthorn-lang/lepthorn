@@ -284,8 +284,31 @@ make ctv_check_expr(arena, decls, sink, funcs, idx)
             ctv_check_arglist(arena, decls, sink, funcs, node.left)
         done()
     otherwise
+        when node.kind == "BINOP" and ctv_is_bitwise(node.op)
+            ctv_check_bitwise_side(arena, sink, node, node.left)
+            ctv_check_bitwise_side(arena, sink, node, node.right)
+        done()
         ctv_check_expr(arena, decls, sink, funcs, node.left)
         ctv_check_expr(arena, decls, sink, funcs, node.right)
+    done()
+done()
+
+make ctv_is_bitwise(op)
+    done(op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>")
+done()
+
+(* bitwise operators bind looser than comparisons, so `a & b == c` is
+   a & (b == c): a true/false on one side of a bitwise operator is
+   always a mistake, found here instead of when the program runs *)
+make ctv_check_bitwise_side(arena, sink, node, side_idx)
+    ensure side = arena_get(arena, side_idx)
+    suppose truth = side.kind == "BOOL"
+    when side.kind == "BINOP"
+        ensure o = side.op
+        truth = o == "==" or o == "!=" or o == "<" or o == "<=" or o == ">" or o == ">=" or o == "and" or o == "or"
+    done()
+    when truth
+        ctv_error(sink, node.pos, "`" + node.op + "` needs whole numbers, but one side is true/false; " + node.op + " binds looser than comparisons, so write (a " + node.op + " b) == c")
     done()
 done()
 

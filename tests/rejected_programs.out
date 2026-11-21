@@ -19,6 +19,9 @@ build/test/rejected/case_mixed.lep:4: LEC3001: `choose`: case labels must all be
 case_twice eval: 1 check: 1
 build/test/rejected/case_twice.lep:4: LEC3001: `choose`: case 1 appears twice
     case 1
+bitwise_vs_compare eval: 1 check: 1
+build/test/rejected/bitwise_vs_compare.lep:2: LEC3001: `&` needs whole numbers, but one side is true/false; & binds looser than comparisons, so write (a & b) == c
+    show a & 3 == 2
 syntax_error eval: 1 check: 1
 build/test/rejected/syntax_error.lep:2: LEC2001: expected a value, found the end of the line
     show a +
