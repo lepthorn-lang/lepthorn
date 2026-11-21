@@ -28,8 +28,9 @@ clang := ""
 # The installed compiler that builds stage 1.
 lepthornc := "lepthornc"
 
-# `just install` puts the new lepthornc in <prefix>/bin.
-prefix := "/usr/local"
+# `just install` puts the new lepthornc in <prefix>/bin. The default,
+# ~/.local, needs no root rights; ~/.local/bin must be on PATH.
+prefix := home_directory() / ".local"
 
 # ------------------------------------------------------------------
 
@@ -124,13 +125,13 @@ fixed-point: release
     cmp -s "$new" "$again" || { echo "error: $new is not a fixed point: its rebuild $again differs"; exit 1; }; \
     say check "fixed point: $new rebuilds itself identically"
 
-# release build, fixed-point check, then copy it to <prefix>/bin
-install: fixed-point
+# release build, the tests (the [Test] folder in manifest.lepm),
+# fixed-point check, then copy it to <prefix>/bin
+install: test fixed-point
     @{{sh}} \
     dest="{{bindir}}/lepthornc"; \
-    if [ -w "{{bindir}}" ]; then install -Dm 755 build/release/bin/lepthornc "$dest"; \
-    else say install "{{bindir}} is not writable, using sudo"; sudo install -Dm 755 build/release/bin/lepthornc "$dest"; fi \
-    || { echo "error: could not write $dest"; exit 1; }; \
+    install -Dm 755 build/release/bin/lepthornc "$dest" \
+    || { echo "error: could not write $dest; set prefix in the justfile to a folder you can write"; exit 1; }; \
     say installed "$dest ($("$dest" version | head -n 1))"
 
 # remove <prefix>/bin/lepthornc
@@ -138,7 +139,8 @@ uninstall:
     @{{sh}} \
     dest="{{bindir}}/lepthornc"; \
     if [ ! -e "$dest" ]; then say uninstall "nothing to remove: $dest does not exist"; exit 0; fi; \
-    if [ -w "{{bindir}}" ]; then rm -f "$dest"; else sudo rm -f "$dest"; fi && say removed "$dest"
+    rm -f "$dest" || { echo "error: could not remove $dest"; exit 1; }; \
+    say removed "$dest"
 
 # the full check from an empty build/: stages, tests, fixed point, both libcs
 verify: clean test fixed-point targets
