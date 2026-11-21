@@ -62,3 +62,9 @@ parallel
         task("high")
     done()
 done()
+
+(* a function with an empty body is still a function *)
+make does_nothing(x)
+done()
+does_nothing(1)
+show "empty function: ok"

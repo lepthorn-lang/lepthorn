@@ -272,10 +272,13 @@ make ctv_check_expr(arena, decls, sink, funcs, idx)
                rule *)
             ensure target = ctv_func_lookup(funcs, node.op)
             ensure is_builtin = node.op == "length" or node.op == "vector"
-            when target.body == none_idx() and is_builtin
-            otherwise when target.body == none_idx()
+            (* a missing function comes back with no name; its body can't
+               tell, because a function with an empty body has none too *)
+            ensure missing = target.name == ""
+            when missing and is_builtin
+            otherwise when missing
                 ctv_error(sink, node.pos, "call to undefined function '" + node.op + "'")
-            otherwise when target.body != none_idx()
+            otherwise
                 ensure want = ctv_func_param_count(target)
                 when node.num_value != want
                     ctv_error(sink, node.pos, "wrong number of arguments in call to '" + node.op + "'")
