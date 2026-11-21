@@ -1,0 +1,4 @@
+(* American - United States customary units (foot, inch, pound, mile).
+   No units here yet. When the first one is added, write a function
+   add_american_units(table) in american_units.lep, use it here, and
+   call it from build_unit_table in registrar.lep. *)

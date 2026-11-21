@@ -9,7 +9,7 @@
    runtime) at the end - LLVM resolves forward references. *)
 
 use core::ast::ast
-use core::units::quantity
+use core::units
 use core::lang_syntax::data_types
 use core::lang_syntax::parser
 use core::ctv::ctv

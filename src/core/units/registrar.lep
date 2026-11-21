@@ -1,0 +1,106 @@
+(* registrar.lep - the list of all units, and what a dimension is.
+
+   build_unit_table makes the list. Each group of units lives in its
+   own folder and adds itself here: general_units/ (SI), IEEE/ and
+   American/. Every part of the compiler reads units from this one
+   list, so a new unit is written in one place only.
+
+   A unit written after a number (25km) is looked up in this list when
+   the program is compiled. An unknown name comes back with an empty
+   suffix, and the caller reports the error. *)
+
+(* What a quantity is made of: how many times each SI base unit
+   appears. A speed (meter per second) has m = 1 and s = -1. *)
+shape Dimension
+    kg: Number
+    m: Number
+    s: Number
+    a: Number
+    k: Number
+    mol: Number
+    cd: Number
+    rad: Number
+done()
+
+(* One unit: its name, what it is made of, and how many SI units one of
+   it is (1 km is 1000 m). *)
+shape UnitEntry
+    suffix: Text
+    dim: Dimension
+    scale: Number
+done()
+
+(* the dimension of a plain number with no unit: all zero *)
+make dim_zero()
+    done(Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0))
+done()
+
+(* true when two dimensions are the same, field by field *)
+make dim_equal(d1, d2)
+    when d1.kg != d2.kg
+        done(false)
+    done()
+    when d1.m != d2.m
+        done(false)
+    done()
+    when d1.s != d2.s
+        done(false)
+    done()
+    when d1.a != d2.a
+        done(false)
+    done()
+    when d1.k != d2.k
+        done(false)
+    done()
+    when d1.mol != d2.mol
+        done(false)
+    done()
+    when d1.cd != d2.cd
+        done(false)
+    done()
+    when d1.rad != d2.rad
+        done(false)
+    done()
+    done(true)
+done()
+
+(* the most units the list can hold; a ring that is full would drop
+   its oldest unit, so add_unit stops the compiler instead *)
+make unit_table_size()
+    done(256)
+done()
+
+(* adds one unit to the list *)
+make add_unit(table, suffix, dim, scale)
+    when ring::is_full(table)
+        sys::fail("too many units: make unit_table_size() larger in src/core/units/registrar.lep")
+    done()
+    ring::write(table, UnitEntry(suffix = suffix, dim = dim, scale = scale))
+done()
+
+(* makes the list of all units, one group after another *)
+make build_unit_table()
+    ensure table = ring::create(unit_table_size())
+    add_si_units(table)
+    done(table)
+done()
+
+(* finds a unit by its name; searches from the last unit added *)
+make lookup_unit(table, suffix)
+    when suffix == ""
+        done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+    done()
+    ensure n = ring::size(table)
+    suppose i = n - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure entry = ring::peek(table, i)
+        when entry.suffix == suffix
+            done(entry)
+        done()
+        i = i - 1
+    done()
+    done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+done()

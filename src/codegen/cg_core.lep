@@ -9,7 +9,7 @@
    checks kinds where an operation needs one. *)
 
 use core::ast::ast
-use core::units::quantity
+use core::units
 use core::lang_syntax::parser
 use runtime::primitives
 

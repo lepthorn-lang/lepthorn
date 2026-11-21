@@ -125,7 +125,7 @@ done()
 
 (* The unit list for `take` input, written into the program.
    It is made from build_unit_table, so every unit is listed in one
-   place only: src/core/units/quantity.lep. *)
+   place only: src/core/units/registrar.lep. *)
 make cg_rt_units(ctx)
     ensure table = build_unit_table()
     ensure count = ring::size(table)

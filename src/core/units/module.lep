@@ -1,1 +1,7 @@
-use core::units::quantity
+(* units - everything about units and dimensions.
+   registrar.lep keeps the list of all units.
+   Each folder adds one group of units to that list. *)
+use core::units::registrar
+use core::units::general_units
+use core::units::IEEE
+use core::units::American

@@ -1,0 +1,55 @@
+(* si_units.lep - the SI units.
+
+   Each line adds one unit:
+       add_unit(table, name, dimension, size in SI)
+
+   "size in SI" says how many SI units one of this unit is.
+   Example: 1 km is 1000 m, so km has 1000.
+
+   A dimension says what the unit is made of. The eight numbers are
+   kg, m, s, a (ampere), k (kelvin), mol, cd (candela) and rad.
+   Example: a newton is kg * m / s^2, so kg = 1, m = 1, s = -2. *)
+
+make add_si_units(table)
+    ensure mass = Dimension(kg = 1, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure length = Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure time = Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure force = Dimension(kg = 1, m = 1, s = 0 - 2, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure speed = Dimension(kg = 0, m = 1, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure frequency = Dimension(kg = 0, m = 0, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
+    ensure angle = Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 1)
+
+    (* mass *)
+    add_unit(table, "kg", mass, 1)
+    add_unit(table, "g", mass, 0.001)
+    add_unit(table, "t", mass, 1000)
+
+    (* length *)
+    add_unit(table, "m", length, 1)
+    add_unit(table, "km", length, 1000)
+    add_unit(table, "cm", length, 0.01)
+    add_unit(table, "mm", length, 0.001)
+
+    (* time *)
+    add_unit(table, "s", time, 1)
+    add_unit(table, "ms", time, 0.001)
+    add_unit(table, "min", time, 60)
+    add_unit(table, "h", time, 3600)
+
+    (* force *)
+    add_unit(table, "N", force, 1)
+    add_unit(table, "kN", force, 1000)
+    add_unit(table, "MN", force, 1000000)
+
+    (* speed: meters per second *)
+    add_unit(table, "mps", speed, 1)
+
+    (* frequency *)
+    add_unit(table, "Hz", frequency, 1)
+    add_unit(table, "kHz", frequency, 1000)
+
+    (* angle: one degree is pi / 180 radians *)
+    add_unit(table, "rad", angle, 1)
+    add_unit(table, "degree", angle, 0.017453292519943295)
+    add_unit(table, "deg", angle, 0.017453292519943295)
+done()

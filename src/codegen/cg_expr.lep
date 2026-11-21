@@ -3,7 +3,7 @@
    expression's i64 value. Operands are evaluated left to right. *)
 
 use core::ast::ast
-use core::units::quantity
+use core::units
 use core::lang_syntax::parser
 use runtime::primitives
 use codegen::cg_core

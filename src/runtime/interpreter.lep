@@ -14,7 +14,7 @@
    with this language's own real-time statements, not re-implemented. *)
 
 use core::ast::ast
-use core::units::quantity
+use core::units
 use core::lang_syntax::data_types
 use core::lang_syntax::parser
 use core::ctv::ctv
