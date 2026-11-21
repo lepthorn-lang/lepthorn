@@ -128,14 +128,14 @@ done()
    place only: src/core/units/registrar.lep. *)
 make cg_rt_units(ctx)
     ensure table = build_unit_table()
-    ensure count = ring::size(table)
+    ensure count = unit_count(table)
     suppose line = "@lep.units = internal constant [" + text::from_number(count) + " x %lep.U] ["
     suppose i = 0
     repeat
         when i >= count
             stop
         done()
-        ensure unit = ring::peek(table, i)
+        ensure unit = unit_at(table, i)
         when i > 0
             line = line + ", "
         done()
@@ -147,7 +147,7 @@ done()
 
 (* how many units the `take` list has *)
 make cg_rt_unit_count()
-    done(text::from_number(ring::size(build_unit_table())))
+    done(text::from_number(unit_count(build_unit_table())))
 done()
 
 (* one unit of the list: its name, its scale to SI, its dimension *)

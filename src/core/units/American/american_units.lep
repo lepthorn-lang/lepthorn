@@ -1,0 +1,8 @@
+(* american_units.lep - United States customary units, such as foot,
+   inch, pound and mile.
+   No units here yet. Add each one with a line like:
+       add_unit(list, name, dimension, size in SI)
+   See general_units/si_units.lep for examples. *)
+
+make add_american_units(list)
+done()
