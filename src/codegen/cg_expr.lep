@@ -86,7 +86,7 @@ make cg_num_node(ctx, node)
         done(cg_num_lit(ctx, mag))
     done()
     ensure d = ue.dim
-    ensure dims = "i32 " + text::from_number(d.kg) + ", i32 " + text::from_number(d.m) + ", i32 " + text::from_number(d.s) + ", i32 " + text::from_number(d.a) + ", i32 " + text::from_number(d.k) + ", i32 " + text::from_number(d.mol) + ", i32 " + text::from_number(d.cd) + ", i32 " + text::from_number(d.rad)
+    ensure dims = cg_dimension_ir(d)
     ensure qr = cg_tmp(ctx)
     cg_emit(ctx, qr + " = call i64 @lep_qty(double " + cg_double_lit(mag) + ", " + dims + ")")
     done(qr)

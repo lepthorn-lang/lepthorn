@@ -119,39 +119,57 @@ make cg_rt_input(ctx)
     rt(ctx, "define internal i1 @lep.isblank(i8 %c) {|entry:|  %a = icmp eq i8 %c, 32|  %b = icmp eq i8 %c, 9|  %d = icmp eq i8 %c, 13|  %ab = or i1 %a, %b|  %r = or i1 %ab, %d|  ret i1 %r|}")
     rt(ctx, "define internal i64 @lep_sys_take(i64 %name) {|entry:|  %ip = alloca i64|  %sp = alloca ptr|  %numbuf = alloca [64 x i8]|  %np = call ptr @lep.tchars(i64 %name)|  %w = call i32 (ptr, ...) @printf(ptr @.rt.f_takep, ptr %np)|  %f = call i32 @fflush(ptr null)|  %raw = call ptr @lep.readline()|  store ptr %raw, ptr %sp|  br label %lead|lead:|  %s = load ptr, ptr %sp|  %c = load i8, ptr %s|  %bl = call i1 @lep.isblank(i8 %c)|  br i1 %bl, label %adv, label %trail0|adv:|  %s1 = getelementptr i8, ptr %s, i64 1|  store ptr %s1, ptr %sp|  br label %lead|trail0:|  %s2 = load ptr, ptr %sp|  %n = call i64 @strlen(ptr %s2)|  store i64 %n, ptr %ip|  br label %trail|trail:|  %k = load i64, ptr %ip|  %kz = icmp eq i64 %k, 0|  br i1 %kz, label %tdone, label %tchk|tchk:|  %km = sub i64 %k, 1|  %cp = getelementptr i8, ptr %s2, i64 %km|  %cc = load i8, ptr %cp|  %tb = call i1 @lep.isblank(i8 %cc)|  br i1 %tb, label %tcut, label %tdone|tcut:|  store i8 0, ptr %cp|  store i64 %km, ptr %ip|  br label %trail")
     rt(ctx, "tdone:|  store i64 0, ptr %ip|  br label %scan|scan:|  %i = load i64, ptr %ip|  %cp2 = getelementptr i8, ptr %s2, i64 %i|  %ch = load i8, ptr %cp2|  %dg1 = icmp sge i8 %ch, 48|  %dg2 = icmp sle i8 %ch, 57|  %dg = and i1 %dg1, %dg2|  %mi = icmp eq i8 %ch, 45|  %dt = icmp eq i8 %ch, 46|  %md = or i1 %mi, %dt|  %ok = or i1 %dg, %md|  %room = icmp slt i64 %i, 63|  %go = and i1 %ok, %room|  br i1 %go, label %sadv, label %sdone|sadv:|  %i1 = add i64 %i, 1|  store i64 %i1, ptr %ip|  br label %scan|sdone:|  %i2 = load i64, ptr %ip|  %zero = icmp eq i64 %i2, 0|  br i1 %zero, label %bad, label %parse|bad:|  call void @lep.die1(ptr @.rt.f_take_parse, ptr %raw)|  unreachable|parse:|  %m = call ptr @memcpy(ptr %numbuf, ptr %s2, i64 %i2)|  %nend = getelementptr i8, ptr %numbuf, i64 %i2|  store i8 0, ptr %nend|  %v = call double @strtod(ptr %numbuf, ptr null)|  %unit = getelementptr i8, ptr %s2, i64 %i2|  %u0 = load i8, ptr %unit|  %nounit = icmp eq i8 %u0, 0|  br i1 %nounit, label %plain, label %lookup|plain:|  %r0 = call i64 @lep.enc(double %v)|  ret i64 %r0")
-    rt(ctx, "lookup:|  store i64 0, ptr %ip|  br label %ul|ul:|  %j = load i64, ptr %ip|  %udone = icmp sge i64 %j, 20|  br i1 %udone, label %nounitfound, label %ub|ub:|  %namep = getelementptr [20 x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 0|  %uname = load ptr, ptr %namep|  %cmp = call i32 @strcmp(ptr %uname, ptr %unit)|  %hit = icmp eq i32 %cmp, 0|  br i1 %hit, label %found, label %unext|unext:|  %j1 = add i64 %j, 1|  store i64 %j1, ptr %ip|  br label %ul|found:|  %scp = getelementptr [20 x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 1|  %scale = load double, ptr %scp|  %dimp = getelementptr [20 x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 2|  %x = fmul double %v, %scale|  %r1 = call i64 @lep.mkq(double %x, ptr %dimp)|  ret i64 %r1|nounitfound:|  call void @lep.die1(ptr @.rt.f_unit, ptr %unit)|  unreachable|}")
+    ensure n = cg_rt_unit_count()
+    rt(ctx, "lookup:|  store i64 0, ptr %ip|  br label %ul|ul:|  %j = load i64, ptr %ip|  %udone = icmp sge i64 %j, " + n + "|  br i1 %udone, label %nounitfound, label %ub|ub:|  %namep = getelementptr [" + n + " x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 0|  %uname = load ptr, ptr %namep|  %cmp = call i32 @strcmp(ptr %uname, ptr %unit)|  %hit = icmp eq i32 %cmp, 0|  br i1 %hit, label %found, label %unext|unext:|  %j1 = add i64 %j, 1|  store i64 %j1, ptr %ip|  br label %ul|found:|  %scp = getelementptr [" + n + " x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 1|  %scale = load double, ptr %scp|  %dimp = getelementptr [" + n + " x %lep.U], ptr @lep.units, i64 0, i64 %j, i32 2|  %x = fmul double %v, %scale|  %r1 = call i64 @lep.mkq(double %x, ptr %dimp)|  ret i64 %r1|nounitfound:|  call void @lep.die1(ptr @.rt.f_unit, ptr %unit)|  unreachable|}")
 done()
 
-(* the same 20-entry unit table as build_unit_table, for `take` input *)
+(* The unit list for `take` input, written into the program.
+   It is made from build_unit_table, so every unit is listed in one
+   place only: src/core/units/quantity.lep. *)
 make cg_rt_units(ctx)
-    suppose line = "@lep.units = internal constant [20 x %lep.U] ["
-    line = line + cg_rt_unit(ctx, "kg", "1.0", "1", "0", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "g", "0.001", "1", "0", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "t", "1000.0", "1", "0", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "m", "1.0", "0", "1", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "km", "1000.0", "0", "1", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "cm", "0.01", "0", "1", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "mm", "0.001", "0", "1", "0", "0") + ", "
-    line = line + cg_rt_unit(ctx, "s", "1.0", "0", "0", "1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "ms", "0.001", "0", "0", "1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "min", "60.0", "0", "0", "1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "h", "3600.0", "0", "0", "1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "N", "1.0", "1", "1", "-2", "0") + ", "
-    line = line + cg_rt_unit(ctx, "kN", "1000.0", "1", "1", "-2", "0") + ", "
-    line = line + cg_rt_unit(ctx, "MN", "1000000.0", "1", "1", "-2", "0") + ", "
-    line = line + cg_rt_unit(ctx, "mps", "1.0", "0", "1", "-1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "Hz", "1.0", "0", "0", "-1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "kHz", "1000.0", "0", "0", "-1", "0") + ", "
-    line = line + cg_rt_unit(ctx, "rad", "1.0", "0", "0", "0", "1") + ", "
-    line = line + cg_rt_unit(ctx, "degree", "0.017453292519943295", "0", "0", "0", "1") + ", "
-    line = line + cg_rt_unit(ctx, "deg", "0.017453292519943295", "0", "0", "0", "1")
+    ensure table = build_unit_table()
+    ensure count = ring::size(table)
+    suppose line = "@lep.units = internal constant [" + text::from_number(count) + " x %lep.U] ["
+    suppose i = 0
+    repeat
+        when i >= count
+            stop
+        done()
+        ensure unit = ring::peek(table, i)
+        when i > 0
+            line = line + ", "
+        done()
+        line = line + cg_rt_unit(ctx, unit)
+        i = i + 1
+    done()
     cg_global(ctx, line + "]")
 done()
 
-(* A/K/mol/cd exponents are 0 for every unit in this table *)
-make cg_rt_unit(ctx, name, scale, kg, m, s, rad)
-    rt_str(ctx, "u_" + name, name)
-    done("%lep.U { ptr @.rt.u_" + name + ", double " + scale + ", [8 x i32] [i32 " + kg + ", i32 " + m + ", i32 " + s + ", i32 0, i32 0, i32 0, i32 0, i32 " + rad + "] }")
+(* how many units the `take` list has *)
+make cg_rt_unit_count()
+    done(text::from_number(ring::size(build_unit_table())))
+done()
+
+(* one unit of the list: its name, its scale to SI, its dimension *)
+make cg_rt_unit(ctx, unit)
+    rt_str(ctx, "u_" + unit.suffix, unit.suffix)
+    ensure name = "ptr @.rt.u_" + unit.suffix
+    ensure scale = "double " + cg_double_lit(unit.scale)
+    ensure dimension = "[8 x i32] [" + cg_dimension_ir(unit.dim) + "]"
+    done("%lep.U { " + name + ", " + scale + ", " + dimension + " }")
+done()
+
+(* the 8 dimension numbers as LLVM IR: "i32 1, i32 0, ..." *)
+make cg_dimension_ir(d)
+    suppose ir = "i32 " + text::from_number(d.kg)
+    ir = ir + ", i32 " + text::from_number(d.m)
+    ir = ir + ", i32 " + text::from_number(d.s)
+    ir = ir + ", i32 " + text::from_number(d.a)
+    ir = ir + ", i32 " + text::from_number(d.k)
+    ir = ir + ", i32 " + text::from_number(d.mol)
+    ir = ir + ", i32 " + text::from_number(d.cd)
+    ir = ir + ", i32 " + text::from_number(d.rad)
+    done(ir)
 done()
 
 make cg_rt_engines(ctx)
