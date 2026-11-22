@@ -416,13 +416,31 @@ Phase 1 item 11 and Phase 2A are about this.
 
 ## How a unit becomes a value
 
-Files: `src/core/units/registrar.lep`, `general_units/si_units.lep`,
-`IEEE/`, `American/`
+Files: `src/core/units/base_units.lep`, `registrar.lep`,
+`general_units/si_units.lep`, `IEEE/`, `American/`
 
 A **dimension** says what a quantity is made of: how many times each
-SI base unit appears. It has 8 numbers: `kg m s a k mol cd rad`.
+of the 8 base units appears (`kg m s A K mol cd rad`).
+`base_units.lep` is the only place that names them. Its `Dimension`
+shape has one field per base unit: `mass`, `length`, `time`,
+`current`, `temperature`, `amount`, `luminosity`, `angle`.
 
-| Quantity | kg | m | s | Written |
+**Adding a unit is one line** in its group's file, with the dimension
+written as text the way a physics book writes it:
+
+```lepthorn
+add_unit(list, "km", "m", 1000)
+add_unit(list, "N", "kg m / s^2", 1)
+add_unit(list, "Hz", "1 / s", 1)
+add_unit(list, "psi", "kg / m s^2", 6894.757)
+```
+
+Words are base units, split by spaces; every word after `/` goes below
+the line; `^2` is a power; `1` means "nothing". A word that is not a
+base unit stops the compiler with a clear message.
+`dimension_from_text` turns the text into a `Dimension`.
+
+| Quantity | mass | length | time | Written |
 |---|---|---|---|---|
 | mass | 1 | 0 | 0 | `kg` |
 | speed | 0 | 1 | −1 | `m/s` |
