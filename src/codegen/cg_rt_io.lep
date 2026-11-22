@@ -154,21 +154,26 @@ done()
 make cg_rt_unit(ctx, unit)
     rt_str(ctx, "u_" + unit.suffix, unit.suffix)
     ensure name = "ptr @.rt.u_" + unit.suffix
-    ensure scale = "double " + cg_double_lit(unit.scale)
-    ensure dimension = "[8 x i32] [" + cg_dimension_ir(unit.dim) + "]"
+    ensure scale = "double " + cg_double_lit(unit.to_si)
+    ensure dimension = "[8 x i32] [" + cg_dimension_ir(unit.dimension) + "]"
     done("%lep.U { " + name + ", " + scale + ", " + dimension + " }")
 done()
 
-(* the 8 dimension numbers as LLVM IR: "i32 1, i32 0, ..." *)
+(* the 8 powers of a dimension as LLVM IR: "i32 1, i32 0, ..." *)
 make cg_dimension_ir(d)
-    suppose ir = "i32 " + text::from_number(d.kg)
-    ir = ir + ", i32 " + text::from_number(d.m)
-    ir = ir + ", i32 " + text::from_number(d.s)
-    ir = ir + ", i32 " + text::from_number(d.a)
-    ir = ir + ", i32 " + text::from_number(d.k)
-    ir = ir + ", i32 " + text::from_number(d.mol)
-    ir = ir + ", i32 " + text::from_number(d.cd)
-    ir = ir + ", i32 " + text::from_number(d.rad)
+    ensure names = base_unit_names()
+    suppose ir = ""
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        when i > 0
+            ir = ir + ", "
+        done()
+        ir = ir + "i32 " + text::from_number(power_of(d, names[i]))
+        i = i + 1
+    done()
     done(ir)
 done()
 

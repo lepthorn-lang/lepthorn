@@ -27,6 +27,12 @@ show "frequency:" 1kHz + 50Hz
 show "right angle:" 90deg
 show "same angle:" 90degree
 
+(* electric current: A, mA; temperature: K; amount: mol; light: cd *)
+show "current:" 1A + 250mA
+show "temperature:" 293K
+show "amount:" 2mol
+show "light:" 100cd
+
 (* * and / build new units: a length divided by a time is a speed *)
 ensure distance = 100m
 ensure time = 8s

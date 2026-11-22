@@ -81,11 +81,11 @@ make cg_num_node(ctx, node)
         cg_fail(ctx, "LEC7001: codegen error: unknown unit suffix '" + node.op + "'")
         done("10")
     done()
-    ensure mag = node.num_value * ue.scale
-    when dim_equal(ue.dim, dim_zero())
+    ensure mag = node.num_value * ue.to_si
+    when same_dimension(ue.dimension, no_dimension())
         done(cg_num_lit(ctx, mag))
     done()
-    ensure d = ue.dim
+    ensure d = ue.dimension
     ensure dims = cg_dimension_ir(d)
     ensure qr = cg_tmp(ctx)
     cg_emit(ctx, qr + " = call i64 @lep_qty(double " + cg_double_lit(mag) + ", " + dims + ")")

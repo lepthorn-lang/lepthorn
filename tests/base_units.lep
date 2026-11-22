@@ -1,0 +1,10 @@
+(* every base unit, alone and combined; the interpreter and compiled
+   programs must show the same thing *)
+show 2kg 3m 4s
+show 2A * 3s
+show 300K
+show 5mA + 1A
+show 2mol
+show 1cd
+show 90deg
+show 1kg * 1m / (1s * 1s)

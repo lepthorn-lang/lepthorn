@@ -54,14 +54,7 @@ done()
 (* base-dimension symbols in order, the Unicode pieces, and the nine
    named dimensions *)
 make cg_rt_dimtables(ctx)
-    rt_str(ctx, "d_kg", "kg")
-    rt_str(ctx, "d_m", "m")
-    rt_str(ctx, "d_s", "s")
-    rt_str(ctx, "d_A", "A")
-    rt_str(ctx, "d_K", "K")
-    rt_str(ctx, "d_mol", "mol")
-    rt_str(ctx, "d_cd", "cd")
-    rt_str(ctx, "d_rad", "rad")
+    cg_rt_base_names(ctx)
     rt_str(ctx, "s_empty", "")
     rt_str(ctx, "f_pcts", "%s")
     rt_str(ctx, "f_int", "%d")
@@ -92,9 +85,41 @@ make cg_rt_dimtables(ctx)
     rt_str(ctx, "n_Pa", "Pa")
     rt_str(ctx, "n_W", "W")
     rt_str(ctx, "n_Hz", "Hz")
-    rt(ctx, "@lep.dimsyms = internal constant [8 x ptr] [ptr @.rt.d_kg, ptr @.rt.d_m, ptr @.rt.d_s, ptr @.rt.d_A, ptr @.rt.d_K, ptr @.rt.d_mol, ptr @.rt.d_cd, ptr @.rt.d_rad]")
+    rt(ctx, cg_rt_base_table())
     rt(ctx, "@lep.supdigits = internal constant [10 x ptr] [ptr @.rt.u0, ptr @.rt.u1, ptr @.rt.u2, ptr @.rt.u3, ptr @.rt.u4, ptr @.rt.u5, ptr @.rt.u6, ptr @.rt.u7, ptr @.rt.u8, ptr @.rt.u9]")
     rt(ctx, "@lep.dimtab = internal constant [9 x [8 x i32]] [[8 x i32] [i32 1, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 0, i32 1, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 0, i32 0, i32 1, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 1], [8 x i32] [i32 1, i32 1, i32 -2, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 1, i32 2, i32 -2, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 1, i32 -1, i32 -2, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 1, i32 2, i32 -3, i32 0, i32 0, i32 0, i32 0, i32 0], [8 x i32] [i32 0, i32 0, i32 -1, i32 0, i32 0, i32 0, i32 0, i32 0]]")
     rt(ctx, "@lep.dimtabn = internal constant [9 x ptr] [ptr @.rt.d_kg, ptr @.rt.d_m, ptr @.rt.d_s, ptr @.rt.d_rad, ptr @.rt.n_N, ptr @.rt.n_J, ptr @.rt.n_Pa, ptr @.rt.n_W, ptr @.rt.n_Hz]")
 done()
 
+(* the base unit names (kg, m, s, ...) as strings @.rt.d_kg, ..., in
+   the order of base_units.lep *)
+make cg_rt_base_names(ctx)
+    ensure names = base_unit_names()
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        rt_str(ctx, "d_" + names[i], names[i])
+        i = i + 1
+    done()
+done()
+
+(* the table of those names, used to print a dimension *)
+make cg_rt_base_table()
+    ensure names = base_unit_names()
+    ensure count = text::from_number(length(names))
+    suppose table = "@lep.dimsyms = internal constant [" + count + " x ptr] ["
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        when i > 0
+            table = table + ", "
+        done()
+        table = table + "ptr @.rt.d_" + names[i]
+        i = i + 1
+    done()
+    done(table + "]")
+done()

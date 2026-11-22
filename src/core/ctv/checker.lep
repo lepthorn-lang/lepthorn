@@ -30,7 +30,7 @@ shape DimVar
 done()
 
 make dim_unknown()
-    done(DimInfo(known = false, dimension = dim_zero()))
+    done(DimInfo(known = false, dimension = no_dimension()))
 done()
 
 make dim_known(d)
@@ -38,19 +38,6 @@ make dim_known(d)
 done()
 
 (* -- dimension arithmetic -- *)
-
-(* a * b adds the exponents (sign 1); a / b subtracts them (sign -1) *)
-make dim_combine(a, b, sign)
-    ensure kg = a.kg + sign * b.kg
-    ensure m = a.m + sign * b.m
-    ensure s = a.s + sign * b.s
-    ensure amp = a.a + sign * b.a
-    ensure kelvin = a.k + sign * b.k
-    ensure mol = a.mol + sign * b.mol
-    ensure cd = a.cd + sign * b.cd
-    ensure rad = a.rad + sign * b.rad
-    done(Dimension(kg = kg, m = m, s = s, a = amp, k = kelvin, mol = mol, cd = cd, rad = rad))
-done()
 
 (* -- dimensions as text, for messages: kg, m/s, kg·m/s² -- *)
 
@@ -116,20 +103,21 @@ done()
 
 (* the units on one side of the / sign *)
 make dim_side(d, which)
+    ensure names = base_unit_names()
     suppose part = ""
-    part = dim_part(part, "kg", d.kg, which)
-    part = dim_part(part, "m", d.m, which)
-    part = dim_part(part, "s", d.s, which)
-    part = dim_part(part, "A", d.a, which)
-    part = dim_part(part, "K", d.k, which)
-    part = dim_part(part, "mol", d.mol, which)
-    part = dim_part(part, "cd", d.cd, which)
-    part = dim_part(part, "rad", d.rad, which)
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        part = dim_part(part, names[i], power_of(d, names[i]), which)
+        i = i + 1
+    done()
     done(part)
 done()
 
 make dim_text(d)
-    when dim_equal(d, dim_zero())
+    when same_dimension(d, no_dimension())
         done("a plain number")
     done()
     ensure top = dim_side(d, "top")
@@ -239,14 +227,14 @@ done()
 make dim_record_return(vars, info)
     ensure seen = dim_find_var(vars, "$seen")
     when not seen.known
-        dim_add_var(vars, "$seen", dim_known(dim_zero()))
+        dim_add_var(vars, "$seen", dim_known(no_dimension()))
         dim_add_var(vars, "$return", info)
     otherwise
         ensure old = dim_find_var(vars, "$return")
         ensure both_known = old.known and info.known
         suppose same = false
         when both_known
-            same = dim_equal(old.dimension, info.dimension)
+            same = same_dimension(old.dimension, info.dimension)
         done()
         when not same
             dim_add_var(vars, "$return", dim_unknown())
@@ -271,7 +259,7 @@ make dim_of(ctx, vars, idx)
         when node.op != "" and unit.suffix == ""
             done(dim_unknown())
         done()
-        done(dim_known(unit.dim))
+        done(dim_known(unit.dimension))
     done()
     when node.kind == "VAR"
         done(dim_find_var(vars, node.op))
@@ -306,15 +294,15 @@ make dim_of_binop(ctx, vars, node)
         done(dim_unknown())
     done()
     when op == "*"
-        done(dim_known(dim_combine(left.dimension, right.dimension, 1)))
+        done(dim_known(multiply_dimensions(left.dimension, right.dimension)))
     done()
     when op == "/"
-        done(dim_known(dim_combine(left.dimension, right.dimension, 0 - 1)))
+        done(dim_known(divide_dimensions(left.dimension, right.dimension)))
     done()
     when not dim_is_same_dimension_op(op)
         done(dim_unknown())
     done()
-    when not dim_equal(left.dimension, right.dimension)
+    when not same_dimension(left.dimension, right.dimension)
         ensure a = dim_text(left.dimension)
         ensure b = dim_text(right.dimension)
         dim_report(ctx, node.pos, "`" + op + "` needs the same unit on both sides, got " + a + " and " + b)
@@ -512,7 +500,7 @@ make dim_check_assign(ctx, vars, node)
     ensure old = dim_find_var(vars, node.op)
     ensure both_known = value.known and old.known
     when both_known
-        when not dim_equal(value.dimension, old.dimension)
+        when not same_dimension(value.dimension, old.dimension)
             ensure a = dim_text(old.dimension)
             ensure b = dim_text(value.dimension)
             dim_report(ctx, node.pos, "'" + node.op + "' holds " + a + ", it cannot take a value in " + b)

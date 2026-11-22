@@ -1,55 +1,64 @@
 (* si_units.lep - the SI units.
 
-   Each line adds one unit:
-       add_unit(list, name, dimension, size in SI)
+   To add a unit, write one line:
 
-   "size in SI" says how many SI units one of this unit is.
-   Example: 1 km is 1000 m, so km has 1000.
+       add_unit(list, "name", "dimension", size in SI)
 
-   A dimension says what the unit is made of. The eight numbers are
-   kg, m, s, a (ampere), k (kelvin), mol, cd (candela) and rad.
-   Example: a newton is kg * m / s^2, so kg = 1, m = 1, s = -2. *)
+   name       what is written after a number: 25km
+   dimension  what the unit is made of, in base units (kg m s A K mol
+              cd rad). Units below the line come after "/"; ^2 is a
+              power. "m / s" is a speed, "kg m / s^2" a force, "1 / s"
+              a frequency.
+   size       how many SI units one of it is: 1 km is 1000 m, so 1000.
+
+   Example, a new unit for pressure:
+       add_unit(list, "Pa", "kg / m s^2", 1) *)
 
 make add_si_units(list)
-    ensure mass = Dimension(kg = 1, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure length = Dimension(kg = 0, m = 1, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure time = Dimension(kg = 0, m = 0, s = 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure force = Dimension(kg = 1, m = 1, s = 0 - 2, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure speed = Dimension(kg = 0, m = 1, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure frequency = Dimension(kg = 0, m = 0, s = 0 - 1, a = 0, k = 0, mol = 0, cd = 0, rad = 0)
-    ensure angle = Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 1)
-
     (* mass *)
-    add_unit(list, "kg", mass, 1)
-    add_unit(list, "g", mass, 0.001)
-    add_unit(list, "t", mass, 1000)
+    add_unit(list, "kg", "kg", 1)
+    add_unit(list, "g", "kg", 0.001)
+    add_unit(list, "t", "kg", 1000)
 
     (* length *)
-    add_unit(list, "m", length, 1)
-    add_unit(list, "km", length, 1000)
-    add_unit(list, "cm", length, 0.01)
-    add_unit(list, "mm", length, 0.001)
+    add_unit(list, "m", "m", 1)
+    add_unit(list, "km", "m", 1000)
+    add_unit(list, "cm", "m", 0.01)
+    add_unit(list, "mm", "m", 0.001)
 
     (* time *)
-    add_unit(list, "s", time, 1)
-    add_unit(list, "ms", time, 0.001)
-    add_unit(list, "min", time, 60)
-    add_unit(list, "h", time, 3600)
+    add_unit(list, "s", "s", 1)
+    add_unit(list, "ms", "s", 0.001)
+    add_unit(list, "min", "s", 60)
+    add_unit(list, "h", "s", 3600)
 
     (* force *)
-    add_unit(list, "N", force, 1)
-    add_unit(list, "kN", force, 1000)
-    add_unit(list, "MN", force, 1000000)
+    add_unit(list, "N", "kg m / s^2", 1)
+    add_unit(list, "kN", "kg m / s^2", 1000)
+    add_unit(list, "MN", "kg m / s^2", 1000000)
 
     (* speed: meters per second *)
-    add_unit(list, "mps", speed, 1)
+    add_unit(list, "mps", "m / s", 1)
 
     (* frequency *)
-    add_unit(list, "Hz", frequency, 1)
-    add_unit(list, "kHz", frequency, 1000)
+    add_unit(list, "Hz", "1 / s", 1)
+    add_unit(list, "kHz", "1 / s", 1000)
 
     (* angle: one degree is pi / 180 radians *)
-    add_unit(list, "rad", angle, 1)
-    add_unit(list, "degree", angle, 0.017453292519943295)
-    add_unit(list, "deg", angle, 0.017453292519943295)
+    add_unit(list, "rad", "rad", 1)
+    add_unit(list, "degree", "rad", 0.017453292519943295)
+    add_unit(list, "deg", "rad", 0.017453292519943295)
+
+    (* electric current *)
+    add_unit(list, "A", "A", 1)
+    add_unit(list, "mA", "A", 0.001)
+
+    (* temperature, in kelvin *)
+    add_unit(list, "K", "K", 1)
+
+    (* amount of substance *)
+    add_unit(list, "mol", "mol", 1)
+
+    (* light *)
+    add_unit(list, "cd", "cd", 1)
 done()

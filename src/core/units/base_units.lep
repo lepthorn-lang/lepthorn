@@ -1,0 +1,247 @@
+(* base_units.lep - the 8 base units, and what a dimension is.
+
+   Every quantity is made of 8 base units, each raised to a whole power:
+
+     kg   mass             A    electric current     cd   light
+     m    length           K    temperature          rad  angle
+     s    time             mol  amount of substance
+
+   A speed (meter per second) is m^1 s^-1: length 1, time -1.
+
+   A unit's dimension is written as text, the way a physics book writes
+   it (see dimension_from_text below):
+
+     "m"            a length
+     "m / s"        a speed
+     "kg m / s^2"   a force
+     "1 / s"        a frequency
+
+   Compiled programs keep a dimension as 8 whole numbers ([8 x i32] in
+   the run-time code, src/codegen/cg_rt_*.lep). Adding a 9th base unit
+   means changing that size there too. *)
+
+(* how many times each base unit appears *)
+shape Dimension
+    mass: Number            (* kg *)
+    length: Number          (* m *)
+    time: Number            (* s *)
+    current: Number         (* A *)
+    temperature: Number     (* K *)
+    amount: Number          (* mol *)
+    luminosity: Number      (* cd *)
+    angle: Number           (* rad *)
+done()
+
+(* the dimension of a plain number: nothing *)
+make no_dimension()
+    done(Dimension(mass = 0, length = 0, time = 0, current = 0, temperature = 0, amount = 0, luminosity = 0, angle = 0))
+done()
+
+(* -- the base units by name -- *)
+
+(* the 8 base unit names, in the order of the Dimension fields *)
+make base_unit_names()
+    done(["kg", "m", "s", "A", "K", "mol", "cd", "rad"])
+done()
+
+make is_base_unit(name)
+    ensure names = base_unit_names()
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        when names[i] == name
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+(* how many times one base unit appears in a dimension *)
+make power_of(d, name)
+    when name == "kg"
+        done(d.mass)
+    otherwise when name == "m"
+        done(d.length)
+    otherwise when name == "s"
+        done(d.time)
+    otherwise when name == "A"
+        done(d.current)
+    otherwise when name == "K"
+        done(d.temperature)
+    otherwise when name == "mol"
+        done(d.amount)
+    otherwise when name == "cd"
+        done(d.luminosity)
+    done()
+    done(d.angle)
+done()
+
+(* the same dimension, with `amount` more of one base unit *)
+make add_power(d, name, amount)
+    suppose mass = d.mass
+    suppose len = d.length
+    suppose time = d.time
+    suppose current = d.current
+    suppose temperature = d.temperature
+    suppose substance = d.amount
+    suppose luminosity = d.luminosity
+    suppose angle = d.angle
+    when name == "kg"
+        mass = mass + amount
+    otherwise when name == "m"
+        len = len + amount
+    otherwise when name == "s"
+        time = time + amount
+    otherwise when name == "A"
+        current = current + amount
+    otherwise when name == "K"
+        temperature = temperature + amount
+    otherwise when name == "mol"
+        substance = substance + amount
+    otherwise when name == "cd"
+        luminosity = luminosity + amount
+    otherwise when name == "rad"
+        angle = angle + amount
+    done()
+    done(Dimension(mass = mass, length = len, time = time, current = current, temperature = temperature, amount = substance, luminosity = luminosity, angle = angle))
+done()
+
+(* -- working with dimensions -- *)
+
+make same_dimension(a, b)
+    ensure names = base_unit_names()
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        when power_of(a, names[i]) != power_of(b, names[i])
+            done(false)
+        done()
+        i = i + 1
+    done()
+    done(true)
+done()
+
+(* a * b adds the powers; a / b takes them away *)
+make multiply_dimensions(a, b)
+    ensure names = base_unit_names()
+    suppose result = a
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        result = add_power(result, names[i], power_of(b, names[i]))
+        i = i + 1
+    done()
+    done(result)
+done()
+
+make divide_dimensions(a, b)
+    ensure names = base_unit_names()
+    suppose result = a
+    suppose i = 0
+    repeat
+        when i >= length(names)
+            stop
+        done()
+        result = add_power(result, names[i], 0 - power_of(b, names[i]))
+        i = i + 1
+    done()
+    done(result)
+done()
+
+(* -- a dimension written as text -- *)
+
+(* "kg m / s^2" -> mass 1, length 1, time -2.
+   Words are base units, split by spaces. Every word after "/" goes
+   below the line. "^2" is a power. "1" is allowed for "nothing", as
+   in "1 / s". `unit` is the unit being added, for the error message. *)
+make dimension_from_text(written, unit)
+    suppose result = no_dimension()
+    suppose below = false
+    suppose word = ""
+    suppose i = 0
+    repeat
+        when i > text::length(written)
+            stop
+        done()
+        suppose c = " "
+        when i < text::length(written)
+            c = text::char_at(written, i)
+        done()
+        when c == " " or c == "/"
+            result = add_word(result, word, below, unit)
+            word = ""
+            when c == "/"
+                below = true
+            done()
+        otherwise
+            word = word + c
+        done()
+        i = i + 1
+    done()
+    done(result)
+done()
+
+(* one word of a dimension text, such as "s^2", added to `d` *)
+make add_word(d, word, below, unit)
+    when word == "" or word == "1"
+        done(d)
+    done()
+    suppose name = word
+    suppose power = 1
+    ensure hat = text_index(word, "^")
+    when hat >= 0
+        name = text::slice(word, 0, hat)
+        power = text::to_number(text::slice(word, hat + 1, text::length(word)))
+    done()
+    when not is_base_unit(name)
+        sys::fail("unit " + unit + ": " + name + " is not a base unit (kg m s A K mol cd rad)")
+    done()
+    when below
+        power = 0 - power
+    done()
+    done(add_power(d, name, power))
+done()
+
+(* where `part` starts in `text`, or -1 *)
+make text_index(whole, part)
+    ensure n = text::length(part)
+    suppose i = 0
+    repeat
+        when i + n > text::length(whole)
+            stop
+        done()
+        when text::slice(whole, i, i + n) == part
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()
+
+(* -- a number with a dimension, as a real value -- *)
+
+(* 3 with mass 1 and time -2 becomes 3 kg/s². Each base unit is raised
+   to its power and multiplied in; a power of 0 gives 1 and changes
+   nothing. This is the same run-time arithmetic as in any program. *)
+make make_quantity(magnitude, d)
+    when same_dimension(d, no_dimension())
+        done(magnitude)
+    done()
+    suppose result = magnitude
+    result = result * (1kg ** d.mass)
+    result = result * (1m ** d.length)
+    result = result * (1s ** d.time)
+    result = result * (1A ** d.current)
+    result = result * (1K ** d.temperature)
+    result = result * (1mol ** d.amount)
+    result = result * (1cd ** d.luminosity)
+    result = result * (1rad ** d.angle)
+    done(result)
+done()

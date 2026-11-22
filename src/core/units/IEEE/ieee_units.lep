@@ -1,7 +1,8 @@
 (* ieee_units.lep - units from IEEE standards.
-   No units here yet. Add each one with a line like:
-       add_unit(list, name, dimension, size in SI)
-   See general_units/si_units.lep for examples. *)
+   No units here yet. Add each one with one line, for example:
+       add_unit(list, "dB", "1", 1)
+   (name, dimension in base units, size in SI). How to write the
+   dimension is explained in general_units/si_units.lep. *)
 
 make add_ieee_units(list)
 done()

@@ -1,6 +1,8 @@
 (* units - everything about units and dimensions.
+   base_units.lep names the 8 base units and says what a dimension is.
    registrar.lep keeps the list of all units.
    Each folder adds one group of units to that list. *)
+use core::units::base_units
 use core::units::registrar
 use core::units::general_units
 use core::units::IEEE

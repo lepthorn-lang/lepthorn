@@ -1,4 +1,4 @@
-(* registrar.lep - the list of all units, and what a dimension is.
+(* registrar.lep - the list of all units.
 
    build_unit_table makes the list. Each group of units lives in its
    own folder and adds itself here: general_units/ (SI), IEEE/ and
@@ -9,59 +9,12 @@
    the program is compiled. An unknown name comes back with an empty
    suffix, and the caller reports the error. *)
 
-(* What a quantity is made of: how many times each SI base unit
-   appears. A speed (meter per second) has m = 1 and s = -1. *)
-shape Dimension
-    kg: Number
-    m: Number
-    s: Number
-    a: Number
-    k: Number
-    mol: Number
-    cd: Number
-    rad: Number
-done()
-
-(* One unit: its name, what it is made of, and how many SI units one of
-   it is (1 km is 1000 m). *)
+(* One unit: its name, what it is made of (see base_units.lep), and
+   how many SI units one of it is (1 km is 1000 m). *)
 shape UnitEntry
     suffix: Text
-    dim: Dimension
-    scale: Number
-done()
-
-(* the dimension of a plain number with no unit: all zero *)
-make dim_zero()
-    done(Dimension(kg = 0, m = 0, s = 0, a = 0, k = 0, mol = 0, cd = 0, rad = 0))
-done()
-
-(* true when two dimensions are the same, field by field *)
-make dim_equal(d1, d2)
-    when d1.kg != d2.kg
-        done(false)
-    done()
-    when d1.m != d2.m
-        done(false)
-    done()
-    when d1.s != d2.s
-        done(false)
-    done()
-    when d1.a != d2.a
-        done(false)
-    done()
-    when d1.k != d2.k
-        done(false)
-    done()
-    when d1.mol != d2.mol
-        done(false)
-    done()
-    when d1.cd != d2.cd
-        done(false)
-    done()
-    when d1.rad != d2.rad
-        done(false)
-    done()
-    done(true)
+    dimension: Dimension
+    to_si: Number
 done()
 
 (* The list of units. A ring has a fixed size, so the list keeps its
@@ -72,11 +25,11 @@ shape UnitList
 done()
 
 (* adds one unit to the list, making room first when it is full *)
-make add_unit(list, suffix, dim, scale)
+make add_unit(list, suffix, dimension_text, to_si)
     when ring::is_full(list.items)
         grow_unit_list(list)
     done()
-    ring::write(list.items, UnitEntry(suffix = suffix, dim = dim, scale = scale))
+    ring::write(list.items, UnitEntry(suffix = suffix, dimension = dimension_from_text(dimension_text, suffix), to_si = to_si))
 done()
 
 (* moves every unit into a new ring twice as big *)
@@ -116,7 +69,7 @@ done()
 (* finds a unit by its name; searches from the last unit added *)
 make lookup_unit(list, suffix)
     when suffix == ""
-        done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+        done(UnitEntry(suffix = "", dimension = no_dimension(), to_si = 1))
     done()
     ensure n = unit_count(list)
     suppose i = n - 1
@@ -130,5 +83,5 @@ make lookup_unit(list, suffix)
         done()
         i = i - 1
     done()
-    done(UnitEntry(suffix = "", dim = dim_zero(), scale = 1))
+    done(UnitEntry(suffix = "", dimension = no_dimension(), to_si = 1))
 done()

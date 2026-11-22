@@ -150,15 +150,6 @@ make env_assign(st, env, name, value)
     ifail("assignment to undeclared variable '" + name + "'")
 done()
 
-(* a number with the given dimension, built with the language's own
-   unit arithmetic (A/K/mol/cd never occur in the unit table) *)
-make make_qty(mag, d)
-    when dim_equal(d, dim_zero())
-        done(mag)
-    done()
-    done(mag * (1kg ** d.kg) * (1m ** d.m) * (1s ** d.s) * (1rad ** d.rad))
-done()
-
 (* -- target shapes and arrays -- *)
 
 make shape_def(st, name)
@@ -361,7 +352,7 @@ make eval_node(st, env, idx)
         when node.op != "" and ue.suffix == ""
             ifail("LEC8026: unknown unit suffix '" + node.op + "'")
         done()
-        done(make_qty(node.num_value * ue.scale, ue.dim))
+        done(make_quantity(node.num_value * ue.to_si, ue.dimension))
     done()
     when k == "BOOL"
         done(node.bool_value)
