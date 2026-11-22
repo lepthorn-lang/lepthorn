@@ -86,6 +86,8 @@ Every language decision is checked against these seven rules:
   with units, variables, `*` and `/`, function calls). Input, shape
   fields, array items and collections are checked while running; a
   mismatch there stops the program.
+- A `use` line inside a comment is read as a real `use`: the part
+  that pulls files together does not skip comments yet.
 - Under `eval`, deep recursion stops before a depth of 10000.
 - `ensure` does not lock array items or shape fields.
 - More conformance tests, especially error paths.
@@ -154,6 +156,12 @@ Covers:
     - Error-code naming: `LEC` for compiler errors and `LER` for
       runtime and real-time errors. Today runtime errors use
       `LEC80xx`.
+18. `use` lines are found only outside comments, so a comment that
+    talks about `use "file.lep"` never pulls in a file.
+19. Tests written in the code itself, the way Rust has `#[test]` and
+    `assert_eq!`: a way to name a test and check a value inside a
+    `.lep` file (for example `expect add(2kg, 3kg) == 5kg`), run by
+    `lepthornc test`. Then most tests need no `.out` file.
 
 ### Phase 1
 *Units, dimensions, and quantities complete: unit awareness everywhere*
@@ -167,8 +175,10 @@ Covers:
 3. Quantities.
 4. Arithmetic and unit algebra.
 5. Unit mismatches found before the program runs through compile-time
-   validation. Done for numbers with units, variables, `*` and `/`,
-   and function calls; still to do for shape fields, array items and
+   validation (`src/core/ctv/checker.lep`). Done for numbers with
+   units, variables, `*` and `/`, and function calls. Still to do:
+   array items (an array of lengths keeps the unit of its items) and
+   shape fields (a field keeps the unit it was built with), then
    input.
 6. A unit mismatch found while running stops the program instead of
    continuing with the value 0. Done.
