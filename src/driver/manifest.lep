@@ -388,7 +388,9 @@ make mf_handle_line(st, entries, line, lineno)
         mf_fail(lineno, key + " is set twice")
     done()
     ensure is_list = drv_starts_with(raw, "[")
-    when is_list != mf_word_in(key, "authors libraries")
+    (* `tests` takes one folder or file, or a list of them *)
+    ensure takes_both = key == "tests"
+    when not takes_both and is_list != mf_word_in(key, "authors libraries")
         when is_list
             mf_fail(lineno, key + " takes quoted text, not a list")
         done()
@@ -576,6 +578,20 @@ make mf_check_unique(m, block, key)
     done()
 done()
 
+(* every folder or file in `tests` must be relative to the project root *)
+make mf_check_test_paths(m)
+    ensure items = mf_items(mf_get(m, "test", 0, "tests"))
+    repeat
+        when ring::is_empty(items)
+            stop
+        done()
+        ensure path = ring::get(items)
+        when drv_starts_with(path, "/") or drv_starts_with(path, "~")
+            mf_fail(mf_line(m, "test", 0, "tests"), "tests must be relative to the project root, got " + path)
+        done()
+    done()
+done()
+
 (* SPDX license expression syntax: ids joined by AND / OR, an id WITH an
    exception, parentheses. Ids are not checked against the SPDX list. *)
 make mf_spdx_ok(expr)
@@ -691,7 +707,7 @@ make mf_validate(m)
     when mf_count(m, "test") > 1
         mf_fail(mf_line(m, "test", 1, ""), "only one [Test] section")
     done()
-    mf_check_path(m, "test", 0, "tests", false)
+    mf_check_test_paths(m)
     t = 0
     repeat
         when t >= mf_count(m, "profile")

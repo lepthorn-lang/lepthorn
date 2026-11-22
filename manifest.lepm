@@ -12,14 +12,14 @@
     kind   = "bin"
     source = "src/main.lep"
 
-(* Tests can include specific files too:
+(* Tests: one folder or file, or a list of them:
    tests = "tests/"
-   tests = "tests/parser.lep"
-   tests = "tests/units.lep"
+   tests = ["tests/", "examples/"]
+   tests = ["tests/parser.lep", "tests/units.lep"]
 *)
 
 [Test]
-    tests = "tests/"
+    tests = ["tests/", "examples/"]
 
 [Profile]
     name         = "debug"

@@ -1056,32 +1056,69 @@ shape TestCase
 done()
 
 (* [Test] tests = "dir/", default tests/ *)
-make drv_test_root(m)
-    ensure root = mf_get(m, "test", 0, "tests")
-    when root == ""
+(* the folders and files named by `tests` in manifest.lepm, one per
+   line; "tests" when the manifest names none *)
+make drv_test_roots(m)
+    ensure roots = mf_get(m, "test", 0, "tests")
+    when roots == ""
         done("tests")
     done()
-    done(root)
+    done(roots)
 done()
 
+(* every test program: each .lep file in a folder of `tests`, or a .lep
+   file named there. Tests of the first entry keep their plain name
+   (units_tests); the others get their folder in front
+   (examples/01_hello_text), so two tests never share a name. *)
 make drv_test_cases(m)
     ensure cases = ring::create(8192)
-    ensure root = drv_test_root(m)
-    when not sys::is_dir(root)
-        show "lepthornc: test directory " + root + " does not exist"
-        sys::exit(2)
-    done()
-    ensure entries = sys::list_dir(root)
+    ensure roots = mf_items(drv_test_roots(m))
+    suppose first = true
     repeat
-        when ring::is_empty(entries)
+        when ring::is_empty(roots)
             stop
         done()
-        ensure entry = ring::get(entries)
-        when drv_ends_with(entry, ".lep")
-            ring::write(cases, TestCase(name = drv_strip_ext(entry), src = drv_concat(root, entry)))
-        done()
+        drv_add_test_cases(cases, ring::get(roots), first)
+        first = false
     done()
     done(cases)
+done()
+
+make drv_add_test_cases(cases, root, first)
+    when drv_ends_with(root, ".lep")
+        when not file::exists(root)
+            show "lepthornc: test file " + root + " does not exist"
+            sys::exit(2)
+        done()
+        ring::write(cases, TestCase(name = drv_strip_ext(root), src = root))
+    otherwise
+        when not sys::is_dir(root)
+            show "lepthornc: test directory " + root + " does not exist"
+            sys::exit(2)
+        done()
+        ensure entries = sys::list_dir(root)
+        repeat
+            when ring::is_empty(entries)
+                stop
+            done()
+            ensure entry = ring::get(entries)
+            when drv_ends_with(entry, ".lep")
+                suppose name = drv_strip_ext(entry)
+                when not first
+                    name = drv_test_folder_name(root) + "/" + name
+                done()
+                ring::write(cases, TestCase(name = name, src = drv_concat(root, entry)))
+            done()
+        done()
+    done()
+done()
+
+(* "examples/" -> "examples" *)
+make drv_test_folder_name(root)
+    when drv_ends_with(root, "/")
+        done(text::slice(root, 0, text::length(root) - 1))
+    done()
+    done(root)
 done()
 
 make drv_dots(name, width)
@@ -1185,6 +1222,26 @@ done()
 
 (* -- resolve on a project: what manifest.lepm means on this machine -- *)
 
+(* one line per entry of `tests`: tests/ (25 files) *)
+make drv_show_tests(m)
+    ensure roots = mf_items(drv_test_roots(m))
+    repeat
+        when ring::is_empty(roots)
+            stop
+        done()
+        ensure root = ring::get(roots)
+        when drv_ends_with(root, ".lep") and file::exists(root)
+            show "tests: " + root
+        otherwise when sys::is_dir(root)
+            ensure cases = ring::create(8192)
+            drv_add_test_cases(cases, root, true)
+            show "tests: " + root + " (" + text::from_number(ring::size(cases)) + " files)"
+        otherwise
+            show "tests: " + root + " (missing)"
+        done()
+    done()
+done()
+
 make drv_show_field(label, value)
     when value != ""
         show label + ": " + value
@@ -1235,12 +1292,7 @@ make drv_cmd_resolve_project()
         show "target: " + mf_get(m, "target", t, "name") + " (" + mf_get(m, "target", t, "kind") + ") " + mf_get(m, "target", t, "source")
         t = t + 1
     done()
-    ensure root = drv_test_root(m)
-    when sys::is_dir(root)
-        show "tests: " + root + " (" + text::from_number(ring::size(drv_test_cases(m))) + " files)"
-    otherwise
-        show "tests: " + root + " (missing)"
-    done()
+    drv_show_tests(m)
     t = 0
     repeat
         when t >= mf_count(m, "profile")

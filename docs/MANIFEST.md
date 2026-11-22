@@ -63,7 +63,7 @@ targets cannot have the same name.
 
 | Key | Meaning |
 |---|---|
-| `tests` | the directory whose `.lep` files are the tests; default `"tests/"` |
+| `tests` | a folder whose `.lep` files are the tests, a single `.lep` file, or a list of them, e.g. `["tests/", "examples/"]`; default `"tests/"` |
 
 ### [Profile] (any number)
 
