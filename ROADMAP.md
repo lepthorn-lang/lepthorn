@@ -82,9 +82,10 @@ Every language decision is checked against these seven rules:
   glibc 2.43, and musl 1.2.5.
 - `parallel` has no OS threads in compiled programs;
   `watch` and `interrupt` run their body once.
-- Unit mismatches, for example `2kg + 3m`, are found while the
-  program runs, not before. The program prints an error but keeps
-  running with the value 0 and exits with status 0.
+- Units are checked before running where they can be known (numbers
+  with units, variables, `*` and `/`, function calls). Input, shape
+  fields, array items and collections are checked while running; a
+  mismatch there stops the program.
 - Under `eval`, deep recursion stops before a depth of 10000.
 - `ensure` does not lock array items or shape fields.
 - More conformance tests, especially error paths.
@@ -166,11 +167,13 @@ Covers:
 3. Quantities.
 4. Arithmetic and unit algebra.
 5. Unit mismatches found before the program runs through compile-time
-   validation.
+   validation. Done for numbers with units, variables, `*` and `/`,
+   and function calls; still to do for shape fields, array items and
+   input.
 6. A unit mismatch found while running stops the program instead of
-   continuing with the value 0.
-7. Comparisons check units. For example, `1kg < 2m` is an error;
-   today it returns true.
+   continuing with the value 0. Done.
+7. Comparisons check units. For example, `1kg < 2m` is an error.
+   Done.
 8. Units are checked everywhere a value goes: function parameters and
    return values, array items, shape fields, `take` and `read` input,
    `choose`, `every`, and `loop_hz`.

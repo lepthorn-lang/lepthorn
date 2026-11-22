@@ -45,10 +45,10 @@ changes to `ensure` values, unknown functions, wrong numbers of
 arguments, `stop`/`next` outside a loop, and unprotected changes to
 shared values inside `parallel`. While the program runs, wrong kinds of
 values, array indexes out of range, division by zero and bad units in
-physics functions stop the program with an error. Two unit mistakes are
-reported but do not stop the program yet: `+`, `-` or `%` with
-different units (`LEC8025`) and an exponent with a unit (`LEC8027`);
-the result is 0.
+physics functions stop the program with an error. So do unit mistakes:
+`+`, `-`, `%` or a comparison with different units (`LEC8025`) and an
+exponent with a unit (`LEC8027`). Most unit mistakes are found before
+the program runs, as described in [SPEC.md](SPEC.md).
 
 ## Memory safety
 

@@ -74,9 +74,14 @@ no literal uses them yet.
   whole number: `(3m) ** 2` is `9 m²`.
 - Comparisons need the same unit on both sides.
 
-If `+`, `-` or `%` get different units, the program prints `LEC8025`,
-uses 0 as the result, and goes on. This check happens while the program
-runs. It is not done before.
+Unit mistakes are found **before the program runs** wherever the
+units can be known: from numbers written with a unit, through
+variables, through `*` and `/`, and through function calls (a call
+such as `add(2kg, 3m)` checks `add` with those units, and the call has
+the unit of its `done(value)`). A variable also keeps the unit of its
+first value. Where a unit cannot be known before running (input, shape
+fields, array items, collections), the program checks it while running
+and **stops** with `LEC8025`.
 
 ### Numbers used as whole numbers
 

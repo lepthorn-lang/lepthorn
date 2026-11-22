@@ -242,6 +242,7 @@ passes.
 
 | Rule | Example that is rejected |
 |---|---|
+| Units must match (see below) | `2kg + 3m`, `1kg < 2m` |
 | Every name must be declared | `show speed` with no `speed` |
 | An `ensure` value cannot change | `ensure limit = 2m` then `limit = 3m` |
 | A function must exist and get the right number of arguments | `p_control(1, 2)` when it takes 3 |
@@ -259,11 +260,34 @@ r1.lep:2: LEC3001: cannot reassign 'limit' - declared with ensure (immutable)
     limit = 3m
 ```
 
-**Not checked yet: units.** `2kg + 3m` passes the checker. It is caught
-only while running (`LEC8025`), and then the program goes on with 0.
-Phase 1 adds *dimension inference* here: the checker will follow units
-from the numbers through every expression, so this becomes a checker
-error.
+**Units** are checked by a second file, `src/core/ctv/checker.lep`.
+It follows units from the numbers written with a unit (`25kg`) through
+variables (a variable keeps the unit of its first value), through
+`*` and `/`, and through calls. Then `+`, `-`, `%` and `<` `>` `<=` `>=` must have the
+same unit on both sides, and a new value for a variable must keep its
+unit:
+
+| Program | Checker error |
+|---|---|
+| `ensure d = 2kg + 3m` | `` `+` needs the same unit on both sides, got kg and m `` |
+| `show 1kg < 2m` | `` `<` needs the same unit on both sides, got kg and m `` |
+| `suppose speed = 2m / 1s` then `speed = 5kg` | `'speed' holds m/s, it cannot take a value in kg` |
+| `make add(a, b)` ... `show add(2kg, 3m)` | ``in this call to 'add': `+` needs the same unit on both sides, got kg and m`` |
+
+**Calls.** When a call gives some arguments with known units, the
+checker checks the function's body again with each parameter set to
+its argument's unit. An error found inside is shown at the call, where
+the wrong units were given. The units of `done(value)` become the unit
+of the call, so `ensure v = speed(10m, 2s)` makes `v` a speed. Each
+function and set of argument units is checked once and remembered
+(`done_calls`). A function that calls itself is not checked again
+while it is being checked (`calling`).
+
+Where a unit cannot be known before running (input, shape fields,
+array items, collections, the parameters of a function no call gives
+units to) nothing is reported, so a correct program is never rejected.
+The run-time check then catches a real mismatch and stops the program
+with `LEC8025`.
 
 ## 5a. Interpreter: run the tree now
 
@@ -481,8 +505,7 @@ in the next round.
 
 | Missing today | Stage it changes | Phase |
 |---|---|---|
-| Unit errors found before running (`2kg + 3m`, `1kg < 2m`) | 4 CTV: dimension inference | 1 |
-| A unit error while running must stop the program | runtime (`cg_rt_ops`) and interpreter | 1 |
+| Units of shape fields, array items and input known before running | 4 CTV: `checker.lep` | 1 |
 | No unit data at run time when it is known | 5b code generator: plain doubles after the check | 1 |
 | Memory is never given back | runtime allocator, regions | 2A |
 | `parallel` on real threads; measured loop timing | runtime timing and threads | 2C |

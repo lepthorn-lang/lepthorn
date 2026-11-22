@@ -16,8 +16,6 @@ A few do not stop the program:
 
 | Code | Printed on | What happens |
 |---|---|---|
-| `LEC8025` | standard output | the result is 0 and the program goes on |
-| `LEC8027` | standard output | the result is 0 and the program goes on |
 | `LEC8016`, `LEC8017` | standard error | a warning; the program goes on |
 | `LEC8001`-`LEC8012` | nothing | returned by `file::error()` |
 
@@ -100,16 +98,18 @@ lepthorn: warning: LEC8017 Timeout Expired
 
 ### LEC8025: unit mismatch
 
-`+`, `-` or `%` got values with different units. The result is 0 and
-the program goes on.
+`+`, `-`, `%` or a comparison (`<`, `>`, `<=`, `>=`) got values with
+different units while the program runs. The program stops. When the
+units are known before running, the checker reports the mistake first
+(`LEC3001`) and the program does not start.
 
 ```lepthorn
-show 1kg + 1m
+ensure values = [1kg, 1m]
+show values[0] + values[1]
 ```
 
 ```text
-LEC8025: runtime error: dimension mismatch in +
-0
+lepthorn: runtime error: LEC8025: dimension mismatch in `+`: kg and m
 ```
 
 ### LEC8026: unknown unit
@@ -127,11 +127,10 @@ When `take` reads an unknown unit, the program stops with
 
 ### LEC8027: exponent with a unit
 
-The right side of `**` has a unit. The result is 0 and the program goes
-on.
+The right side of `**` has a unit. The program stops.
 
 ```text
-LEC8027: runtime error: exponent must be dimensionless
+lepthorn: runtime error: LEC8027: the exponent of `**` must be a plain number, got kg
 ```
 
 ### LEC8029: choose label does not fit the value

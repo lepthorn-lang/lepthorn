@@ -203,24 +203,64 @@ Rules:
   raised to a whole number: `(2m) ** 2` is `4 m²`.
 - Comparisons need both sides to have the same unit.
 
-**Unit mistakes are found while the program runs, not before.** When
-`+`, `-` or `%` get different units, the program prints `LEC8025`, uses
-0 as the result, and keeps going:
+Unit mistakes are found **before the program runs** wherever the
+units can be known: from numbers written with a unit, through
+variables, through `*` and `/`, and through function calls (a call
+such as `add(2kg, 3m)` checks `add` with those units, and the call has
+the unit of its `done(value)`). A variable also keeps the unit of its
+first value. Where a unit cannot be known before running (input, shape
+fields, array items, collections), the program checks it while running
+and **stops** with `LEC8025`.
 
 ```lepthorn
 ensure a = 5kg
 ensure b = 3m
 suppose c = a + b
-show "c:" c
 ```
 
 ```text
-LEC8025: runtime error: dimension mismatch in +
-c: 0
+file.lep:3: LEC3001: `+` needs the same unit on both sides, got kg and m
+    suppose c = a + b
 ```
 
-An exponent with a unit (`2 ** 1m`) gives `LEC8027` and works the same
-way. Checking units before the program runs is not done yet.
+```lepthorn
+suppose speed = 2m / 1s
+speed = 5kg
+```
+
+```text
+file.lep:2: LEC3001: 'speed' holds m/s, it cannot take a value in kg
+    speed = 5kg
+```
+
+A mistake inside a function is shown at the call that gives the wrong
+units:
+
+```lepthorn
+make add(a, b)
+    done(a + b)
+done()
+show add(2kg, 3m)
+```
+
+```text
+file.lep:4: LEC3001: in this call to 'add': `+` needs the same unit on both sides, got kg and m
+    show add(2kg, 3m)
+```
+
+When the units are only known while running, for example in array
+items:
+
+```lepthorn
+ensure values = [2kg, 3m]
+show values[0] + values[1]
+```
+
+```text
+lepthorn: runtime error: LEC8025: dimension mismatch in `+`: kg and m
+```
+
+An exponent with a unit (`2 ** 1kg`) stops the program with `LEC8027`.
 
 How units are printed is described in [DATATYPES.md](DATATYPES.md).
 
