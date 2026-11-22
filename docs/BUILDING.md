@@ -87,7 +87,7 @@ step fails. Errors in the compiler's source look like errors in any
 program, with the file and line:
 
 ```text
-src/core/ctv/ctv.lep:250: LEC2001: a statement cannot start with '+'
+src/core/ctv/ctv.lep:250: LEC2004: a statement cannot start with '+'
     ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'") +
 lepthornc: compilation failed
 error: stage 1 failed: /home/you/.local/bin/lepthornc could not build this source (errors above)

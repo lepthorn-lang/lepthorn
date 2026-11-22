@@ -216,7 +216,7 @@ Other things the parser does:
   declarations.
 - On a syntax error it makes a `PARSE_ERROR` node, moves one token
   forward and goes on, so it never loops forever. Any `PARSE_ERROR`
-  stops the build with `LEC2001`.
+  stops the build with a `LEC2xxx` error.
 
 Node kinds in use: `NUM BOOL TEXT VAR BINOP UNARY CALL FIELD_ACCESS
 INDEX_ACCESS SHAPE_CONSTRUCT ARRAY_LITERAL ENSURE_STMT SUPPOSE_STMT
@@ -256,7 +256,7 @@ Errors are printed like this, with the file and line found through the
 `use` markers:
 
 ```text
-r1.lep:2: LEC3001: cannot reassign 'limit' - declared with ensure (immutable)
+r1.lep:2: LEC3003: cannot reassign 'limit' - declared with ensure (immutable)
     limit = 3m
 ```
 
@@ -287,7 +287,18 @@ Where a unit cannot be known before running (input, shape fields,
 array items, collections, the parameters of a function no call gives
 units to) nothing is reported, so a correct program is never rejected.
 The run-time check then catches a real mismatch and stops the program
-with `LEC8025`.
+with `LER2001`.
+
+### Errors
+
+Every error message and its code are in one place, `src/core/errors/`
+(see [ERRORS.md](ERRORS.md)). The lexer, parser, checker and code
+generator ask for an error by name (`error_line("unit_mismatch", [op,
+a, b])`). The run-time code asks for the same messages when it is
+written (`rt_error`), with each `{n}` turned into a printf format, so
+the interpreter and a compiled program always print the same text.
+`LEC` codes are found before the program runs, `LER` codes while it
+runs.
 
 ## 5a. Interpreter: run the tree now
 

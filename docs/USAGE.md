@@ -91,9 +91,9 @@ src/physics/drag.lep:14: LEC3001: undeclared variable 'area'
 ```
 
 Every error in the program is printed, not only the first, and nothing
-runs. The codes are explained in [errors/](errors/). Errors while the
-program runs (`LEC8xxx`) are printed as
-`lepthorn: runtime error: <message>`.
+runs. The codes are explained in [ERRORS.md](ERRORS.md) and by
+`lepthornc explain CODE`. Errors while the program runs (`LERxxxx`)
+are printed as `lepthorn: runtime error: CODE: <message>`.
 
 ## How units are printed
 

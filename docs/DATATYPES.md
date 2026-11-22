@@ -81,7 +81,7 @@ such as `add(2kg, 3m)` checks `add` with those units, and the call has
 the unit of its `done(value)`). A variable also keeps the unit of its
 first value. Where a unit cannot be known before running (input, shape
 fields, array items, collections), the program checks it while running
-and **stops** with `LEC8025`.
+and **stops** with `LER2001`.
 
 ### Numbers used as whole numbers
 
@@ -150,7 +150,7 @@ show masses length(masses)
 [10 kg, 25 kg, 5 kg] 3
 ```
 
-- Indexes start at 0. A wrong index stops the program with `LEC8013`.
+- Indexes start at 0. A wrong index stops the program with `LER3002`.
 - The items can be of any kind, and of different kinds.
 - An array is shared, not copied: a function that changes an item of
   an array it was given changes the caller's array.

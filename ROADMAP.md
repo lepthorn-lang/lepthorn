@@ -153,9 +153,9 @@ Covers:
       and sized types (`i32`, `u8`, `f64`) needed for FFI.
     - Whether function parameters can name their kind, for example
       `mass: Mass`, or whether the checker infers it.
-    - Error-code naming: `LEC` for compiler errors and `LER` for
-      runtime and real-time errors. Today runtime errors use
-      `LEC80xx`.
+    - Error-code naming: `LEC` for errors found before the program
+      runs and `LER` for errors while it runs. Done: every error is
+      in `src/core/errors/`, and `lepthornc explain CODE` shows it.
 18. `use` lines are found only outside comments, so a comment that
     talks about `use "file.lep"` never pulls in a file.
 19. Tests written in the code itself, the way Rust has `#[test]` and
@@ -279,7 +279,7 @@ Covers:
    action: safe_stop
    ```
 8. A missed deadline becomes a `DEADLINE_MISSED` error. Today it is
-   only a warning, `LEC8016`. The check happens right after the loop
+   only a warning, `LER6001`. The check happens right after the loop
    body ends and before the next release point, using a monotonic
    clock. A miss runs the nearest `on error` handler; it never
    continues silently. Build the recovery grammar only after its

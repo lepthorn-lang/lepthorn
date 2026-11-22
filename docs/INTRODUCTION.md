@@ -46,8 +46,8 @@ arguments, `stop`/`next` outside a loop, and unprotected changes to
 shared values inside `parallel`. While the program runs, wrong kinds of
 values, array indexes out of range, division by zero and bad units in
 physics functions stop the program with an error. So do unit mistakes:
-`+`, `-`, `%` or a comparison with different units (`LEC8025`) and an
-exponent with a unit (`LEC8027`). Most unit mistakes are found before
+`+`, `-`, `%` or a comparison with different units (`LER2001`) and an
+exponent with a unit (`LER2002`). Most unit mistakes are found before
 the program runs, as described in [SPEC.md](SPEC.md).
 
 ## Memory safety
@@ -267,5 +267,5 @@ software. It is for systems where:
 - [DATATYPES_SPEC.md](DATATYPES_SPEC.md): the planned type system
 - [ARCHITECTURE.md](ARCHITECTURE.md): how the compiler works
 - [METHODOLOGY.md](METHODOLOGY.md): how features are added
-- [errors/](errors/): every error code
+- [ERRORS.md](ERRORS.md): every error code
 - `examples/`: programs you can run

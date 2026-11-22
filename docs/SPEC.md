@@ -109,14 +109,13 @@ speed += 3mps
   an `ensure` array and the fields of an `ensure` shape can still be
   changed: with `ensure p = Point(...)`, `p.x = 1m` is allowed.
 
-These mistakes stop the program before it runs (`LEC3001`):
+These mistakes stop the program before it runs (`LEC3001`-`LEC3003`):
 
 - using a name that was never declared,
 - assigning to a name that was never declared,
 - assigning to an `ensure` variable.
 
-The full list of checks made before running is in
-[errors/verifier.md](errors/verifier.md).
+Every error, with its code, is described in [ERRORS.md](ERRORS.md).
 
 ### Block declarations
 
@@ -166,7 +165,7 @@ but every function can use the variable. `shared ensure!` and
 
 Inside a `parallel` block, a `shared suppose` variable may only be
 changed inside `atomic`. Otherwise the verifier stops the program
-(`LEC3001`).
+(`LEC3008`).
 
 ## 4. Numbers and units
 
@@ -210,7 +209,7 @@ such as `add(2kg, 3m)` checks `add` with those units, and the call has
 the unit of its `done(value)`). A variable also keeps the unit of its
 first value. Where a unit cannot be known before running (input, shape
 fields, array items, collections), the program checks it while running
-and **stops** with `LEC8025`.
+and **stops** with `LER2001`.
 
 ```lepthorn
 ensure a = 5kg
@@ -219,7 +218,7 @@ suppose c = a + b
 ```
 
 ```text
-file.lep:3: LEC3001: `+` needs the same unit on both sides, got kg and m
+file.lep:3: LEC3101: `+` needs the same unit on both sides, got kg and m
     suppose c = a + b
 ```
 
@@ -229,7 +228,7 @@ speed = 5kg
 ```
 
 ```text
-file.lep:2: LEC3001: 'speed' holds m/s, it cannot take a value in kg
+file.lep:2: LEC3102: 'speed' holds m/s, it cannot take a value in kg
     speed = 5kg
 ```
 
@@ -244,7 +243,7 @@ show add(2kg, 3m)
 ```
 
 ```text
-file.lep:4: LEC3001: in this call to 'add': `+` needs the same unit on both sides, got kg and m
+file.lep:4: LEC3103: in this call to 'add': `+` needs the same unit on both sides, got kg and m
     show add(2kg, 3m)
 ```
 
@@ -257,10 +256,10 @@ show values[0] + values[1]
 ```
 
 ```text
-lepthorn: runtime error: LEC8025: dimension mismatch in `+`: kg and m
+lepthorn: runtime error: LER2001: dimension mismatch in `+`: kg and m
 ```
 
-An exponent with a unit (`2 ** 1kg`) stops the program with `LEC8027`.
+An exponent with a unit (`2 ** 1kg`) stops the program with `LER2002`.
 
 How units are printed is described in [DATATYPES.md](DATATYPES.md).
 
@@ -366,21 +365,21 @@ manual
 - A case ends at the next `case`, at `otherwise`, or at the final
   `done()`. There is no `done()` after each case.
 
-Checked before the program runs (`LEC3001`):
+Checked before the program runs (`LEC3014`, `LEC3015`):
 
 - all labels must be of one kind (not `case 1` and `case "b"` together),
 - the same label cannot appear twice,
-- a label must be a literal, not a name or an expression (`LEC2001`).
+- a label must be a literal, not a name or an expression (`LEC2005`).
 
 Checked when `choose` starts, for every label, before any case runs
-(`LEC8029`):
+(`LER5003`, `LER5004`):
 
 - the label must be of the same kind as the value (`choose mode` with
   a Number `mode` cannot have `case "1"`),
 - a number label must have the same unit as the value.
 
 ```text
-lepthorn: runtime error: LEC8029: `choose`: case label type mismatch - the value is Number, case label is Text
+lepthorn: runtime error: LER5003: `choose`: case label type mismatch - the value is Number, case label is Text
 ```
 
 ## 8. Loops
@@ -405,7 +404,7 @@ done()
 - `stop` leaves the innermost loop.
 - `next` skips to the next round of the innermost loop.
 - `stop` or `next` outside a loop is an error before the program runs
-  (`LEC3001`). A function body is not inside the caller's loop, so a
+  (`LEC3006`, `LEC3007`). A function body is not inside the caller's loop, so a
   function cannot `stop` the loop that called it.
 
 ### every and loop_hz
@@ -443,7 +442,7 @@ and `every 10ms` give the same timing.
 
 The frequency must be a positive frequency. A literal that is not
 (`loop_hz 0Hz`, `loop_hz 10ms`, `loop_hz 100kg`, `loop_hz 100`,
-`loop_hz(100Hz)`) is an error before the program runs (`LEC3001`).
+`loop_hz(100Hz)`) is an error before the program runs (`LEC3009`-`LEC3013`).
 Any other value is checked when the loop starts:
 
 ```text
@@ -474,7 +473,7 @@ show "factorial(5):" factorial(5)
   it as a statement is fine. Using its result as a value stops the
   program with an error.
 - A call must pass exactly as many arguments as the function has
-  parameters (`LEC3001`).
+  parameters (`LEC3005`).
 - Functions can call themselves and each other. The call depth is
   limited to 10000; going deeper stops the program.
 - There are no nested functions, no lambdas and no overloading.
@@ -516,7 +515,7 @@ show scores[1] length(scores)   (* 88 3 *)
 ```
 
 - Indexes start at 0 and must be whole numbers.
-- An index outside the array stops the program (`LEC8013`).
+- An index outside the array stops the program (`LER3002`).
 - The size is fixed. There is no push or append. Use a Queue, Stack or
   RingBuffer when the number of items changes.
 - An array can hold values of different kinds, including other arrays.
@@ -542,8 +541,9 @@ a fixed capacity, set when it is created.
 | `stack::push(s, v)`, `stack::pop(s)`, `stack::peek(s)` | add, remove, look |
 | `stack::size`, `stack::is_empty`, `stack::is_full` | count, Booleans |
 
-Adding to a full Queue or Stack stops the program (`LEC8014`). Taking
-from an empty one stops the program (`LEC8015`). A RingBuffer never
+Adding to a full Queue or Stack stops the program (`LER3008`,
+`LER3010`). Taking from an empty one stops the program (`LER3009`,
+`LER3011`, `LER3006` for a RingBuffer). A RingBuffer never
 fails on write.
 
 Lepthorn has no map, set or growable list in the language. Build one in
@@ -579,7 +579,7 @@ character such as `·` counts as 2.
 | `file::error()` | the error code of the last file call, 0 if it worked |
 
 The file functions do not stop the program when they fail. Check
-`file::error()`. The codes are in [errors/runtime.md](errors/runtime.md).
+`file::error()`. The numbers are in [ERRORS.md](ERRORS.md).
 
 ### System
 
@@ -591,7 +591,7 @@ The file functions do not stop the program when they fail. Check
 | `sys::run(command)` | runs a shell command, returns its exit status |
 | `sys::capture(command)` | runs a shell command, returns what it printed |
 | `sys::exit(code)` | ends the program with that exit status |
-| `sys::fail(reason)` | ends the program with `LEC8028: reason`, status 1 |
+| `sys::fail(reason)` | ends the program with `LER1018: reason`, status 1 |
 | `sys::error(message)` | ends the program like any runtime error: `lepthorn: runtime error: message`, status 1 |
 | `sys::cwd()`, `sys::chdir(path)` | current directory; change it (`true` if it worked) |
 | `sys::is_dir(path)`, `sys::mkdir(path)` | Booleans |
@@ -628,8 +628,8 @@ runs on one thread.
 |---|---|
 | `wait 20ms` | sleeps for that time |
 | `wait condition` | checks the Boolean again and again until it is `true` |
-| `deadline 5ms ... done()` | runs the body; if it took longer, prints a warning (`LEC8016`) |
-| `timeout 100ms ... done()` | runs the body; a `wait` inside gives up after that time with a warning (`LEC8017`) |
+| `deadline 5ms ... done()` | runs the body; if it took longer, prints a warning (`LER6001`) |
+| `timeout 100ms ... done()` | runs the body; a `wait` inside gives up after that time with a warning (`LER6002`, `LER6003`) |
 | `parallel ... done()` | runs each task in it, one after another, highest priority first (a task without `priority` counts as 0) |
 | `priority n ... done()` | a task with a priority, inside `parallel` |
 | `atomic ... done()` | runs the body; required around changes to `shared suppose` values inside `parallel` |
@@ -640,7 +640,7 @@ runs on one thread.
 The warnings look like this and do not stop the program:
 
 ```text
-lepthorn: warning: LEC8016 Deadline Missed - took 0.005s, budget 0.001s
+lepthorn: warning: LER6001: Deadline Missed - took 0.005s, budget 0.001s
 ```
 
 Real threads, and running `watch`/`interrupt` bodies on real events,
@@ -650,14 +650,15 @@ are not done yet.
 
 | Code | When | What happens |
 |---|---|---|
-| `LEC1001` | reading the source | the program does not run |
-| `LEC1002` | reading the source | a message; the line is skipped and the program still runs |
-| `LEC2001` | parsing | the program does not run |
-| `LEC3001` | checking, before running | the program does not run |
+| `LEC1xxx` | reading the source | the program does not run (`LEC1002` is only a message) |
+| `LEC2xxx` | parsing | the program does not run |
+| `LEC30xx`, `LEC31xx` | checking, before running | the program does not run |
 | `LEC7xxx` | making native code | no program is written |
-| runtime errors | while running | `lepthorn: runtime error: ...` on stderr, exit status 1 |
+| `LER1xxx`-`LER5xxx` | while running | `lepthorn: runtime error: CODE: ...` on stderr, exit status 1 |
+| `LER6xxx` | while running | `lepthorn: warning: CODE: ...`; the program goes on |
 
-Error codes are listed in [docs/errors](errors/).
+Every error is described in [ERRORS.md](ERRORS.md), and
+`lepthornc explain CODE` shows one.
 
 ## 16. Not in the language yet
 
