@@ -1,0 +1,7 @@
+(* a mismatch the checker cannot see (array items: their units are not
+   known before running) still stops the program when it runs; it never
+   goes on with a made-up value *)
+ensure values = [2kg, 3m]
+show "before"
+show values[0] + values[1]
+show "never printed"

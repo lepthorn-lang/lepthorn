@@ -1,0 +1,5 @@
+(* the same for a comparison the checker cannot see *)
+ensure values = [1kg, 2kg, 2m]
+show "same units:" values[0] < values[1]
+show values[0] < values[2]
+show "never printed"
