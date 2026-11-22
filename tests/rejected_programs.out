@@ -1,41 +1,41 @@
 stop_at_top eval: 1 check: 1
-build/test/rejected/stop_at_top.lep:2: LEC3001: `stop` used outside a loop
+build/test/rejected/stop_at_top.lep:2: LEC3006: `stop` used outside a loop
     stop
 next_in_function eval: 1 check: 1
-build/test/rejected/next_in_function.lep:2: LEC3001: `next` used outside a loop
+build/test/rejected/next_in_function.lep:2: LEC3007: `next` used outside a loop
     next
 open_comment eval: 1 check: 1
 build/test/rejected/open_comment.lep:2: LEC1001: unterminated comment
     (* never closed
 loop_hz_zero eval: 1 check: 1
-build/test/rejected/loop_hz_zero.lep:1: LEC3001: loop_hz expects a positive frequency in Hz, got 0Hz
+build/test/rejected/loop_hz_zero.lep:1: LEC3010: loop_hz expects a positive frequency in Hz, got 0Hz
     loop_hz 0Hz
 loop_hz_period eval: 1 check: 1
-build/test/rejected/loop_hz_period.lep:1: LEC3001: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
+build/test/rejected/loop_hz_period.lep:1: LEC3011: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
     loop_hz 10ms
 case_mixed eval: 1 check: 1
-build/test/rejected/case_mixed.lep:4: LEC3001: `choose`: case labels must all be the same kind - "b" is not like the first label
+build/test/rejected/case_mixed.lep:4: LEC3014: `choose`: case labels must all be the same kind - "b" is not like the first label
     case "b"
 case_twice eval: 1 check: 1
-build/test/rejected/case_twice.lep:4: LEC3001: `choose`: case 1 appears twice
+build/test/rejected/case_twice.lep:4: LEC3015: `choose`: case 1 appears twice
     case 1
 bitwise_vs_compare eval: 1 check: 1
-build/test/rejected/bitwise_vs_compare.lep:2: LEC3001: `&` needs whole numbers, but one side is true/false; & binds looser than comparisons, so write (a & b) == c
+build/test/rejected/bitwise_vs_compare.lep:2: LEC3016: `&` needs whole numbers, but one side is true/false; & binds looser than comparisons, so write (a & b) == c
     show a & 3 == 2
 unit_add eval: 1 check: 1
-build/test/rejected/unit_add.lep:1: LEC3001: `+` needs the same unit on both sides, got kg and m
+build/test/rejected/unit_add.lep:1: LEC3101: `+` needs the same unit on both sides, got kg and m
     ensure d = 2kg + 3m
 unit_compare eval: 1 check: 1
-build/test/rejected/unit_compare.lep:1: LEC3001: `<` needs the same unit on both sides, got kg and m
+build/test/rejected/unit_compare.lep:1: LEC3101: `<` needs the same unit on both sides, got kg and m
     show 1kg < 2m
 unit_assign eval: 1 check: 1
-build/test/rejected/unit_assign.lep:2: LEC3001: 'speed' holds m/s, it cannot take a value in kg
+build/test/rejected/unit_assign.lep:2: LEC3102: 'speed' holds m/s, it cannot take a value in kg
     speed = 5kg
 unit_in_call eval: 1 check: 1
-build/test/rejected/unit_in_call.lep:4: LEC3001: in this call to 'add': `+` needs the same unit on both sides, got kg and m
+build/test/rejected/unit_in_call.lep:4: LEC3103: in this call to 'add': `+` needs the same unit on both sides, got kg and m
     show add(2kg, 3m)
 unit_from_call eval: 1 check: 1
-build/test/rejected/unit_from_call.lep:5: LEC3001: `+` needs the same unit on both sides, got m/s and kg
+build/test/rejected/unit_from_call.lep:5: LEC3101: `+` needs the same unit on both sides, got m/s and kg
     show v + 1kg
 syntax_error eval: 1 check: 1
 build/test/rejected/syntax_error.lep:2: LEC2001: expected a value, found the end of the line

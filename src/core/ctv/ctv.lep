@@ -3,6 +3,7 @@
    wrong-arity checks. *)
 
 use core::ast::ast
+use core::errors
 use core::units
 use core::ctv::checker
 
@@ -245,15 +246,15 @@ make ctv_check_expr(arena, decls, sink, funcs, idx)
     ensure node = arena_get(arena, idx)
     when node.kind == "VAR"
         when not ctv_is_declared(decls, node.op)
-            ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'")
+            ctv_error(sink, node.pos, error_line("undeclared_variable", [node.op]))
         done()
     otherwise when node.kind == "FIELD_ACCESS"
         when not ctv_is_declared(decls, node.op)
-            ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'")
+            ctv_error(sink, node.pos, error_line("undeclared_variable", [node.op]))
         done()
     otherwise when node.kind == "INDEX_ACCESS"
         when not ctv_is_declared(decls, node.op)
-            ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'")
+            ctv_error(sink, node.pos, error_line("undeclared_variable", [node.op]))
         done()
         ctv_check_expr(arena, decls, sink, funcs, node.left)
     otherwise when node.kind == "SHAPE_CONSTRUCT"
@@ -279,11 +280,11 @@ make ctv_check_expr(arena, decls, sink, funcs, idx)
             ensure missing = target.name == ""
             when missing and is_builtin
             otherwise when missing
-                ctv_error(sink, node.pos, "call to undefined function '" + node.op + "'")
+                ctv_error(sink, node.pos, error_line("unknown_function", [node.op]))
             otherwise
                 ensure want = ctv_func_param_count(target)
                 when node.num_value != want
-                    ctv_error(sink, node.pos, "wrong number of arguments in call to '" + node.op + "'")
+                    ctv_error(sink, node.pos, error_line("wrong_argument_count", [node.op]))
                 done()
             done()
             ctv_check_arglist(arena, decls, sink, funcs, node.left)
@@ -313,7 +314,7 @@ make ctv_check_bitwise_side(arena, sink, node, side_idx)
         truth = o == "==" or o == "!=" or o == "<" or o == "<=" or o == ">" or o == ">=" or o == "and" or o == "or"
     done()
     when truth
-        ctv_error(sink, node.pos, "`" + node.op + "` needs whole numbers, but one side is true/false; " + node.op + " binds looser than comparisons, so write (a " + node.op + " b) == c")
+        ctv_error(sink, node.pos, error_line("bitwise_with_boolean", [node.op]))
     done()
 done()
 
@@ -341,22 +342,22 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
             ctv_check_arglist(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "FIELD_ASSIGN_STMT"
             when not ctv_is_declared(decls, node.op)
-                ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'")
+                ctv_error(sink, node.pos, error_line("undeclared_variable", [node.op]))
             done()
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "INDEX_ASSIGN_STMT"
             when not ctv_is_declared(decls, node.op)
-                ctv_error(sink, node.pos, "undeclared variable '" + node.op + "'")
+                ctv_error(sink, node.pos, error_line("undeclared_variable", [node.op]))
             done()
             ctv_check_expr(arena, decls, sink, funcs, node.left)
             ctv_check_expr(arena, decls, sink, funcs, node.right)
         otherwise when node.kind == "ASSIGN_STMT"
             when not ctv_is_declared(decls, node.op)
-                ctv_error(sink, node.pos, "assignment to undeclared variable '" + node.op + "'")
+                ctv_error(sink, node.pos, error_line("assign_undeclared", [node.op]))
             otherwise when not ctv_is_mutable(decls, node.op)
-                ctv_error(sink, node.pos, "cannot reassign '" + node.op + "' - declared with ensure (immutable)")
+                ctv_error(sink, node.pos, error_line("ensure_changed", [node.op]))
             otherwise when needs_atomic and ctv_is_shared_mutable(shared_decls, node.op)
-                ctv_error(sink, node.pos, "'" + node.op + "' is a shared suppose value, reassigned inside parallel without atomic")
+                ctv_error(sink, node.pos, error_line("shared_without_atomic", [node.op]))
             done()
             ctv_check_expr(arena, decls, sink, funcs, node.left)
         otherwise when node.kind == "SHARED_ENSURE_STMT"
@@ -422,11 +423,11 @@ make ctv_check_block(arena, decls, shared_decls, sink, funcs, start, needs_atomi
         otherwise when node.kind == "TAKE_STMT" or node.kind == "READ_STMT"
         otherwise when node.kind == "STOP_STMT"
             when not in_loop
-                ctv_error(sink, node.pos, "`stop` used outside a loop")
+                ctv_error(sink, node.pos, error_line_plain("stop_outside_loop"))
             done()
         otherwise when node.kind == "NEXT_STMT"
             when not in_loop
-                ctv_error(sink, node.pos, "`next` used outside a loop")
+                ctv_error(sink, node.pos, error_line_plain("next_outside_loop"))
             done()
         otherwise
             ctv_check_expr(arena, decls, sink, funcs, node.left)
@@ -445,9 +446,9 @@ make ctv_check_loop_hz(arena, sink, node)
         when times.kind == "NUM"
             ensure written = text::from_number(times.num_value) + times.op
             when times.op != ""
-                ctv_error(sink, node.pos, "loop_hz(n) takes a plain number of times per second, got " + written + "; write loop_hz " + written + " for a frequency with a unit")
+                ctv_error(sink, node.pos, error_line("loop_hz_paren_with_unit", [written]))
             otherwise when times.num_value <= 0
-                ctv_error(sink, node.pos, "loop_hz expects a positive frequency in Hz, got " + written)
+                ctv_error(sink, node.pos, error_line("loop_hz_not_positive", [written]))
             done()
         done()
         done(true)
@@ -456,14 +457,14 @@ make ctv_check_loop_hz(arena, sink, node)
         ensure lit = text::from_number(freq.num_value) + freq.op
         when freq.op == "Hz" or freq.op == "kHz"
             when freq.num_value <= 0
-                ctv_error(sink, node.pos, "loop_hz expects a positive frequency in Hz, got " + lit)
+                ctv_error(sink, node.pos, error_line("loop_hz_not_positive", [lit]))
             done()
         otherwise when freq.op == "s" or freq.op == "ms" or freq.op == "min" or freq.op == "h"
-            ctv_error(sink, node.pos, "loop_hz expects a frequency in Hz, got " + lit + "; for a period use every " + lit)
+            ctv_error(sink, node.pos, error_line("loop_hz_got_period", [lit]))
         otherwise when freq.op == ""
-            ctv_error(sink, node.pos, "loop_hz expects a frequency in Hz, got " + lit + "; write loop_hz " + lit + "Hz or loop_hz(" + lit + ")")
+            ctv_error(sink, node.pos, error_line("loop_hz_plain_number", [lit]))
         otherwise
-            ctv_error(sink, node.pos, "loop_hz expects a frequency in Hz, got " + lit)
+            ctv_error(sink, node.pos, error_line("loop_hz_not_frequency", [lit]))
         done()
     done()
     done(true)
@@ -483,7 +484,7 @@ make ctv_check_case_labels(arena, sink, first)
             when kind == ""
                 kind = la.kind
             otherwise when la.kind != kind
-                ctv_error(sink, la.pos, "`choose`: case labels must all be the same kind - " + ca.op + " is not like the first label")
+                ctv_error(sink, la.pos, error_line("choose_mixed_labels", [ca.op]))
             done()
             suppose b = ca.sibling
             repeat
@@ -494,7 +495,7 @@ make ctv_check_case_labels(arena, sink, first)
                 when cb.left != none_idx()
                     ensure lb = arena_get(arena, cb.left)
                     when ctv_same_label(la, lb)
-                        ctv_error(sink, lb.pos, "`choose`: case " + cb.op + " appears twice")
+                        ctv_error(sink, lb.pos, error_line("choose_label_twice", [cb.op]))
                     done()
                 done()
                 b = cb.sibling
@@ -591,7 +592,7 @@ make report_ctv_errors(sink, source)
             stop
         done()
         ensure e = ring::peek(sink, i)
-        src_error(source, e.pos, "LEC3001: " + e.message)
+        src_error(source, e.pos, e.message)
         i = i + 1
     done()
 done()

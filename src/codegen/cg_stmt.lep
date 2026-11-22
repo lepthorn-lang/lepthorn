@@ -212,7 +212,7 @@ make cg_stmt(ctx, arena, node)
             target = ctx.continue_label
         done()
         when target == ""
-            cg_fail(ctx, "LEC7001: codegen error: stop/next used outside a loop")
+            cg_fail(ctx, error_line_plain("codegen_stop_outside_loop"))
         otherwise
             cg_emit(ctx, "br label %" + target)
             ctx.terminated = true
@@ -264,7 +264,7 @@ make cg_stmt(ctx, arena, node)
         cg_choose(ctx, arena, node)
         done(true)
     done()
-    cg_fail(ctx, "LEC7001: codegen error: unsupported statement kind '" + k + "'")
+    cg_fail(ctx, error_line("unsupported_statement", [k]))
     done(false)
 done()
 

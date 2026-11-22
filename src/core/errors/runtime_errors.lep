@@ -1,0 +1,112 @@
+(* runtime_errors.lep - mistakes found while the program runs. They stop
+   the program with "lepthorn: runtime error: CODE: message".
+   Unit mistakes are in unit_errors.lep, timing in realtime_errors.lep.
+
+   LER1xxx  values and operators     LER4xxx  input
+   LER3xxx  arrays, shapes, collections, text
+   LER5xxx  functions and choose     LER9xxx  bugs in the compiler *)
+
+make add_runtime_errors(list)
+    (* values and operators *)
+    add_error(list, "LER1001", "division_by_zero", "Division by zero", "Check the divisor before dividing.")
+    add_error(list, "LER1002", "modulo_by_zero", "Modulo by zero", "Check the divisor before using %.")
+    add_error(list, "LER1003", "operands_not_quantities",
+        "`{1}` requires both operands to be quantities, got {2} and {3}",
+        "Use numbers on both sides.")
+    add_error(list, "LER1004", "operands_not_ordered",
+        "`{1}` requires both operands to be quantities or both Text, got {2} and {3}",
+        "Compare numbers with numbers, or Text with Text.")
+    add_error(list, "LER1005", "equal_kinds_differ",
+        "`==` requires both operands to be the same kind of value (both quantities of the same dimension, both Text, both Boolean, or both the same shape), got {1} and {2}",
+        "Compare values of the same kind.")
+    add_error(list, "LER1006", "equal_shapes_differ",
+        "`==` requires both operands to be the same shape; got {1} and {2}",
+        "Compare two values of the same shape.")
+    add_error(list, "LER1007", "and_needs_boolean", "`and` requires both operands to be Boolean", "Use true/false on both sides.")
+    add_error(list, "LER1008", "or_needs_boolean", "`or` requires both operands to be Boolean", "Use true/false on both sides.")
+    add_error(list, "LER1009", "not_needs_boolean", "`not` requires a Boolean operand", "Use true/false after not.")
+    add_error(list, "LER1010", "condition_not_boolean",
+        "`{1}` condition must be Boolean, got {2}",
+        "A condition must be true or false, for example x > 0.")
+    add_error(list, "LER1011", "needs_plain_number",
+        "{1} must be a dimensionless Number, got {2}",
+        "Use a number without a unit here.")
+    add_error(list, "LER1012", "bitwise_needs_whole",
+        "`{1}` requires dimensionless whole-number operands",
+        "Use whole numbers without units.")
+    add_error(list, "LER1013", "bitwise_fraction",
+        "`{1}` requires a whole-number operand, got a fractional value",
+        "Use a whole number.")
+    add_error(list, "LER1014", "wrong_kind",
+        "{1}: expected {2}, got {3}",
+        "Give a value of the kind that is expected.")
+    add_error(list, "LER1015", "out_of_memory", "out of memory", "The program used all memory.")
+    add_error(list, "LER1016", "value_never_assigned", "show: this value was never assigned", "Give the variable a value first.")
+    add_error(list, "LER1017", "unknown_value", "show: unknown value", "This is a bug in the compiler; please report it.")
+    add_error(list, "LER1018", "program_failed", "{1}", "sys::fail stopped the program with this reason.")
+
+    (* arrays, shapes, collections, text *)
+    add_error(list, "LER3001", "index_not_number", "an array index must be a dimensionless Number", "Use a whole number without a unit as an index.")
+    add_error(list, "LER3002", "index_out_of_bounds",
+        "index {1} is out of bounds for an array of length {2}",
+        "Indexes start at 0 and stop before length(array).")
+    add_error(list, "LER3003", "not_a_shape",
+        "field '{1}': expected a shape value, got {2}",
+        "Only a shape value has fields.")
+    add_error(list, "LER3004", "no_such_field", "{1}: no field '{2}'", "Check the field name.")
+    add_error(list, "LER3005", "bad_capacity",
+        "{1}: capacity must be a positive whole Number, got {2}",
+        "Give a whole number more than 0.")
+    add_error(list, "LER3006", "ring_empty", "ring::get: RingBuffer is empty", "Check ring::is_empty first.")
+    add_error(list, "LER3007", "ring_peek_out_of_bounds",
+        "ring::peek: index {1} is out of bounds for a RingBuffer holding {2} element(s)",
+        "Use an index below ring::size.")
+    add_error(list, "LER3008", "queue_full", "queue::enqueue: Queue is full", "Check queue::is_full first.")
+    add_error(list, "LER3009", "queue_empty", "{1}: Queue is empty", "Check queue::is_empty first.")
+    add_error(list, "LER3010", "stack_full", "stack::push: Stack is full", "Check stack::is_full first.")
+    add_error(list, "LER3011", "stack_empty", "{1}: Stack is empty", "Check stack::is_empty first.")
+    add_error(list, "LER3012", "char_at_out_of_bounds",
+        "text::char_at: index {1} is out of bounds for Text of length {2}",
+        "Use an index below text::length.")
+    add_error(list, "LER3013", "slice_out_of_bounds",
+        "text::slice: range [{1}, {2}) is out of bounds for Text of length {3}",
+        "Keep the range inside the Text.")
+    add_error(list, "LER3014", "text_not_a_number", "text::to_number: '{1}' is not a valid number", "Give Text that holds a number.")
+    add_error(list, "LER3015", "code_out_of_range", "text::from_code: {1} is out of range (0-255)", "Give a code from 0 to 255.")
+    add_error(list, "LER3016", "from_number_needs_number", "text::from_number: expected a Number", "Give a number.")
+    add_error(list, "LER3017", "not_an_array", "expected an Array, got {1}", "Give an array.")
+    add_error(list, "LER3020", "length_not_array", "length: expected an Array, got {1}", "length() takes an array.")
+    add_error(list, "LER3018", "run_unknown_shape", "unknown shape '{1}'", "Declare the shape first.")
+    add_error(list, "LER3019", "run_shape_missing_field",
+        "shape '{1}' construction is missing field '{2}'",
+        "Give every field when building a shape.")
+
+    (* input *)
+    add_error(list, "LER4001", "end_of_input", "end of input", "take or read found no more input.")
+    add_error(list, "LER4002", "take_not_a_number", "`take`: could not parse input '{1}'", "Type a number, with or without a unit: 40kg")
+
+    (* functions and choose *)
+    add_error(list, "LER5001", "recursion_too_deep",
+        "{1}: maximum recursion depth (10000) exceeded",
+        "A function called itself too many times; check its stop condition.")
+    add_error(list, "LER5002", "no_return_value",
+        "{1}: this function never reaches done(value) - it cannot be used as a value (call it as a bare statement instead)",
+        "End the function with done(value), or call it on its own line.")
+    add_error(list, "LER5003", "choose_label_kind",
+        "`choose`: case label type mismatch - the value is {1}, case label is {2}",
+        "Use labels of the same kind as the value.")
+    add_error(list, "LER5004", "choose_label_unit",
+        "`choose`: case label {1} has a different unit than the value {2}",
+        "Use labels with the same unit as the value.")
+    add_error(list, "LER5005", "priority_not_number", "priority must be a Number", "Give priority a number: priority 10")
+    add_error(list, "LER5006", "run_unknown_function", "unknown function {1}", "Write the function with make.")
+    add_error(list, "LER5007", "run_argument_count",
+        "{1}: expected {2} argument(s), got {3}",
+        "Give the right number of arguments.")
+    add_error(list, "LER5008", "unknown_namespace_call", "unknown namespace call {1}", "Check the name, for example text::length.")
+    add_error(list, "LER5009", "run_undefined_variable", "undefined variable '{1}'", "Declare it first.")
+    add_error(list, "LER5010", "run_assign_undeclared", "assignment to undeclared variable '{1}'", "Declare it with suppose first.")
+
+    (* bugs in the compiler itself *)
+    add_error(list, "LER9001", "unsupported_kind", "unsupported {1} '{2}'", "This is a bug in the compiler; please report it.")
+done()

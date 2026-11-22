@@ -1,2 +1,2 @@
 before
-lepthorn: runtime error: LEC8013: index 5 is out of bounds for an array of length 3
+lepthorn: runtime error: LER3002: index 5 is out of bounds for an array of length 3

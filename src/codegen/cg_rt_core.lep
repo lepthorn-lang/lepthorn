@@ -79,8 +79,8 @@ make cg_rt_core(ctx)
     rt(ctx, "@lep.dim0 = internal constant [8 x i32] zeroinitializer")
     cg_rt_chars(ctx)
     rt_str(ctx, "f_die", "lepthorn: runtime error: %s" + nl)
-    rt_str(ctx, "f_expect", "%s: expected %s, got %s")
-    rt_str(ctx, "m_oom", "out of memory")
+    rt_error(ctx, "f_expect", "wrong_kind", ["%s", "%s", "%s"])
+    rt_error_plain(ctx, "m_oom", "out_of_memory")
     rt_str(ctx, "kn_num", "Number")
     rt_str(ctx, "kn_bool", "Boolean")
     rt_str(ctx, "kn_nov", "no value")
@@ -146,4 +146,16 @@ make cg_rt_chars(ctx)
         i = i + 1
     done()
     cg_global(ctx, line + "], align 8")
+done()
+
+(* an error message for the run-time code, taken from src/core/errors/.
+   Each {n} in the message becomes the printf format in `formats` (%s,
+   %lld, ...), so a compiled program prints the same text as the
+   interpreter. *)
+make rt_error(ctx, key, name, formats)
+    rt_str(ctx, key, error_line(name, formats))
+done()
+
+make rt_error_plain(ctx, key, name)
+    rt_str(ctx, key, error_line_plain(name))
 done()

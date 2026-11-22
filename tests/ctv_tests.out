@@ -1,9 +1,9 @@
 -- CTV: undeclared variable, immutable reassignment, undefined function, wrong arity --
 line 1: LEC3001: undeclared variable 'missing_var'
     show missing_var
-line 2: LEC3001: cannot reassign 'x' - declared with ensure (immutable)
+line 2: LEC3003: cannot reassign 'x' - declared with ensure (immutable)
     x = 10
-line 1: LEC3001: call to undefined function 'ghost'
+line 1: LEC3004: call to undefined function 'ghost'
     show ghost(1, 2)
-line 4: LEC3001: wrong number of arguments in call to 'add'
+line 4: LEC3005: wrong number of arguments in call to 'add'
     show add(1, 2, 3)

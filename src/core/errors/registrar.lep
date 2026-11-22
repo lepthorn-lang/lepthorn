@@ -1,0 +1,207 @@
+(* registrar.lep - the list of every error the compiler and the
+   run-time can give.
+
+   Each error is one line in the file of its group:
+
+       add_error(list, "LEC3001", "undeclared_variable",
+           "undeclared variable '{1}'",
+           "Declare it first with ensure or suppose.")
+
+   code     LEC: found before the program runs (lexer, parser, checker,
+            code generator). LER: found while it runs.
+   name     how the compiler's own code asks for the error
+   message  what is printed; {1}, {2}, ... are filled in with values
+   help     one line on how to fix it; `lepthornc explain CODE` shows it
+
+   The groups, one file each:
+
+       lexer_errors.lep     LEC1xxx    codegen_errors.lep   LEC7xxx
+       parser_errors.lep    LEC2xxx    runtime_errors.lep   LER1xxx-LER5xxx
+       checker_errors.lep   LEC30xx    realtime_errors.lep  LER6xxx
+       unit_errors.lep      LEC31xx, LER2xxx
+
+   A code or a name used twice stops the compiler, so every error stays
+   unique. *)
+
+shape ErrorEntry
+    code: Text
+    name: Text
+    message: Text
+    help: Text
+done()
+
+(* The list of errors. It grows by itself, like the unit list. *)
+shape ErrorList
+    items: Number
+done()
+
+make add_error(list, code, name, message, help)
+    when error_index(list, "code", code) >= 0
+        sys::fail("error code " + code + " is used twice in src/core/errors/")
+    done()
+    when error_index(list, "name", name) >= 0
+        sys::fail("error name " + name + " is used twice in src/core/errors/")
+    done()
+    when ring::is_full(list.items)
+        grow_error_list(list)
+    done()
+    ring::write(list.items, ErrorEntry(code = code, name = name, message = message, help = help))
+done()
+
+make grow_error_list(list)
+    ensure old = list.items
+    ensure bigger = ring::create(ring::size(old) * 2)
+    suppose i = 0
+    repeat
+        when i >= ring::size(old)
+            stop
+        done()
+        ring::write(bigger, ring::peek(old, i))
+        i = i + 1
+    done()
+    list.items = bigger
+done()
+
+(* the place of the error whose `what` ("code" or "name") is `value`,
+   or -1 *)
+make error_index(list, what, value)
+    suppose i = 0
+    repeat
+        when i >= ring::size(list.items)
+            stop
+        done()
+        ensure e = ring::peek(list.items, i)
+        when what == "code" and e.code == value
+            done(i)
+        done()
+        when what == "name" and e.name == value
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()
+
+(* every error, one group after another *)
+make build_error_table()
+    ensure list = ErrorList(items = ring::create(64))
+    add_lexer_errors(list)
+    add_parser_errors(list)
+    add_checker_errors(list)
+    add_unit_errors(list)
+    add_codegen_errors(list)
+    add_runtime_errors(list)
+    add_realtime_errors(list)
+    done(list)
+done()
+
+(* the error with this name; a wrong name is a bug in the compiler *)
+make find_error(name)
+    ensure list = build_error_table()
+    ensure at = error_index(list, "name", name)
+    when at < 0
+        sys::fail("no error named " + name + " in src/core/errors/")
+    done()
+    done(ring::peek(list.items, at))
+done()
+
+(* the error with this code, or an entry with an empty code *)
+make find_error_code(code)
+    ensure list = build_error_table()
+    ensure at = error_index(list, "code", code)
+    when at < 0
+        done(ErrorEntry(code = "", name = "", message = "", help = ""))
+    done()
+    done(ring::peek(list.items, at))
+done()
+
+(* -- filling in {1}, {2}, ... -- *)
+
+(* `message` with each {n} replaced by values[n - 1] *)
+make fill_message(message, values)
+    suppose out = message
+    suppose i = 0
+    repeat
+        when i >= length(values)
+            stop
+        done()
+        out = replace_all(out, "{" + text::from_number(i + 1) + "}", values[i])
+        i = i + 1
+    done()
+    done(out)
+done()
+
+make replace_all(whole, part, with)
+    suppose out = ""
+    suppose i = 0
+    ensure n = text::length(part)
+    repeat
+        when i >= text::length(whole)
+            stop
+        done()
+        suppose here = false
+        when i + n <= text::length(whole)
+            here = text::slice(whole, i, i + n) == part
+        done()
+        when here
+            out = out + with
+            i = i + n
+        otherwise
+            out = out + text::char_at(whole, i)
+            i = i + 1
+        done()
+    done()
+    done(out)
+done()
+
+(* -- what the compiler's code calls -- *)
+
+(* "LEC3001: undeclared variable 'x'" *)
+make error_line(name, values)
+    ensure e = find_error(name)
+    done(e.code + ": " + fill_message(e.message, values))
+done()
+
+(* the same, for an error with no values *)
+make error_line_plain(name)
+    ensure e = find_error(name)
+    done(e.code + ": " + e.message)
+done()
+
+(* only the message, without the code *)
+make error_message(name, values)
+    ensure e = find_error(name)
+    done(fill_message(e.message, values))
+done()
+
+(* for the run-time code: each {n} becomes a printf format such as %s
+   or %lld, given in `formats`, so a compiled program prints the same
+   text as the interpreter *)
+make error_format(name, formats)
+    done(error_line(name, formats))
+done()
+
+(* "LEC3101: `+` needs ..." -> "`+` needs ...", to put one error's
+   message inside another *)
+make without_code(line)
+    ensure at = error_find_text(line, ": ")
+    when at < 0
+        done(line)
+    done()
+    done(text::slice(line, at + 2, text::length(line)))
+done()
+
+make error_find_text(whole, part)
+    ensure n = text::length(part)
+    suppose i = 0
+    repeat
+        when i + n > text::length(whole)
+            stop
+        done()
+        when text::slice(whole, i, i + n) == part
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()

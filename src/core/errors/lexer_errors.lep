@@ -1,0 +1,11 @@
+(* lexer_errors.lep - mistakes found while the text is cut into tokens.
+   LEC1xxx. *)
+
+make add_lexer_errors(list)
+    add_error(list, "LEC1001", "unclosed_comment",
+        "unterminated comment",
+        "Close every (* with a matching *).")
+    add_error(list, "LEC1002", "line_comment",
+        "'//' line comments are not supported - use (* ... *) instead",
+        "Write comments as (* ... *).")
+done()

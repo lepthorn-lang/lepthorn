@@ -1,5 +1,7 @@
 (* data_types.lep - token/cursor shapes and the lexer. No deps. *)
 
+use core::errors
+
 (* The lexer turns source text into tokens, using the text::
    primitives.
 
@@ -124,7 +126,7 @@ make skip_comment(source, j, n)
         done()
         (* past the end: lex_all turns n + 1 into an error token *)
         when k >= n
-            src_error(source, j - 2, "LEC1001: unterminated comment")
+            src_error(source, j - 2, error_line_plain("unclosed_comment"))
             done(n + 1)
         done()
         ensure c = text::char_at(source, k)
@@ -194,7 +196,7 @@ make skip_trivia(source, i, n)
                garbage tokens. *)
             when j + 1 < n
                 when text::char_at(source, j + 1) == "/"
-                    src_error(source, j, "LEC1002: '//' line comments are not supported - use (* ... *) instead")
+                    src_error(source, j, error_line_plain("line_comment"))
                     suppose k = j + 2
                     repeat
                         when k >= n

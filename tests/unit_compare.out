@@ -1,2 +1,2 @@
 same units: true
-lepthorn: runtime error: LEC8025: dimension mismatch in `<`: kg and m
+lepthorn: runtime error: LER2001: dimension mismatch in `<`: kg and m

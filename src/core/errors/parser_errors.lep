@@ -1,0 +1,20 @@
+(* parser_errors.lep - mistakes in how the program is put together
+   (its grammar). LEC2xxx. *)
+
+make add_parser_errors(list)
+    add_error(list, "LEC2001", "expected_value",
+        "expected a value, found {1}",
+        "A number, a name, text in quotes, true or false was expected here.")
+    add_error(list, "LEC2002", "input_needs_name",
+        "`take`/`read` needs a variable name",
+        "Write the name to read into: take mass")
+    add_error(list, "LEC2003", "loop_hz_needs_frequency",
+        "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz",
+        "Give the rate after loop_hz.")
+    add_error(list, "LEC2004", "bad_statement_start",
+        "a statement cannot start with '{1}'",
+        "A statement starts with a keyword (ensure, show, when, ...) or a name.")
+    add_error(list, "LEC2005", "bad_case_label",
+        "a case label must be a number, quoted Text, true or false, got '{1}'",
+        "Write the label as a literal value, not a name or an expression.")
+done()

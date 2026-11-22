@@ -151,7 +151,7 @@ make parse_primary(tok_buf, cur, arena)
     otherwise when kind == "EOF"
         found = "the end of the file"
     done()
-    node = perr(tok_buf, cur, "expected a value, found " + found)
+    node = perr(tok_buf, cur, error_line("expected_value", [found]))
     when not cur_is_empty(tok_buf, cur)
         cur_take(tok_buf, cur)
     done()
@@ -910,7 +910,7 @@ make parse_statement_at(tok_buf, cur, arena)
         cur_take(tok_buf, cur)
         name_tok = cur_take(tok_buf, cur)
         when name_tok.kind != "IDENT"
-            node = perr(tok_buf, cur, "`take`/`read` needs a variable name")
+            node = perr(tok_buf, cur, error_line_plain("input_needs_name"))
             done(arena_add(arena, node))
         done()
         node = mk_node(kind + "_STMT", 0, false, name_tok.value, 0, 0)
@@ -949,7 +949,7 @@ make parse_statement_at(tok_buf, cur, arena)
         when token_kind(tok_buf, cur) == "NEWLINE" or token_kind(tok_buf, cur) == "EOF"
             (* the body is still parsed, so this is the only error *)
             hz_form = "missing"
-            expr_idx = arena_add(arena, perr(tok_buf, cur, "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz"))
+            expr_idx = arena_add(arena, perr(tok_buf, cur, error_line_plain("loop_hz_needs_frequency")))
         done()
         when hz_form == "missing"
         otherwise when hz_form == "paren"
@@ -1104,7 +1104,7 @@ make parse_statement_at(tok_buf, cur, arena)
         done(arena_add(arena, node))
     done()
     ensure bad = cur_current(tok_buf, cur)
-    node = perr(tok_buf, cur, "a statement cannot start with '" + bad.value + "'")
+    node = perr(tok_buf, cur, error_line("bad_statement_start", [bad.value]))
     when not cur_is_empty(tok_buf, cur)
         cur_take(tok_buf, cur)
     done()
@@ -1154,7 +1154,7 @@ make parse_choose(tok_buf, cur, arena)
             when lk == "NUMBER" or lk == "STRING" or lk == "TRUE" or lk == "FALSE"
                 label_idx = parse_primary(tok_buf, cur, arena)
             otherwise
-                arena_add(arena, perr(tok_buf, cur, "a case label must be a number, quoted Text, true or false, got '" + label_text + "'"))
+                arena_add(arena, perr(tok_buf, cur, error_line("bad_case_label", [label_text])))
                 cur_take(tok_buf, cur)
             done()
             cur_take(tok_buf, cur)

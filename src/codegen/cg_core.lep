@@ -9,6 +9,7 @@
    checks kinds where an operation needs one. *)
 
 use core::ast::ast
+use core::errors
 use core::units
 use core::lang_syntax::parser
 use runtime::primitives
@@ -275,7 +276,7 @@ make cg_load_var(ctx, name)
         cg_emit(ctx, r + " = load i64, ptr @g." + name)
         done(r)
     done()
-    cg_fail(ctx, "LEC7009: codegen error: undefined variable '" + name + "'")
+    cg_fail(ctx, error_line("codegen_undefined_variable", [name]))
     done("10")
 done()
 
@@ -288,7 +289,7 @@ make cg_store_var(ctx, name, v)
         cg_emit(ctx, "store i64 " + v + ", ptr @g." + name)
         done(true)
     done()
-    cg_fail(ctx, "LEC7009: codegen error: assignment to undeclared variable '" + name + "'")
+    cg_fail(ctx, error_line("codegen_assign_undeclared", [name]))
 done()
 
 (* returns from the current function, restoring the call-depth counter *)

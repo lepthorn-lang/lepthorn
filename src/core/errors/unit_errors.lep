@@ -1,0 +1,50 @@
+(* unit_errors.lep - unit mistakes. LEC31xx are found by the checker
+   before the program runs; LER2xxx while it runs. *)
+
+make add_unit_errors(list)
+    (* before the program runs *)
+    add_error(list, "LEC3101", "unit_mismatch",
+        "`{1}` needs the same unit on both sides, got {2} and {3}",
+        "Make both sides the same kind of quantity, or convert one of them.")
+    add_error(list, "LEC3102", "variable_unit_changed",
+        "'{1}' holds {2}, it cannot take a value in {3}",
+        "A variable keeps the unit of its first value.")
+    add_error(list, "LEC3103", "unit_error_in_call",
+        "in this call to '{1}': {2}",
+        "The units given to the function do not fit what it does with them.")
+
+    (* while the program runs *)
+    add_error(list, "LER2001", "unit_mismatch_run",
+        "dimension mismatch in `{1}`: {2} and {3}",
+        "Both sides must have the same unit.")
+    add_error(list, "LER2002", "exponent_with_unit",
+        "the exponent of `**` must be a plain number, got {1}",
+        "Write the power as a number without a unit.")
+    add_error(list, "LER2003", "fractional_power",
+        "`**`: a dimensioned base requires a whole-number exponent (fractional powers of a physical dimension are not defined)",
+        "Raise a number with a unit only to a whole power.")
+    add_error(list, "LER2004", "unknown_unit",
+        "unknown unit suffix '{1}'",
+        "Use a unit from the unit table (see examples/19_units_and_conversion.lep).")
+    add_error(list, "LER2005", "gravity_needs_mass",
+        "force::gravity: argument must have mass dimension [kg]",
+        "Give a mass, such as 10kg.")
+    add_error(list, "LER2006", "acceleration_needs_force_and_mass",
+        "force::acceleration: arguments must be a force [N] and a mass [kg]",
+        "Give a force and a mass.")
+    add_error(list, "LER2007", "velocity_needs_length_and_time",
+        "motion::velocity: arguments must be a length [m] and a time [s]",
+        "Give a distance and a time.")
+    add_error(list, "LER2008", "rotation_needs_angle",
+        "matrix::rotationZ: argument must have angle dimension [rad]",
+        "Give an angle, such as 90deg.")
+    add_error(list, "LER2009", "vector_needs_quantity",
+        "vector: expected a quantity value",
+        "Give three numbers.")
+    add_error(list, "LER2010", "period_needs_time",
+        "`{1}` requires a time (e.g. 10ms) or frequency (e.g. 100Hz) quantity",
+        "Give a time such as 10ms, or a frequency such as 100Hz.")
+    add_error(list, "LER2011", "loop_hz_bad_rate",
+        "loop_hz expects a positive frequency in Hz, got {1} (for a period, use every)",
+        "Give a rate more than 0, such as 100Hz.")
+done()

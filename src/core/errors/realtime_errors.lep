@@ -1,0 +1,14 @@
+(* realtime_errors.lep - timing. LER6xxx. Today these are warnings: the
+   program goes on. Phase 2C makes a missed deadline an error. *)
+
+make add_realtime_errors(list)
+    add_error(list, "LER6001", "deadline_missed",
+        "Deadline Missed - took {1}s, budget {2}s",
+        "The block took longer than its deadline.")
+    add_error(list, "LER6002", "timeout_expired",
+        "Timeout Expired",
+        "The wait did not end before the timeout.")
+    add_error(list, "LER6003", "timeout_expired_after",
+        "Timeout Expired - waited {1}s",
+        "The wait did not end before the timeout.")
+done()
