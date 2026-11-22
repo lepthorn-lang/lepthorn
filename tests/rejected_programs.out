@@ -22,6 +22,21 @@ build/test/rejected/case_twice.lep:4: LEC3001: `choose`: case 1 appears twice
 bitwise_vs_compare eval: 1 check: 1
 build/test/rejected/bitwise_vs_compare.lep:2: LEC3001: `&` needs whole numbers, but one side is true/false; & binds looser than comparisons, so write (a & b) == c
     show a & 3 == 2
+unit_add eval: 1 check: 1
+build/test/rejected/unit_add.lep:1: LEC3001: `+` needs the same unit on both sides, got kg and m
+    ensure d = 2kg + 3m
+unit_compare eval: 1 check: 1
+build/test/rejected/unit_compare.lep:1: LEC3001: `<` needs the same unit on both sides, got kg and m
+    show 1kg < 2m
+unit_assign eval: 1 check: 1
+build/test/rejected/unit_assign.lep:2: LEC3001: 'speed' holds m/s, it cannot take a value in kg
+    speed = 5kg
+unit_in_call eval: 1 check: 1
+build/test/rejected/unit_in_call.lep:4: LEC3001: in this call to 'add': `+` needs the same unit on both sides, got kg and m
+    show add(2kg, 3m)
+unit_from_call eval: 1 check: 1
+build/test/rejected/unit_from_call.lep:5: LEC3001: `+` needs the same unit on both sides, got m/s and kg
+    show v + 1kg
 syntax_error eval: 1 check: 1
 build/test/rejected/syntax_error.lep:2: LEC2001: expected a value, found the end of the line
     show a +

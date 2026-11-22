@@ -3,6 +3,8 @@
    wrong-arity checks. *)
 
 use core::ast::ast
+use core::units
+use core::ctv::checker
 
 shape DeclInfo
     name: Text
@@ -577,6 +579,8 @@ make ctv_check_program(arena, program_start, funcs, sink)
         ctv_check_block(arena, fn_decls, shared_decls, sink, funcs, f2.body, false, false)
         j = j + 1
     done()
+    (* units: 2kg + 3m is found here, before the program runs *)
+    dim_check_program(arena, program_start, funcs, sink)
 done()
 
 make report_ctv_errors(sink, source)

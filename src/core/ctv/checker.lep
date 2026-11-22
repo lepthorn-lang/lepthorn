@@ -1,0 +1,672 @@
+(* checker.lep - checks units before the program runs.
+
+   Every number written with a unit (25kg, 10ms) has a known dimension.
+   This pass follows those dimensions through the program:
+
+     - a variable keeps the dimension of its first value;
+     - * and / combine dimensions (m / s is a speed);
+     - + - % and the comparisons < > <= >= need the same dimension on
+       both sides, so 2kg + 3m and 1kg < 2m are errors;
+     - a new value for a variable must have the variable's dimension;
+     - a call such as add(2kg, 3m) checks the body of add again with
+       a = kg and b = m, and an error inside is shown at the call;
+       done(value) gives the dimension of the call's result.
+
+   When a dimension cannot be known here (input, a shape field, an array
+   item, a parameter of a function nobody calls with known units),
+   nothing is reported: the run-time check still catches a real
+   mismatch. So a correct program is never rejected. *)
+
+(* What is known about the dimension of one expression. *)
+shape DimInfo
+    known: Boolean
+    dimension: Dimension
+done()
+
+(* A variable and the dimension of its first value. *)
+shape DimVar
+    name: Text
+    info: DimInfo
+done()
+
+make dim_unknown()
+    done(DimInfo(known = false, dimension = dim_zero()))
+done()
+
+make dim_known(d)
+    done(DimInfo(known = true, dimension = d))
+done()
+
+(* -- dimension arithmetic -- *)
+
+(* a * b adds the exponents (sign 1); a / b subtracts them (sign -1) *)
+make dim_combine(a, b, sign)
+    ensure kg = a.kg + sign * b.kg
+    ensure m = a.m + sign * b.m
+    ensure s = a.s + sign * b.s
+    ensure amp = a.a + sign * b.a
+    ensure kelvin = a.k + sign * b.k
+    ensure mol = a.mol + sign * b.mol
+    ensure cd = a.cd + sign * b.cd
+    ensure rad = a.rad + sign * b.rad
+    done(Dimension(kg = kg, m = m, s = s, a = amp, k = kelvin, mol = mol, cd = cd, rad = rad))
+done()
+
+(* -- dimensions as text, for messages: kg, m/s, kg·m/s² -- *)
+
+(* a whole number as superscript digits: 2 -> ², 12 -> ¹² *)
+make dim_superscript(n)
+    ensure digits = text::from_number(n)
+    suppose out = ""
+    suppose i = 0
+    repeat
+        when i >= text::length(digits)
+            stop
+        done()
+        ensure c = text::char_at(digits, i)
+        when c == "0"
+            out = out + "⁰"
+        otherwise when c == "1"
+            out = out + "¹"
+        otherwise when c == "2"
+            out = out + "²"
+        otherwise when c == "3"
+            out = out + "³"
+        otherwise when c == "4"
+            out = out + "⁴"
+        otherwise when c == "5"
+            out = out + "⁵"
+        otherwise when c == "6"
+            out = out + "⁶"
+        otherwise when c == "7"
+            out = out + "⁷"
+        otherwise when c == "8"
+            out = out + "⁸"
+        otherwise
+            out = out + "⁹"
+        done()
+        i = i + 1
+    done()
+    done(out)
+done()
+
+(* one base unit with its exponent: m, s², kg³ *)
+make dim_term(name, exponent)
+    when exponent == 1
+        done(name)
+    done()
+    done(name + dim_superscript(exponent))
+done()
+
+(* adds one base unit to the top (positive exponent) or the bottom
+   (negative exponent) part of a unit; `which` says which part *)
+make dim_part(part, name, exponent, which)
+    suppose e = exponent
+    when which == "bottom"
+        e = 0 - exponent
+    done()
+    when e <= 0
+        done(part)
+    done()
+    when part == ""
+        done(dim_term(name, e))
+    done()
+    done(part + "·" + dim_term(name, e))
+done()
+
+(* the units on one side of the / sign *)
+make dim_side(d, which)
+    suppose part = ""
+    part = dim_part(part, "kg", d.kg, which)
+    part = dim_part(part, "m", d.m, which)
+    part = dim_part(part, "s", d.s, which)
+    part = dim_part(part, "A", d.a, which)
+    part = dim_part(part, "K", d.k, which)
+    part = dim_part(part, "mol", d.mol, which)
+    part = dim_part(part, "cd", d.cd, which)
+    part = dim_part(part, "rad", d.rad, which)
+    done(part)
+done()
+
+make dim_text(d)
+    when dim_equal(d, dim_zero())
+        done("a plain number")
+    done()
+    ensure top = dim_side(d, "top")
+    ensure bottom = dim_side(d, "bottom")
+    when bottom == ""
+        done(top)
+    done()
+    when top == ""
+        done("1/" + bottom)
+    done()
+    done(top + "/" + bottom)
+done()
+
+(* -- a list that grows by itself (a ring has a fixed size) -- *)
+
+shape DimList
+    items: Number
+done()
+
+make dim_list_new()
+    done(DimList(items = ring::create(16)))
+done()
+
+make dim_list_add(list, item)
+    when ring::is_full(list.items)
+        ensure old = list.items
+        ensure bigger = ring::create(ring::size(old) * 2)
+        suppose i = 0
+        repeat
+            when i >= ring::size(old)
+                stop
+            done()
+            ring::write(bigger, ring::peek(old, i))
+            i = i + 1
+        done()
+        list.items = bigger
+    done()
+    ring::write(list.items, item)
+done()
+
+make dim_list_size(list)
+    done(ring::size(list.items))
+done()
+
+make dim_list_at(list, i)
+    done(ring::peek(list.items, i))
+done()
+
+(* -- what the whole pass carries around -- *)
+
+(* arena: the program tree. units: the unit list. funcs: the program's
+   functions. errors: what was found (a DimList of CtvError).
+   calling: the functions being checked right now, written as
+   "|add|scale|", so a function that calls itself is not checked
+   forever. done_calls: calls already checked, so the same call is not
+   checked twice. *)
+shape DimCtx
+    arena: Number
+    units: Number
+    funcs: Number
+    errors: Number
+    calling: Text
+    done_calls: Number
+done()
+
+(* the same ctx, with one more function being checked *)
+make dim_ctx_calling(ctx, name, errors)
+    ensure calling = ctx.calling + "|" + name + "|"
+    done(DimCtx(arena = ctx.arena, units = ctx.units, funcs = ctx.funcs, errors = errors, calling = calling, done_calls = ctx.done_calls))
+done()
+
+(* one checked call: "add(kg, m)", its result, and its errors *)
+shape DimCall
+    key: Text
+    result: DimInfo
+    errors: Number
+done()
+
+make dim_report(ctx, pos, message)
+    dim_list_add(ctx.errors, CtvError(message = message, pos = pos))
+done()
+
+(* -- variables -- *)
+
+make dim_find_var(vars, name)
+    suppose i = dim_list_size(vars) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure v = dim_list_at(vars, i)
+        when v.name == name
+            done(v.info)
+        done()
+        i = i - 1
+    done()
+    done(dim_unknown())
+done()
+
+make dim_add_var(vars, name, info)
+    dim_list_add(vars, DimVar(name = name, info = info))
+done()
+
+(* done(value) inside a function: remember the dimension of the result.
+   When two done(value) give different dimensions, the result is not
+   known. *)
+make dim_record_return(vars, info)
+    ensure seen = dim_find_var(vars, "$seen")
+    when not seen.known
+        dim_add_var(vars, "$seen", dim_known(dim_zero()))
+        dim_add_var(vars, "$return", info)
+    otherwise
+        ensure old = dim_find_var(vars, "$return")
+        ensure both_known = old.known and info.known
+        suppose same = false
+        when both_known
+            same = dim_equal(old.dimension, info.dimension)
+        done()
+        when not same
+            dim_add_var(vars, "$return", dim_unknown())
+        done()
+    done()
+done()
+
+(* -- expressions -- *)
+
+make dim_is_same_dimension_op(op)
+    when op == "+" or op == "-" or op == "%"
+        done(true)
+    done()
+    done(op == "<" or op == ">" or op == "<=" or op == ">=")
+done()
+
+(* the dimension of an expression; reports a mismatch it finds *)
+make dim_of(ctx, vars, idx)
+    ensure node = arena_get(ctx.arena, idx)
+    when node.kind == "NUM"
+        ensure unit = lookup_unit(ctx.units, node.op)
+        when node.op != "" and unit.suffix == ""
+            done(dim_unknown())
+        done()
+        done(dim_known(unit.dim))
+    done()
+    when node.kind == "VAR"
+        done(dim_find_var(vars, node.op))
+    done()
+    when node.kind == "BINOP"
+        done(dim_of_binop(ctx, vars, node))
+    done()
+    when node.kind == "UNARY"
+        dim_of(ctx, vars, node.left)
+        done(dim_unknown())
+    done()
+    when node.kind == "CALL"
+        done(dim_of_call(ctx, vars, node))
+    done()
+    when node.kind == "INDEX_ACCESS"
+        dim_of(ctx, vars, node.left)
+        done(dim_unknown())
+    done()
+    when node.kind == "SHAPE_CONSTRUCT" or node.kind == "ARRAY_LITERAL"
+        dim_check_inits(ctx, vars, node.left)
+        done(dim_unknown())
+    done()
+    done(dim_unknown())
+done()
+
+make dim_of_binop(ctx, vars, node)
+    ensure left = dim_of(ctx, vars, node.left)
+    ensure right = dim_of(ctx, vars, node.right)
+    ensure op = node.op
+    ensure both_known = left.known and right.known
+    when not both_known
+        done(dim_unknown())
+    done()
+    when op == "*"
+        done(dim_known(dim_combine(left.dimension, right.dimension, 1)))
+    done()
+    when op == "/"
+        done(dim_known(dim_combine(left.dimension, right.dimension, 0 - 1)))
+    done()
+    when not dim_is_same_dimension_op(op)
+        done(dim_unknown())
+    done()
+    when not dim_equal(left.dimension, right.dimension)
+        ensure a = dim_text(left.dimension)
+        ensure b = dim_text(right.dimension)
+        dim_report(ctx, node.pos, "`" + op + "` needs the same unit on both sides, got " + a + " and " + b)
+        done(dim_unknown())
+    done()
+    when op == "+" or op == "-" or op == "%"
+        done(left)
+    done()
+    (* a comparison gives true or false, not a quantity *)
+    done(dim_unknown())
+done()
+
+(* call arguments and show arguments: the expressions are the chain *)
+make dim_check_args(ctx, vars, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        dim_of(ctx, vars, idx)
+        ensure node = arena_get(ctx.arena, idx)
+        idx = node.sibling
+    done()
+done()
+
+(* shape fields and array items: each chain node holds its value in .left *)
+make dim_check_inits(ctx, vars, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(ctx.arena, idx)
+        dim_of(ctx, vars, node.left)
+        idx = node.sibling
+    done()
+done()
+
+(* -- calls to the program's own functions -- *)
+
+(* the dimensions of a call's arguments, in order *)
+make dim_arg_infos(ctx, vars, start)
+    ensure infos = dim_list_new()
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        dim_list_add(infos, dim_of(ctx, vars, idx))
+        ensure node = arena_get(ctx.arena, idx)
+        idx = node.sibling
+    done()
+    done(infos)
+done()
+
+(* "add(kg, m)": the name of a check, from the function and the
+   arguments' units; ? is a unit that is not known *)
+make dim_call_key(name, infos)
+    suppose key = name + "("
+    suppose i = 0
+    repeat
+        when i >= dim_list_size(infos)
+            stop
+        done()
+        when i > 0
+            key = key + ", "
+        done()
+        ensure info = dim_list_at(infos, i)
+        when info.known
+            key = key + dim_text(info.dimension)
+        otherwise
+            key = key + "?"
+        done()
+        i = i + 1
+    done()
+    done(key + ")")
+done()
+
+make dim_any_known(infos)
+    suppose i = 0
+    repeat
+        when i >= dim_list_size(infos)
+            stop
+        done()
+        ensure info = dim_list_at(infos, i)
+        when info.known
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+(* true when "|name|" is somewhere in ctx.calling *)
+make dim_is_calling(ctx, name)
+    ensure mark = "|" + name + "|"
+    ensure n = text::length(mark)
+    ensure all = ctx.calling
+    suppose i = 0
+    repeat
+        when i + n > text::length(all)
+            stop
+        done()
+        when text::slice(all, i, i + n) == mark
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+make dim_find_call(ctx, key)
+    suppose i = 0
+    repeat
+        when i >= dim_list_size(ctx.done_calls)
+            stop
+        done()
+        ensure c = dim_list_at(ctx.done_calls, i)
+        when c.key == key
+            done(i)
+        done()
+        i = i + 1
+    done()
+    done(0 - 1)
+done()
+
+(* the dimension of a call's result. For a function of the program,
+   called with some known units, its body is checked with those units. *)
+make dim_of_call(ctx, vars, node)
+    ensure infos = dim_arg_infos(ctx, vars, node.left)
+    ensure f = ctv_func_lookup(ctx.funcs, node.op)
+    when f.name == ""
+        done(dim_unknown())
+    done()
+    when not dim_any_known(infos)
+        done(dim_unknown())
+    done()
+    when dim_is_calling(ctx, f.name)
+        done(dim_unknown())
+    done()
+    ensure key = dim_call_key(f.name, infos)
+    suppose at = dim_find_call(ctx, key)
+    when at < 0
+        dim_check_call(ctx, f, infos, key)
+        at = dim_find_call(ctx, key)
+    done()
+    ensure call = dim_list_at(ctx.done_calls, at)
+    dim_report_call_errors(ctx, node, f.name, call.errors)
+    done(call.result)
+done()
+
+(* checks a function's body with its parameters set to the call's units,
+   and keeps the result in ctx.done_calls *)
+make dim_check_call(ctx, f, infos, key)
+    ensure errors = dim_list_new()
+    ensure inner = dim_ctx_calling(ctx, f.name, errors)
+    ensure vars = dim_list_new()
+    ensure count = param_count(f.params)
+    suppose i = 0
+    repeat
+        when i >= count
+            stop
+        done()
+        suppose info = dim_unknown()
+        when i < dim_list_size(infos)
+            info = dim_list_at(infos, i)
+        done()
+        dim_add_var(vars, param_at(f.params, i), info)
+        i = i + 1
+    done()
+    dim_check_block(inner, vars, f.body)
+    ensure result = dim_find_var(vars, "$return")
+    dim_list_add(ctx.done_calls, DimCall(key = key, result = result, errors = errors))
+done()
+
+(* an error inside the called function is shown at the call, where the
+   wrong units were given *)
+make dim_report_call_errors(ctx, node, name, errors)
+    suppose i = 0
+    repeat
+        when i >= dim_list_size(errors)
+            stop
+        done()
+        ensure e = dim_list_at(errors, i)
+        dim_report(ctx, node.pos, "in this call to '" + name + "': " + e.message)
+        i = i + 1
+    done()
+done()
+
+(* -- statements -- *)
+
+(* a new value for a variable must keep the variable's dimension *)
+make dim_check_assign(ctx, vars, node)
+    ensure value = dim_of(ctx, vars, node.left)
+    ensure old = dim_find_var(vars, node.op)
+    ensure both_known = value.known and old.known
+    when both_known
+        when not dim_equal(value.dimension, old.dimension)
+            ensure a = dim_text(old.dimension)
+            ensure b = dim_text(value.dimension)
+            dim_report(ctx, node.pos, "'" + node.op + "' holds " + a + ", it cannot take a value in " + b)
+        done()
+    done()
+done()
+
+make dim_check_block(ctx, vars, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(ctx.arena, idx)
+        dim_check_statement(ctx, vars, node)
+        idx = node.sibling
+    done()
+done()
+
+make dim_check_statement(ctx, vars, node)
+    ensure k = node.kind
+    when k == "ENSURE_STMT" or k == "SUPPOSE_STMT"
+        dim_add_var(vars, node.op, dim_of(ctx, vars, node.left))
+    otherwise when k == "SHARED_ENSURE_STMT" or k == "SHARED_SUPPOSE_STMT"
+        dim_add_var(vars, node.op, dim_of(ctx, vars, node.left))
+    otherwise when k == "ASSIGN_STMT"
+        dim_check_assign(ctx, vars, node)
+    otherwise when k == "RETURN_STMT"
+        dim_record_return(vars, dim_of(ctx, vars, node.left))
+    otherwise when k == "SHOW_STMT"
+        dim_check_args(ctx, vars, node.left)
+    otherwise when dim_is_one_expression(k)
+        dim_of(ctx, vars, node.left)
+    otherwise when k == "INDEX_ASSIGN_STMT"
+        dim_of(ctx, vars, node.left)
+        dim_of(ctx, vars, node.right)
+    otherwise when k == "WHEN_STMT"
+        dim_of(ctx, vars, node.left)
+        dim_check_block(ctx, vars, node.right)
+        when node.alt != none_idx()
+            dim_check_block(ctx, vars, node.alt)
+        done()
+    otherwise when k == "CHOOSE_STMT"
+        dim_check_choose(ctx, vars, node)
+    otherwise when k == "PARALLEL_STMT"
+        dim_check_tasks(ctx, vars, node.right)
+    otherwise when dim_is_plain_block(k)
+        dim_check_block(ctx, vars, node.right)
+    otherwise when dim_is_block_with_expression(k)
+        dim_of(ctx, vars, node.left)
+        dim_check_block(ctx, vars, node.right)
+    done()
+done()
+
+(* statements that are only one expression, kept in .left *)
+make dim_is_one_expression(k)
+    when k == "FIELD_ASSIGN_STMT" or k == "EXPR_STMT"
+        done(true)
+    done()
+    done(k == "WAIT_STMT")
+done()
+
+(* blocks with no expression of their own *)
+make dim_is_plain_block(k)
+    when k == "DECL_BLOCK_STMT" or k == "REPEAT_FOREVER_STMT"
+        done(true)
+    done()
+    done(k == "ATOMIC_STMT" or k == "INTERRUPT_STMT")
+done()
+
+(* blocks with one expression in .left *)
+make dim_is_block_with_expression(k)
+    when k == "REPEAT_UNTIL_STMT" or k == "REPEAT_COUNT_STMT"
+        done(true)
+    done()
+    when k == "LOOP_HZ_STMT" or k == "EVERY_STMT"
+        done(true)
+    done()
+    when k == "DEADLINE_STMT" or k == "TIMEOUT_STMT" or k == "WATCH_STMT"
+        done(true)
+    done()
+    done(false)
+done()
+
+make dim_check_choose(ctx, vars, node)
+    dim_of(ctx, vars, node.left)
+    suppose case_idx = node.right
+    repeat
+        when case_idx == none_idx()
+            stop
+        done()
+        ensure case_node = arena_get(ctx.arena, case_idx)
+        dim_check_block(ctx, vars, case_node.right)
+        case_idx = case_node.sibling
+    done()
+    when node.alt != none_idx()
+        dim_check_block(ctx, vars, node.alt)
+    done()
+done()
+
+make dim_check_tasks(ctx, vars, start)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure task = arena_get(ctx.arena, idx)
+        dim_of(ctx, vars, task.left)
+        dim_check_block(ctx, vars, task.right)
+        idx = task.sibling
+    done()
+done()
+
+(* -- the whole program -- *)
+
+(* an error is kept once, even when two checks find it *)
+make dim_already_in(sink, e)
+    suppose i = 0
+    repeat
+        when i >= ring::size(sink)
+            stop
+        done()
+        ensure old = ring::peek(sink, i)
+        when old.pos == e.pos and old.message == e.message
+            done(true)
+        done()
+        i = i + 1
+    done()
+    done(false)
+done()
+
+(* the top level first, then each function on its own (its parameters'
+   units not known); then the errors go into the checker's list *)
+make dim_check_program(arena, program_start, funcs, sink)
+    ensure ctx = DimCtx(arena = arena, units = build_unit_table(), funcs = funcs, errors = dim_list_new(), calling = "", done_calls = dim_list_new())
+    dim_check_block(ctx, dim_list_new(), program_start)
+    suppose i = 0
+    repeat
+        when i >= ring::size(funcs)
+            stop
+        done()
+        ensure f = ring::peek(funcs, i)
+        dim_check_block(dim_ctx_calling(ctx, f.name, ctx.errors), dim_list_new(), f.body)
+        i = i + 1
+    done()
+    suppose j = 0
+    repeat
+        when j >= dim_list_size(ctx.errors)
+            stop
+        done()
+        ensure e = dim_list_at(ctx.errors, j)
+        when not dim_already_in(sink, e)
+            ring::write(sink, e)
+        done()
+        j = j + 1
+    done()
+done()
