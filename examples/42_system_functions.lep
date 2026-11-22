@@ -1,0 +1,17 @@
+(* 42_system_functions.lep - sys:: functions for the program's
+   environment and for measuring time. *)
+
+(* environment variables: setenv sets one, getenv reads it *)
+show "set:" sys::setenv("ROBOT_MODE", "test")
+show "mode:" sys::getenv("ROBOT_MODE")
+show "missing is empty:" sys::getenv("NO_SUCH_VARIABLE_HERE") == ""
+
+(* sys::now() is a clock that only goes forward, in seconds. Use it to
+   measure how long something takes, not as a date. *)
+ensure start = sys::now()
+wait 20ms
+ensure took = sys::now() - start
+show "waited at least 20 ms:" took >= 0.02
+
+(* the kind of a value *)
+show "kind:" sys::kind("text") sys::kind(true) sys::kind([1, 2])

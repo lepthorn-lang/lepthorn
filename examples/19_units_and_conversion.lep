@@ -1,0 +1,42 @@
+(* 19_units_and_conversion.lep - every unit in the unit table, and how
+   units convert.
+
+   A unit is written right after a number, with no space: 25kg, 10ms.
+   Inside, every value is kept in SI units (kg, m, s, rad), so
+   different units of the same kind can be mixed freely. *)
+
+(* mass: kg, g, t (tonne) *)
+show "mass:" 1t + 500kg + 250g
+
+(* length: m, km, cm, mm *)
+show "length:" 1km + 20m + 30cm + 4mm
+
+(* time: s, ms, min, h *)
+show "time:" 1h + 2min + 3s + 400ms
+
+(* force: N, kN, MN *)
+show "force:" 2kN + 500N
+
+(* speed: mps is meters per second *)
+show "speed:" 3mps
+
+(* frequency: Hz, kHz *)
+show "frequency:" 1kHz + 50Hz
+
+(* angle: rad, deg, degree; one degree is pi / 180 rad *)
+show "right angle:" 90deg
+show "same angle:" 90degree
+
+(* * and / build new units: a length divided by a time is a speed *)
+ensure distance = 100m
+ensure time = 8s
+show "speed:" distance / time
+
+(* mass times acceleration is a force; its name (N) is shown too *)
+show "force:" 70kg * 9.81m / (1s * 1s)
+
+(* ** raises a unit to a whole power *)
+show "area:" (3m) ** 2
+
+(* a length divided by a length has no unit left: a plain number *)
+show "ratio:" 10m / 2m

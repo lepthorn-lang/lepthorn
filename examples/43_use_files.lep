@@ -1,0 +1,15 @@
+(* 43_use_files.lep - use: put functions in another file and pull it in.
+
+   A `use` line with a quoted path includes that file, relative to the
+   file that has the use line. In a project, a name path such as
+   physics::drag includes src/physics/drag/module.lep or
+   src/physics/drag.lep.
+   Each file is included once, even when several files use it, and a
+   function can be used before or after the place where it is written. *)
+
+use "lib/robot_math.lep"
+
+ensure speed = wheel_speed(0.1m, 2 / 1s)
+show "wheel speed:" speed
+
+show "stopping distance:" stopping_distance(speed, 2m / (1s * 1s))

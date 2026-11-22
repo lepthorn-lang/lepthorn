@@ -1,0 +1,50 @@
+(* 20_unit_checking.lep - how Lepthorn finds unit mistakes.
+
+   The checker follows units before the program runs: from numbers
+   with units, through variables, through * and /, and through
+   function calls. These programs would be stopped before they start:
+
+     ensure d = 2kg + 3m
+       -> `+` needs the same unit on both sides, got kg and m
+
+     show 1kg < 2m
+       -> `<` needs the same unit on both sides, got kg and m
+
+     suppose speed = 2m / 1s
+     speed = 5kg
+       -> 'speed' holds m/s, it cannot take a value in kg
+
+     make add(a, b)
+         done(a + b)
+     done()
+     show add(2kg, 3m)
+       -> in this call to 'add': `+` needs the same unit on both sides,
+          got kg and m
+
+   When a unit is only known while the program runs (array items,
+   shape fields, input), a mismatch stops the program with LEC8025.
+   The program never goes on with a made-up value.
+
+   Below is the correct version of each one. *)
+
+ensure total_mass = 2kg + 3kg
+show "total mass:" total_mass
+
+show "lighter:" 1kg < 2kg
+
+suppose speed = 2m / 1s
+speed = 5m / 1s
+show "new speed:" speed
+
+make add(a, b)
+    done(a + b)
+done()
+show "added:" add(2m, 3m)
+
+(* a function result has a unit too: here a speed *)
+make average_speed(distance, time)
+    done(distance / time)
+done()
+ensure v = average_speed(100m, 20s)
+show "average speed:" v
+show "a bit faster:" v + 1mps

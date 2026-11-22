@@ -1,0 +1,30 @@
+(* 18_comments_and_lines.lep - comments, line breaks and long lines.
+
+   This is a comment. It starts with (* and ends with *).
+   It can cover many lines. *)
+
+(* Comments can be nested: (* this inner comment *) does not end the
+   outer one. So you can comment out code that has its own comments. *)
+
+(* A new line ends a statement. There are no semicolons. *)
+ensure speed = 12mps
+show "speed:" speed
+
+(* Inside ( ) or [ ] a line break is ignored, so a long call or a long
+   list can be written over several lines. *)
+ensure masses = [
+    2kg,
+    3kg,
+    5kg
+]
+show "masses:" masses
+
+show "total:" add_three(
+    masses[0],
+    masses[1],
+    masses[2]
+)
+
+make add_three(a, b, c)
+    done(a + b + c)
+done()

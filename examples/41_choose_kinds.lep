@@ -1,0 +1,33 @@
+(* 41_choose_kinds.lep - choose with numbers that have units, with
+   Text, and with true / false.
+
+   All labels of one choose must be of the same kind, and a label
+   cannot appear twice. A number label must have the same unit as the
+   value. The first matching case runs; otherwise runs when none
+   matches. There is no done() after each case. *)
+
+ensure speed = 2mps
+choose speed
+case 1mps
+    show "slow"
+case 2mps
+    show "walking pace"
+otherwise
+    show "fast"
+done()
+
+ensure command = "stop"
+choose command
+case "go"
+    show "moving"
+case "stop"
+    show "stopped"
+done()
+
+ensure battery_low = true
+choose battery_low
+case true
+    show "go back to the charger"
+case false
+    show "keep working"
+done()

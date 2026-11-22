@@ -1,0 +1,25 @@
+(* 22_physics_engines.lep - the built-in physics and maths functions.
+
+   They check the units of what they get and stop the program if the
+   units are wrong. *)
+
+(* weight of a mass on Earth: mass * 9.80665 m/s² *)
+ensure mass = 50kg
+show "weight:" force::gravity(mass)
+
+(* acceleration from a force and a mass: force / mass *)
+show "acceleration:" force::acceleration(100N, mass)
+
+(* speed from a distance and a time: distance / time *)
+show "velocity:" motion::velocity(400m, 50s)
+
+(* a vector with three parts *)
+ensure v = vector(1m, 2m, 3m)
+show "vector:" v
+
+(* a 3 x 3 rotation matrix around the Z axis *)
+ensure r = matrix::rotationZ(90deg)
+show "rotation:" r
+
+(* the kind of any value, as Text *)
+show "kinds:" sys::kind(v) sys::kind(r) sys::kind(mass)

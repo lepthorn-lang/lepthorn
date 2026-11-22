@@ -1,0 +1,23 @@
+(* 44_sync.lep - sync, and how parallel tasks end.
+
+   A parallel block always waits until all of its tasks have ended, so
+   there is never work left running in the background. sync is a point
+   that waits for such work; because nothing runs in the background
+   today, it does nothing. It is part of the language so programs can
+   mark the place. *)
+
+shared suppose done_tasks = 0
+
+make task()
+    atomic
+        done_tasks = done_tasks + 1
+    done()
+done()
+
+parallel
+    task()
+    task()
+done()
+
+sync
+show "tasks done:" done_tasks

@@ -1,0 +1,10 @@
+(* robot_math.lep - functions used by 43_use_files.lep. This file is
+   pulled in with `use`; it is not a program of its own. *)
+
+make wheel_speed(radius, turns_per_second)
+    done(2 * 3.14159 * radius * turns_per_second)
+done()
+
+make stopping_distance(speed, deceleration)
+    done(speed * speed / (2 * deceleration))
+done()

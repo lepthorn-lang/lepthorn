@@ -1,0 +1,45 @@
+(* 21_shapes.lep - shapes: records with named fields.
+
+   A shape is declared at the top level with `shape Name`, one field
+   per line, and done(). The type after each field name is a note for
+   the reader; it is not checked. *)
+
+shape Point
+    x: Number
+    y: Number
+done()
+
+shape Robot
+    name: Text
+    mass: Number
+    position: Point
+done()
+
+(* build a shape value: every field must be given, by name *)
+suppose p = Point(x = 1m, y = 2m)
+show "point:" p
+show "x:" p.x
+
+(* change one field; the variable must be a suppose *)
+p.x = 5m
+show "moved point:" p
+
+(* a field can hold another shape *)
+ensure rover = Robot(name = "rover", mass = 12kg, position = Point(x = 0m, y = 0m))
+show "robot:" rover.name rover.mass
+
+(* only name.field works, so read the inner shape into a name first *)
+ensure where = rover.position
+show "robot x:" where.x
+
+(* two shape values are equal when every field is equal *)
+show "same point:" Point(x = 1m, y = 1m) == Point(x = 1m, y = 1m)
+
+(* shapes can go in arrays and be returned from functions *)
+make midpoint(a, b)
+    done(Point(x = (a.x + b.x) / 2, y = (a.y + b.y) / 2))
+done()
+ensure path = [Point(x = 0m, y = 0m), Point(x = 4m, y = 2m)]
+ensure first = path[0]
+ensure last = path[1]
+show "midpoint:" midpoint(first, last)
