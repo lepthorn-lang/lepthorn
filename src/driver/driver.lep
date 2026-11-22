@@ -744,6 +744,35 @@ make drv_compile_lib(src_path, libdir, name, cfg, keep_ll)
     done(true)
 done()
 
+(* explain CODE: one error, its message and how to fix it.
+   explain alone: every error, one per line. The list is
+   src/core/errors/. *)
+make drv_cmd_explain()
+    when sys::arg_count() < 3
+        ensure list = build_error_table()
+        suppose i = 0
+        repeat
+            when i >= ring::size(list.items)
+                stop
+            done()
+            ensure e = ring::peek(list.items, i)
+            show e.code + "  " + e.message
+            i = i + 1
+        done()
+        sys::exit(0)
+    done()
+    ensure code = sys::arg(2)
+    ensure e = find_error_code(code)
+    when e.code == ""
+        show "lepthornc: no error code " + code + " (run 'lepthornc explain' to see them all)"
+        sys::exit(2)
+    done()
+    show e.code + ": " + e.name
+    show "message: " + e.message
+    show "fix:     " + e.help
+    sys::exit(0)
+done()
+
 make drv_usage()
     show "lepthornc - the Lepthorn compiler"
     show ""
@@ -757,6 +786,7 @@ make drv_usage()
     show "  lepthornc test [options]"
     show "  lepthornc promote [options]"
     show "  lepthornc new <name> [--lib]"
+    show "  lepthornc explain [<code>]"
     show "  lepthornc version"
     show "  lepthornc help"
     show ""
@@ -770,6 +800,7 @@ make drv_usage()
     show "  test        Run the project's tests"
     show "  promote     Check the built programs, then copy them to bin/"
     show "  new         Make a new project"
+    show "  explain     Show what an error code means and how to fix it"
     show "  version     Show the version"
     show "  help        Show this help"
     show ""
@@ -798,6 +829,7 @@ make drv_usage()
     show "  lepthornc run main.lep"
     show "  lepthornc compile app.lep -o app --release"
     show "  lepthornc build --release"
+    show "  lepthornc explain LEC3101"
     show "  lepthornc build --release --target x86_64-linux-musl"
     show "  lepthornc test"
     show "  lepthornc new myproject"
@@ -1400,6 +1432,9 @@ make lepthornc_main()
     when cmd == "help" or cmd == "--help" or cmd == "-h"
         drv_usage()
         sys::exit(0)
+    done()
+    when cmd == "explain"
+        drv_cmd_explain()
     done()
     when cmd == "build"
         drv_cmd_build()

@@ -1,0 +1,15 @@
+(* explain shows what an error code means, from src/core/errors/ *)
+ensure lc = sys::getenv("LEPTHORNC")
+when lc == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+
+make explain(lc, args)
+    ensure q = text::from_code(34)
+    ensure status = sys::run(q + lc + q + " explain " + args)
+    show "exit:" status
+done()
+
+explain(lc, "LEC3101")
+explain(lc, "LER2001")
+explain(lc, "NOPE0000")
