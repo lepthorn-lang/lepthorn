@@ -139,6 +139,70 @@ make drv_read(path)
     done(body)
 done()
 
+(* What the lines read so far have left open: how many comments, and
+   whether we are inside a text. A `use` line counts only when nothing
+   is open. *)
+shape OpenState
+    comments: Number
+    in_text: Boolean
+done()
+
+make nothing_is_open(open)
+    done(open.comments == 0 and not open.in_text)
+done()
+
+(* reads one line and updates what is open after it *)
+make read_open_state(open, line)
+    ensure quote = text::from_code(34)
+    ensure n = text::length(line)
+    suppose place = 0
+    repeat
+        when place >= n
+            stop
+        done()
+        ensure c = text::char_at(line, place)
+        when open.in_text
+            when c == quote
+                open.in_text = false
+            done()
+            place = place + 1
+        otherwise when is_pair(line, place, n, "(", "*")
+            open.comments = open.comments + 1
+            place = place + 2
+        otherwise when open.comments > 0
+            when is_pair(line, place, n, "*", ")")
+                open.comments = open.comments - 1
+                place = place + 1
+            done()
+            place = place + 1
+        otherwise when is_pair(line, place, n, "/", "/")
+            stop
+        otherwise
+            when c == quote
+                open.in_text = true
+            done()
+            place = place + 1
+        done()
+    done()
+done()
+
+(* "core::units (* note *)" -> "core::units": the part before a space
+   or a comment *)
+make first_word(rest)
+    suppose place = 0
+    repeat
+        when place >= text::length(rest)
+            stop
+        done()
+        ensure c = text::char_at(rest, place)
+        when c == " " or c == "("
+            stop
+        done()
+        place = place + 1
+    done()
+    done(text::slice(rest, 0, place))
+done()
+
 (* "Q" + path for `use "path"`, "N" + dotted for `use a::b`, "" otherwise *)
 make drv_extract_use(line)
     ensure trimmed = drv_trim(line)
@@ -166,7 +230,7 @@ make drv_extract_use(line)
         done()
         done("")
     done()
-    done("N" + rest)
+    done("N" + first_word(rest))
 done()
 
 make drv_dotted_to_dir(src_root, dotted)
@@ -251,6 +315,7 @@ make drv_resolve_uses(st, src_root, visited, path)
     (* a marker names the file and line that follow it, so errors can
        say where they are (src_where) *)
     tb_add(tb, drv_marker(shown, 1) + nl)
+    ensure open = OpenState(comments = 0, in_text = false)
     suppose line_no = 0
     suppose start = 0
     suppose i = 0
@@ -266,7 +331,11 @@ make drv_resolve_uses(st, src_root, visited, path)
         when at_break
             line_no = line_no + 1
             ensure line = text::slice(raw, start, i)
-            ensure u = drv_extract_use(line)
+            suppose u = ""
+            when nothing_is_open(open)
+                u = drv_extract_use(line)
+            done()
+            read_open_state(open, line)
             suppose piece = line
             when u != ""
                 ensure target = text::slice(u, 1, text::length(u))

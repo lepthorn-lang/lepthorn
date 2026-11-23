@@ -17,7 +17,7 @@ so you need a `lepthornc` binary to start: copy one from a machine that
 has it (the static musl build runs on any x86-64 Linux) and install it:
 
 ```sh
-sudo install -m 755 lepthornc /usr/local/bin/
+install -Dm 755 lepthornc ~/.local/bin/lepthornc
 ```
 
 After that, `just install` in the compiler's repository builds the

@@ -1,0 +1,2 @@
+(* pulled in by tests/use_lines.lep *)
+ensure from_file = 7

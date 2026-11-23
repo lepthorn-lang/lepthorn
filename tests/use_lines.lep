@@ -1,0 +1,13 @@
+(* only a real use line pulls in a file. These are not real:
+use "no_such_file.lep"
+use no::such::module
+   (* a comment inside
+   use "no_such_file.lep"
+   *)
+use "still_a_comment.lep"
+*)
+use "lib/use_me.lep" (* a note after a real use line *)
+
+show "from the file:" from_file
+show "a text with
+use inside it"

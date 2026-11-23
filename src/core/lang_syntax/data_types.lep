@@ -117,6 +117,18 @@ make classify_keyword(word)
     done()
 done()
 
+(* true when the character at `place` is `first` and the one after it
+   is `second` *)
+make is_pair(source, place, n, first, second)
+    when place + 1 >= n
+        done(false)
+    done()
+    when text::char_at(source, place) != first
+        done(false)
+    done()
+    done(text::char_at(source, place + 1) == second)
+done()
+
 make skip_comment(source, j, n)
     suppose k = j
     suppose depth = 1

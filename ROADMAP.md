@@ -86,8 +86,6 @@ Every language decision is checked against these seven rules:
   with units, variables, `*` and `/`, function calls). Input, shape
   fields, array items and collections are checked while running; a
   mismatch there stops the program.
-- A `use` line inside a comment is read as a real `use`: the part
-  that pulls files together does not skip comments yet.
 - Under `eval`, deep recursion stops before a depth of 10000.
 - `ensure` does not lock array items or shape fields.
 - More conformance tests, especially error paths.
@@ -156,8 +154,9 @@ Covers:
     - Error-code naming: `LEC` for errors found before the program
       runs and `LER` for errors while it runs. Done: every error is
       in `src/core/errors/`, and `lepthornc explain CODE` shows it.
-18. `use` lines are found only outside comments, so a comment that
-    talks about `use "file.lep"` never pulls in a file.
+18. `use` lines are found only outside comments and texts, so a
+    comment that talks about `use "file.lep"` never pulls in a file.
+    Done.
 19. Tests written in the code itself, the way Rust has `#[test]` and
     `assert_eq!`: a way to name a test and check a value inside a
     `.lep` file (for example `expect add(2kg, 3kg) == 5kg`), run by
