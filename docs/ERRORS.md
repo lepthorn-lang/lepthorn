@@ -1,6 +1,8 @@
 # Errors
 
-Every error has a code and a message. Codes that start with `LEC` are
+Every error in a program has a code and a message. (Messages about
+`manifest.lepm`, the command line and `use` files have no code yet.)
+Codes that start with `LEC` are
 found **before** the program runs; codes that start with `LER` are
 found **while** it runs.
 
@@ -50,7 +52,7 @@ nothing runs. Errors while running print
 
 ## Where the errors live
 
-All errors are in one place, `src/core/errors/`, one file per group:
+These errors are in one place, `src/core/errors/`, one file per group:
 
 | File | Codes |
 |---|---|

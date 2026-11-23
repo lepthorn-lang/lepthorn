@@ -152,8 +152,9 @@ Covers:
     - Whether function parameters can name their kind, for example
       `mass: Mass`, or whether the checker infers it.
     - Error-code naming: `LEC` for errors found before the program
-      runs and `LER` for errors while it runs. Done: every error is
-      in `src/core/errors/`, and `lepthornc explain CODE` shows it.
+      runs and `LER` for errors while it runs. Done: these errors are
+      in `src/core/errors/`, and `lepthornc explain CODE` shows them.
+      The manifest and command-line messages have no codes yet.
 18. `use` lines are found only outside comments and texts, so a
     comment that talks about `use "file.lep"` never pulls in a file.
     Done.
@@ -182,7 +183,8 @@ Covers:
 6. A unit mismatch found while running stops the program instead of
    continuing with the value 0. Done.
 7. Comparisons check units. For example, `1kg < 2m` is an error.
-   Done.
+   Done for `<`, `>`, `<=` and `>=`; `1kg == 1m` still gives false
+   with no error.
 8. Units are checked everywhere a value goes: function parameters and
    return values, array items, shape fields, `take` and `read` input,
    `choose`, `every`, and `loop_hz`.

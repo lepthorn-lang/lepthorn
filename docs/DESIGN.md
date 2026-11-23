@@ -291,8 +291,9 @@ with `LER2001`.
 
 ### Errors
 
-Every error message and its code are in one place, `src/core/errors/`
-(see [ERRORS.md](ERRORS.md)). The lexer, parser, checker and code
+Every error in a program, with its code, is in one place,
+`src/core/errors/` (see [ERRORS.md](ERRORS.md)). The manifest and
+command-line messages are not there yet. The lexer, parser, checker and code
 generator ask for an error by name (`error_line("unit_mismatch", [op,
 a, b])`). The run-time code asks for the same messages when it is
 written (`rt_error`), with each `{n}` turned into a printf format, so
