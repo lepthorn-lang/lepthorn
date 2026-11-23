@@ -447,8 +447,12 @@ add_unit(list, "psi", "kg / m s^2", 6894.757)
 ```
 
 Words are base units, split by spaces; every word after `/` goes below
-the line; `^2` is a power; `1` means "nothing". A word that is not a
-base unit stops the compiler with a clear message.
+the line; `^2` or `^-1` is a power; `1` means "nothing". Only one `/`
+is allowed, so `a / b * c` can never mean two things. The same
+dimension can also be written `"kg / (m * s^2)"` (`*` and brackets
+only separate words) or `"kg * m^-1 * s^-2"`, but the unit files use
+the space style only, so they all read the same. A mistake in the text
+stops the compiler with `LEC3104`-`LEC3107`.
 `dimension_from_text` turns the text into a `Dimension`.
 
 | Quantity | mass | length | time | Written |

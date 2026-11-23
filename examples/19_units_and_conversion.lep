@@ -33,6 +33,9 @@ show "temperature:" 293K
 show "amount:" 2mol
 show "light:" 100cd
 
+(* pressure: Pa is kg / m s^2; one atmosphere is 101325 Pa *)
+show "pressure:" 101325Pa
+
 (* * and / build new units: a length divided by a time is a speed *)
 ensure distance = 100m
 ensure time = 8s

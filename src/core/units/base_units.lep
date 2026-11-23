@@ -20,6 +20,8 @@
    the run-time code, src/codegen/cg_rt_*.lep). Adding a 9th base unit
    means changing that size there too. *)
 
+use core::errors
+
 (* how many times each base unit appears *)
 shape Dimension
     mass: Number            (* kg *)
@@ -158,10 +160,29 @@ done()
 (* -- a dimension written as text -- *)
 
 (* "kg m / s^2" -> mass 1, length 1, time -2.
-   Words are base units, split by spaces. Every word after "/" goes
-   below the line. "^2" is a power. "1" is allowed for "nothing", as
-   in "1 / s". `unit` is the unit being added, for the error message. *)
+
+   Three ways to write the same dimension; all work:
+
+       "kg / m s^2"          spaces (the way the unit files are written)
+       "kg / (m * s^2)"      * between units, brackets to read it easily
+       "kg * m^-1 * s^-2"    negative powers, no /
+
+   Rules:
+     - each word is a base unit: kg m s A K mol cd rad
+     - spaces and * only separate words
+     - every word after / goes below the line
+     - only one / is allowed. A second / is an error (LEC3106), because
+       a text such as "a / b * c" could be read two ways: as a / (b c),
+       with c below the line, or as (a / b) c, with c above it. With
+       one / there is only one meaning: everything after it is below.
+     - ^2 or ^-1 is a whole-number power
+     - brackets are only for reading; they must match
+     - "1" means nothing, as in "1 / s"
+   `unit` is the unit being added, for the error message. *)
 make dimension_from_text(written, unit)
+    when not brackets_match(written)
+        sys::error(error_line("unit_brackets", [unit, written]))
+    done()
     suppose result = no_dimension()
     suppose below = false
     suppose word = ""
@@ -170,16 +191,21 @@ make dimension_from_text(written, unit)
         when i > text::length(written)
             stop
         done()
+        (* one space after the end, so the last word is added too *)
         suppose c = " "
         when i < text::length(written)
             c = text::char_at(written, i)
         done()
-        when c == " " or c == "/"
+        when is_separator(c)
             result = add_word(result, word, below, unit)
             word = ""
-            when c == "/"
-                below = true
+        otherwise when c == "/"
+            result = add_word(result, word, below, unit)
+            word = ""
+            when below
+                sys::error(error_line("unit_two_slashes", [unit, written]))
             done()
+            below = true
         otherwise
             word = word + c
         done()
@@ -188,7 +214,37 @@ make dimension_from_text(written, unit)
     done(result)
 done()
 
-(* one word of a dimension text, such as "s^2", added to `d` *)
+(* a character that only separates words *)
+make is_separator(c)
+    when c == " " or c == "*"
+        done(true)
+    done()
+    done(c == "(" or c == ")")
+done()
+
+(* true when every ( has its ) *)
+make brackets_match(written)
+    suppose open = 0
+    suppose i = 0
+    repeat
+        when i >= text::length(written)
+            stop
+        done()
+        ensure c = text::char_at(written, i)
+        when c == "("
+            open = open + 1
+        otherwise when c == ")"
+            open = open - 1
+        done()
+        when open < 0
+            done(false)
+        done()
+        i = i + 1
+    done()
+    done(open == 0)
+done()
+
+(* one word of a dimension text, such as "s^2" or "m^-1", added to `d` *)
 make add_word(d, word, below, unit)
     when word == "" or word == "1"
         done(d)
@@ -198,15 +254,44 @@ make add_word(d, word, below, unit)
     ensure hat = text_index(word, "^")
     when hat >= 0
         name = text::slice(word, 0, hat)
-        power = text::to_number(text::slice(word, hat + 1, text::length(word)))
+        ensure power_text = text::slice(word, hat + 1, text::length(word))
+        when not is_whole_number_text(power_text)
+            sys::error(error_line("unit_power_not_whole", [unit, word]))
+        done()
+        power = text::to_number(power_text)
     done()
     when not is_base_unit(name)
-        sys::fail("unit " + unit + ": " + name + " is not a base unit (kg m s A K mol cd rad)")
+        sys::error(error_line("unit_not_base", [unit, name]))
     done()
     when below
         power = 0 - power
     done()
     done(add_power(d, name, power))
+done()
+
+(* "2", "-1", "12": digits, with one - in front allowed *)
+make is_whole_number_text(t)
+    suppose start = 0
+    when text::length(t) > 0
+        when text::char_at(t, 0) == "-"
+            start = 1
+        done()
+    done()
+    when start >= text::length(t)
+        done(false)
+    done()
+    suppose i = start
+    repeat
+        when i >= text::length(t)
+            stop
+        done()
+        ensure c = text::char_at(t, i)
+        when c < "0" or c > "9"
+            done(false)
+        done()
+        i = i + 1
+    done()
+    done(true)
 done()
 
 (* where `part` starts in `text`, or -1 *)

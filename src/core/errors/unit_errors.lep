@@ -13,6 +13,20 @@ make add_unit_errors(list)
         "in this call to '{1}': {2}",
         "The units given to the function do not fit what it does with them.")
 
+    (* in a unit's dimension text, in src/core/units/ *)
+    add_error(list, "LEC3104", "unit_not_base",
+        "unit {1}: {2} is not a base unit (kg m s A K mol cd rad)",
+        "Write the dimension with base units only, for example 'kg / m s^2'.")
+    add_error(list, "LEC3105", "unit_power_not_whole",
+        "unit {1}: the power in {2} must be a whole number",
+        "Write a power such as ^2 or ^-1.")
+    add_error(list, "LEC3106", "unit_two_slashes",
+        "unit {1}: '{2}' has more than one /",
+        "Put everything below the line after one /: 'kg / m s^2'.")
+    add_error(list, "LEC3107", "unit_brackets",
+        "unit {1}: the brackets in '{2}' do not match",
+        "Close every ( with a ).")
+
     (* while the program runs *)
     add_error(list, "LER2001", "unit_mismatch_run",
         "dimension mismatch in `{1}`: {2} and {3}",

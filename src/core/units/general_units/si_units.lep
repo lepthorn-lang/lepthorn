@@ -12,7 +12,16 @@
    size       how many SI units one of it is: 1 km is 1000 m, so 1000.
 
    Example, a new unit for pressure:
-       add_unit(list, "Pa", "kg / m s^2", 1) *)
+       add_unit(list, "Pa", "kg / m s^2", 1)
+
+   Write only one /, and put everything that goes below the line
+   after it: "kg / m s^2" is kg over (m s^2). A second / is an error,
+   because "a / b * c" could mean a / (b c) or (a / b) c.
+
+   Write every dimension in this one style (spaces, one /), so all
+   unit files read the same. The parser also takes "kg / (m * s^2)"
+   and "kg * m^-1 * s^-2" (see base_units.lep), but in the unit files
+   only the space style is written. *)
 
 make add_si_units(list)
     (* mass *)
@@ -61,4 +70,10 @@ make add_si_units(list)
 
     (* light *)
     add_unit(list, "cd", "cd", 1)
+
+    (* pressure: pascal *)
+    add_unit(list, "Pa", "kg / m s^2", 1)
+    add_unit(list, "kPa", "kg / m s^2", 1000)
+    add_unit(list, "mPa", "kg / m s^2", 1000000)
+
 done()

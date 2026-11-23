@@ -1,0 +1,9 @@
+(* a unit's dimension can be written three ways; all give the same *)
+use core::units
+
+ensure spaces = dimension_from_text("kg / m s^2", "Pa")
+ensure stars = dimension_from_text("kg / (m * s^2)", "Pa")
+ensure powers = dimension_from_text("kg * m^-1 * s^-2", "Pa")
+show spaces
+show "same:" same_dimension(spaces, stars) same_dimension(spaces, powers)
+show dimension_from_text("1 / s", "Hz")
