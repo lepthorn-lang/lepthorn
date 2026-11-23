@@ -351,7 +351,7 @@ make cg_builtin_arity(op)
     when op == "sys::arg_count" or op == "sys::cwd" or op == "sys::now" or op == "sys::is_terminal"
         done(0)
     done()
-    when op == "sys::arg" or op == "sys::run" or op == "sys::exit" or op == "sys::getenv" or op == "sys::is_dir" or op == "sys::mkdir" or op == "sys::file_size" or op == "sys::realpath" or op == "sys::kind" or op == "sys::take" or op == "sys::read" or op == "sys::list_dir" or op == "sys::fail" or op == "sys::capture" or op == "sys::chdir" or op == "sys::error" or op == "sys::warn"
+    when op == "sys::arg" or op == "sys::run" or op == "sys::exit" or op == "sys::getenv" or op == "sys::is_dir" or op == "sys::mkdir" or op == "sys::file_size" or op == "sys::realpath" or op == "sys::kind" or op == "sys::take" or op == "sys::read" or op == "sys::list_dir" or op == "sys::fail" or op == "sys::capture" or op == "sys::chdir" or op == "sys::error" or op == "sys::warn" or op == "sys::at_place"
         done(1)
     done()
     when op == "text::format"

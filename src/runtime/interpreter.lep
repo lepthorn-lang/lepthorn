@@ -810,6 +810,9 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::warn"
         done(sys::warn(a1))
     done()
+    when op == "sys::at_place"
+        done(sys::at_place(a1))
+    done()
     when op == "sys::take"
         done(sys::take(a1))
     done()
