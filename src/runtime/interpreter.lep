@@ -804,6 +804,12 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::now"
         done(sys::now())
     done()
+    when op == "sys::is_terminal"
+        done(sys::is_terminal())
+    done()
+    when op == "sys::warn"
+        done(sys::warn(a1))
+    done()
     when op == "sys::take"
         done(sys::take(a1))
     done()

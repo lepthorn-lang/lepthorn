@@ -593,6 +593,8 @@ The file functions do not stop the program when they fail. Check
 | `sys::exit(code)` | ends the program with that exit status |
 | `sys::fail(reason)` | ends the program with `LER1018: reason`, status 1 |
 | `sys::error(message)` | ends the program like any runtime error: `lepthorn: runtime error: message`, status 1 |
+| `sys::warn(message)` | writes one line to standard error; `true` |
+| `sys::is_terminal()` | `true` when standard error is a terminal, not a file or a pipe |
 | `sys::cwd()`, `sys::chdir(path)` | current directory; change it (`true` if it worked) |
 | `sys::is_dir(path)`, `sys::mkdir(path)` | Booleans |
 | `sys::file_size(path)` | size in bytes, or -1 |

@@ -55,7 +55,7 @@ make cg_rt_header()
     h = h + "declare void @exit(i32)" + nl + "declare double @strtod(ptr, ptr)" + nl + "declare double @fmod(double, double)" + nl + "declare double @pow(double, double)" + nl + "declare double @cos(double)" + nl + "declare double @sin(double)" + nl
     h = h + "declare i32 @open(ptr, i32, ...)" + nl + "declare i64 @read(i32, ptr, i64)" + nl + "declare i64 @write(i32, ptr, i64)" + nl + "declare i32 @close(i32)" + nl + "declare i32 @unlink(ptr)" + nl + "declare i32 @stat(ptr, ptr)" + nl
     h = h + "declare ptr @__errno_location()" + nl + "declare i32 @system(ptr)" + nl + "declare i64 @readlink(ptr, ptr, i64)" + nl + "declare ptr @getcwd(ptr, i64)" + nl + "declare ptr @getenv(ptr)" + nl + "declare i32 @mkdir(ptr, i32)" + nl + "declare ptr @realpath(ptr, ptr)" + nl
-    h = h + "declare i32 @clock_gettime(i32, ptr)" + nl + "declare i32 @nanosleep(ptr, ptr)" + nl + "declare i32 @getchar()" + nl
+    h = h + "declare i32 @clock_gettime(i32, ptr)" + nl + "declare i32 @nanosleep(ptr, ptr)" + nl + "declare i32 @getchar()" + nl + "declare i32 @isatty(i32)" + nl
     h = h + "declare i32 @fprintf(ptr, ptr, ...)" + nl + "declare i32 @fputc(i32, ptr)" + nl + "declare ptr @open_memstream(ptr, ptr)" + nl + "declare i32 @fclose(ptr)" + nl
     h = h + "declare i32 @chdir(ptr)" + nl + "declare i32 @setenv(ptr, ptr, i32)" + nl
     h = h + "declare ptr @popen(ptr, ptr)" + nl + "declare i32 @pclose(ptr)" + nl + "declare i64 @fread(ptr, i64, i64, ptr)" + nl
