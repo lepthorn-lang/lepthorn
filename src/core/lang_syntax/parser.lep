@@ -74,6 +74,15 @@ make perr(tok_buf, cur, msg)
     done(node)
 done()
 
+(* the node, with its place set to `place`: a call is at its name *)
+make at_place(arena, idx, place)
+    suppose node = arena_get(arena, idx)
+    when node.kind != "PARSE_ERROR"
+        node.pos = place
+    done()
+    done(idx)
+done()
+
 make parse_primary(tok_buf, cur, arena)
     ensure kind = token_kind(tok_buf, cur)
     ensure val = token_value(tok_buf, cur)
@@ -105,17 +114,18 @@ make parse_primary(tok_buf, cur, arena)
     done()
     when kind == "IDENT"
         cur_take(tok_buf, cur)
+        ensure name_place = parse_pos
         when token_kind(tok_buf, cur) == "OP"
             when token_value(tok_buf, cur) == "::"
                 cur_take(tok_buf, cur)
                 ensure member_tok = cur_take(tok_buf, cur)
-                done(parse_call(tok_buf, cur, arena, val + "::" + member_tok.value))
+                done(at_place(arena, parse_call(tok_buf, cur, arena, val + "::" + member_tok.value), name_place))
             done()
             when token_value(tok_buf, cur) == "("
                 when looks_like_shape_construct(tok_buf, cur)
-                    done(parse_shape_construct(tok_buf, cur, arena, val))
+                    done(at_place(arena, parse_shape_construct(tok_buf, cur, arena, val), name_place))
                 done()
-                done(parse_call(tok_buf, cur, arena, val))
+                done(at_place(arena, parse_call(tok_buf, cur, arena, val), name_place))
             done()
             when token_value(tok_buf, cur) == "."
                 cur_take(tok_buf, cur)
@@ -179,122 +189,94 @@ make parse_unary(tok_buf, cur, arena)
     done(parse_primary(tok_buf, cur, arena))
 done()
 
+(* the operator at the cursor, such as "+", or "" when there is none *)
+make current_operator(tok_buf, cur)
+    when token_kind(tok_buf, cur) != "OP"
+        done("")
+    done()
+    done(token_value(tok_buf, cur))
+done()
+
+make is_multiply_operator(op)
+    done(op == "*" or op == "/" or op == "%")
+done()
+
+make is_add_operator(op)
+    done(op == "+" or op == "-")
+done()
+
+make is_compare_operator(op)
+    when op == "==" or op == "!="
+        done(true)
+    done()
+    done(op == "<" or op == ">" or op == "<=" or op == ">=")
+done()
+
+make is_bitwise_operator(op)
+    when op == "&" or op == "|" or op == "^"
+        done(true)
+    done()
+    done(op == "<<" or op == ">>")
+done()
+
+(* left op right. `place` is where the operator stands, for errors. *)
+make operator_node(arena, op, left, right, place)
+    suppose node = mk_node("BINOP", 0, false, op, left, right)
+    node.pos = place
+    done(arena_add(arena, node))
+done()
+
 make parse_pow(tok_buf, cur, arena)
     ensure left = parse_unary(tok_buf, cur, arena)
-    when token_kind(tok_buf, cur) == "OP"
-        when token_value(tok_buf, cur) == "**"
-            cur_take(tok_buf, cur)
-            ensure right = parse_pow(tok_buf, cur, arena)
-            ensure node = mk_node("BINOP", 0, false, "**", left, right)
-            done(arena_add(arena, node))
-        done()
+    when current_operator(tok_buf, cur) != "**"
+        done(left)
     done()
-    done(left)
+    cur_take(tok_buf, cur)
+    ensure place = parse_pos
+    ensure right = parse_pow(tok_buf, cur, arena)
+    done(operator_node(arena, "**", left, right, place))
 done()
 
 make parse_mul(tok_buf, cur, arena)
     suppose left = parse_pow(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
     repeat
-        when token_kind(tok_buf, cur) == "OP"
-            ensure val = token_value(tok_buf, cur)
-            when val == "*"
-                cur_take(tok_buf, cur)
-                right = parse_pow(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, "*", left, right)
-                left = arena_add(arena, node)
-            otherwise when val == "/"
-                cur_take(tok_buf, cur)
-                right = parse_pow(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, "/", left, right)
-                left = arena_add(arena, node)
-            otherwise when val == "%"
-                cur_take(tok_buf, cur)
-                right = parse_pow(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, "%", left, right)
-                left = arena_add(arena, node)
-            otherwise
-                stop
-            done()
-        otherwise
+        ensure op = current_operator(tok_buf, cur)
+        when not is_multiply_operator(op)
             stop
         done()
+        cur_take(tok_buf, cur)
+        ensure place = parse_pos
+        ensure right = parse_pow(tok_buf, cur, arena)
+        left = operator_node(arena, op, left, right, place)
     done()
     done(left)
 done()
 
 make parse_add(tok_buf, cur, arena)
     suppose left = parse_mul(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
     repeat
-        when token_kind(tok_buf, cur) == "OP"
-            ensure val = token_value(tok_buf, cur)
-            when val == "+"
-                cur_take(tok_buf, cur)
-                right = parse_mul(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, "+", left, right)
-                left = arena_add(arena, node)
-            otherwise when val == "-"
-                cur_take(tok_buf, cur)
-                right = parse_mul(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, "-", left, right)
-                left = arena_add(arena, node)
-            otherwise
-                stop
-            done()
-        otherwise
+        ensure op = current_operator(tok_buf, cur)
+        when not is_add_operator(op)
             stop
         done()
+        cur_take(tok_buf, cur)
+        ensure place = parse_pos
+        ensure right = parse_mul(tok_buf, cur, arena)
+        left = operator_node(arena, op, left, right, place)
     done()
     done(left)
 done()
 
 make parse_compare(tok_buf, cur, arena)
     ensure left = parse_add(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
-    when token_kind(tok_buf, cur) == "OP"
-        ensure val = token_value(tok_buf, cur)
-        when val == "=="
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "==", left, right)
-            done(arena_add(arena, node))
-        done()
-        when val == "!="
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "!=", left, right)
-            done(arena_add(arena, node))
-        done()
-        when val == "<="
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "<=", left, right)
-            done(arena_add(arena, node))
-        done()
-        when val == ">="
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, ">=", left, right)
-            done(arena_add(arena, node))
-        done()
-        when val == "<"
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "<", left, right)
-            done(arena_add(arena, node))
-        done()
-        when val == ">"
-            cur_take(tok_buf, cur)
-            right = parse_add(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, ">", left, right)
-            done(arena_add(arena, node))
-        done()
+    ensure op = current_operator(tok_buf, cur)
+    when not is_compare_operator(op)
+        done(left)
     done()
-    done(left)
+    cur_take(tok_buf, cur)
+    ensure place = parse_pos
+    ensure right = parse_add(tok_buf, cur, arena)
+    done(operator_node(arena, op, left, right, place))
 done()
 
 (* host precedence (lowest first): or, and, not, bitwise & | ^ << >>
@@ -303,22 +285,15 @@ done()
    and `not a == b` is `not (a == b)`. *)
 make parse_bitwise(tok_buf, cur, arena)
     suppose left = parse_compare(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
     repeat
-        when token_kind(tok_buf, cur) == "OP"
-            ensure val = token_value(tok_buf, cur)
-            when val == "&" or val == "|" or val == "^" or val == "<<" or val == ">>"
-                cur_take(tok_buf, cur)
-                right = parse_compare(tok_buf, cur, arena)
-                node = mk_node("BINOP", 0, false, val, left, right)
-                left = arena_add(arena, node)
-            otherwise
-                stop
-            done()
-        otherwise
+        ensure op = current_operator(tok_buf, cur)
+        when not is_bitwise_operator(op)
             stop
         done()
+        cur_take(tok_buf, cur)
+        ensure place = parse_pos
+        ensure right = parse_compare(tok_buf, cur, arena)
+        left = operator_node(arena, op, left, right, place)
     done()
     done(left)
 done()
@@ -435,9 +410,10 @@ make parse_shape_construct(tok_buf, cur, arena, shape_name)
             done()
             when keep_going
                 ensure fname_tok = cur_take(tok_buf, cur)
+                ensure name_place = parse_pos
                 cur_take(tok_buf, cur)
                 ensure vexpr = parse_or(tok_buf, cur, arena)
-                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
+                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = name_place)
                 ensure fidx = arena_add(arena, fnode)
                 when first == none_idx()
                     first = fidx
@@ -708,6 +684,124 @@ make parse_bang_block(tok_buf, cur, arena, is_ensure, is_shared)
     done(first)
 done()
 
+(* show value value ...
+
+   The values have spaces between them. Each value is linked to the
+   next one through `sibling`, and the SHOW_STMT node points to the
+   first one. show with no value prints an empty line. *)
+make parse_show(tok_buf, cur, arena)
+    cur_take(tok_buf, cur)
+    when is_line_end(tok_buf, cur)
+        done(arena_add(arena, mk_node("SHOW_STMT", 0, false, "", none_idx(), 0)))
+    done()
+    ensure unclear = unclear_spaces(tok_buf, cur)
+    when unclear != ""
+        done(line_error(tok_buf, cur, arena, unclear))
+    done()
+    ensure first = parse_or(tok_buf, cur, arena)
+    suppose last = first
+    repeat
+        when not could_start_expr(tok_buf, cur)
+            stop
+        done()
+        ensure next_value = parse_or(tok_buf, cur, arena)
+        suppose last_node = arena_get(arena, last)
+        last_node.sibling = next_value
+        last = next_value
+    done()
+    when current_operator(tok_buf, cur) == ","
+        done(line_error(tok_buf, cur, arena, "show_comma"))
+    done()
+    done(arena_add(arena, mk_node("SHOW_STMT", 0, false, "", first, 0)))
+done()
+
+(* an error at the current token; the rest of the line is skipped, so
+   one mistake gives one error *)
+make line_error(tok_buf, cur, arena, name)
+    ensure problem = perr(tok_buf, cur, error_line_plain(name))
+    skip_line(tok_buf, cur)
+    done(arena_add(arena, problem))
+done()
+
+(* true at the end of a line, or at the end of the program *)
+make is_line_end(tok_buf, cur)
+    ensure kind = token_kind(tok_buf, cur)
+    done(kind == "NEWLINE" or kind == "EOF" or kind == "LEX_ERROR")
+done()
+
+(* moves to the end of the line *)
+make skip_line(tok_buf, cur)
+    repeat
+        when is_line_end(tok_buf, cur)
+            stop
+        done()
+        cur_take(tok_buf, cur)
+    done()
+done()
+
+(* Between values a space means "next value", so these would be unclear:
+
+       show a -b      show a [0]      show f (3)
+
+   Looks through the line. When it finds one, the cursor is left on it
+   and the name of the error is the result; otherwise "". *)
+make unclear_spaces(tok_buf, cur)
+    ensure start = cur.pos
+    suppose before = cur_current(tok_buf, cur)
+    cur.pos = cur.pos + 1
+    repeat
+        when is_line_end(tok_buf, cur)
+            stop
+        done()
+        ensure token = cur_current(tok_buf, cur)
+        ensure name = unclear_token(tok_buf, cur, before, token)
+        when name != ""
+            done(name)
+        done()
+        before = token
+        cur.pos = cur.pos + 1
+    done()
+    cur.pos = start
+    done("")
+done()
+
+make unclear_token(tok_buf, cur, before, token)
+    when token.kind != "OP"
+        done("")
+    done()
+    when not space_between(before, token)
+        done("")
+    done()
+    when token.value == "-"
+        ensure after = cur_peek_at(tok_buf, cur, 1)
+        ensure value_before = ends_value(before)
+        when value_before and not space_between(token, after)
+            done("show_spaced_minus")
+        done()
+    done()
+    when before.kind == "IDENT" and token.value == "["
+        done("show_spaced_bracket")
+    done()
+    when before.kind == "IDENT" and token.value == "("
+        done("show_spaced_call")
+    done()
+    done("")
+done()
+
+(* true when a value can end with this token *)
+make ends_value(token)
+    when token.kind == "OP"
+        done(token.value == ")" or token.value == "]")
+    done()
+    done(token.kind == "IDENT" or token.kind == "NUMBER" or token.kind == "STRING")
+done()
+
+(* true when there is a space between two tokens that follow each other *)
+make space_between(left, right)
+    ensure right_first = right.next_index - text::length(right.value)
+    done(right_first > left.next_index)
+done()
+
 (* a statement's position is its first token, so an error in it names
    the line it starts on *)
 make parse_statement(tok_buf, cur, arena)
@@ -760,28 +854,7 @@ make parse_statement_at(tok_buf, cur, arena)
         done(arena_add(arena, node))
     done()
     when kind == "SHOW"
-        cur_take(tok_buf, cur)
-        expr_idx = parse_or(tok_buf, cur, arena)
-        suppose show_prev = expr_idx
-        suppose show_prev_node = mk_node("", 0, false, "", 0, 0)
-        suppose show_next = expr_idx
-        suppose show_keep_going = true
-        repeat
-            when show_keep_going
-                when could_start_expr(tok_buf, cur)
-                    show_next = parse_or(tok_buf, cur, arena)
-                    show_prev_node = arena_get(arena, show_prev)
-                    show_prev_node.sibling = show_next
-                    show_prev = show_next
-                otherwise
-                    show_keep_going = false
-                done()
-            otherwise
-                stop
-            done()
-        done()
-        node = mk_node("SHOW_STMT", 0, false, "", expr_idx, 0)
-        done(arena_add(arena, node))
+        done(parse_show(tok_buf, cur, arena))
     done()
     when kind == "STOP"
         cur_take(tok_buf, cur)
@@ -1108,6 +1181,7 @@ make parse_statement_at(tok_buf, cur, arena)
     when not cur_is_empty(tok_buf, cur)
         cur_take(tok_buf, cur)
     done()
+    skip_line(tok_buf, cur)
     done(arena_add(arena, node))
 done()
 

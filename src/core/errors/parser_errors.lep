@@ -4,17 +4,29 @@
 make add_parser_errors(list)
     add_error(list, "LEC2001", "expected_value",
         "expected a value, found {1}",
-        "A number, a name, text in quotes, true or false was expected here.")
+        "write a value here: a number, a name, a text, true or false")
     add_error(list, "LEC2002", "input_needs_name",
         "`take`/`read` needs a variable name",
-        "Write the name to read into: take mass")
+        "write the name to read into: take mass")
     add_error(list, "LEC2003", "loop_hz_needs_frequency",
         "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz",
-        "Give the rate after loop_hz.")
+        "give the rate after loop_hz")
     add_error(list, "LEC2004", "bad_statement_start",
         "a statement cannot start with '{1}'",
-        "A statement starts with a keyword (ensure, show, when, ...) or a name.")
+        "start the line with a keyword (ensure, show, when, ...) or a name")
     add_error(list, "LEC2005", "bad_case_label",
         "a case label must be a number, quoted Text, true or false, got '{1}'",
-        "Write the label as a literal value, not a name or an expression.")
+        "write the label as a literal value, not a name or an expression")
+    add_error(list, "LEC2006", "show_spaced_minus",
+        "this could be a - b, or two values",
+        "write a - b with a space on both sides")
+    add_error(list, "LEC2007", "show_comma",
+        "show takes its values with spaces between them",
+        "remove the comma")
+    add_error(list, "LEC2008", "show_spaced_bracket",
+        "this could be an item of the array, or two values",
+        "write a[0] with no space before the bracket")
+    add_error(list, "LEC2009", "show_spaced_call",
+        "this could be a call, or two values",
+        "write f(3) with no space before the bracket")
 done()
