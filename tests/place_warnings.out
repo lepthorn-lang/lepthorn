@@ -1,0 +1,15 @@
+tests/place_warnings.lep:4:5  LER6002  warning
+    »timeout« 1ms
+    why: the wait did not end in time
+    fix: check what the wait is waiting for, or give it more time
+slow: 3
+in the loop
+tests/place_warnings.lep:11:5  LER6002  warning
+    »timeout« 1ms
+    why: the wait did not end in time
+    fix: check what the wait is waiting for, or give it more time
+tests/place_warnings.lep:17:1  LER6002  warning
+    »timeout« 1ms
+    why: the wait did not end in time
+    fix: check what the wait is waiting for, or give it more time
+after

@@ -1,0 +1,8 @@
+(* the place of an error is the operator or the name, with its column *)
+make add(a, b)
+    done(a + b)
+done()
+ensure items = [1kg]
+ensure lengths = [2m]
+show "é" items[0] add(1m, lengths[0])
+show not true and items[0] < lengths[0]

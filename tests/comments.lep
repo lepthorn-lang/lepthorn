@@ -1,0 +1,17 @@
+(* comments: where they can stand, and comments inside comments *)
+show 1 (* after a value *)
+show (* before a value *) 2
+(* on (* inside (* deeper *) still inside *) the line *) show 3
+(* over
+   several (* nested *)
+   lines *)
+show 4
+(**)
+(***)
+(** stars **)
+show 5
+(* a quote " inside a comment opens nothing *)
+show "(* a comment mark inside a text is text *)"
+show "a (* b"
+show 2 * (3 + 4)
+(* the last line of a file can be a comment *)

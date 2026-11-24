@@ -1,2 +1,4 @@
 before
-lepthorn: runtime error: LER1018: sensor offline
+tests/fail.lep:2:1  LER1018
+    »sys::fail«("sensor offline")
+    why: sensor offline

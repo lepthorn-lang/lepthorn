@@ -1,2 +1,5 @@
 before
-lepthorn: runtime error: LER3002: index 5 is out of bounds for an array of length 3
+tests/index_error.lep:4:6  LER3002
+    show »a«[5]
+    why: index 5 is out of bounds for an array of length 3
+    fix: indexes start at 0 and stop before length(array)

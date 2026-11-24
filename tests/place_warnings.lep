@@ -1,0 +1,20 @@
+(* a block that takes too long shows its own line, also when done(value)
+   or next leaves it early *)
+make slow(n)
+    timeout 1ms
+        wait 5ms
+        done(n)
+    done()
+done()
+show "slow:" slow(3)
+repeat 1
+    timeout 1ms
+        show "in the loop"
+        wait 5ms
+        next
+    done()
+done()
+timeout 1ms
+    wait 5ms
+done()
+show "after"

@@ -1,0 +1,8 @@
+(* an error in a function is shown at its own line, and after a call the
+   program is back at the line of the call *)
+make pick(list, i)
+    done(list[i])
+done()
+ensure list = [1, 2]
+show "first:" pick(list, 1)
+show "second:" pick(list, 0) list[7]

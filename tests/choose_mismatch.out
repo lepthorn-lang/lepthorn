@@ -1,2 +1,5 @@
 before
-lepthorn: runtime error: LER5003: `choose`: case label type mismatch - the value is Number, case label is Text
+tests/choose_mismatch.lep:5:6  LER5003
+    case »"1"«
+    why: `choose`: case label type mismatch - the value is Number, case label is Text
+    fix: use labels of the same kind as the value

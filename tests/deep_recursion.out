@@ -1,0 +1,5 @@
+9999
+tests/deep_recursion.lep:4:5  LER5001
+    »when« n == 0
+    why: count_down: maximum recursion depth (10000) exceeded
+    fix: a function called itself too many times; check its stop condition

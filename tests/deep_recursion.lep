@@ -1,0 +1,10 @@
+(* 10000 calls deep is allowed, one more stops the program; the message
+   names the program's own function in eval and in a compiled program *)
+make count_down(n)
+    when n == 0
+        done(0)
+    done()
+    done(1 + count_down(n - 1))
+done()
+show count_down(9999)
+show count_down(10000)

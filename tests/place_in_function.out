@@ -1,0 +1,5 @@
+first: 2
+tests/place_in_function.lep:8:30  LER3002
+    show "second:" pick(list, 0) »list«[7]
+    why: index 7 is out of bounds for an array of length 2
+    fix: indexes start at 0 and stop before length(array)

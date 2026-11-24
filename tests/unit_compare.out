@@ -1,2 +1,5 @@
 same units: true
-lepthorn: runtime error: LER2001: dimension mismatch in `<`: kg and m
+tests/unit_compare.lep:4:16  LER2001
+    show values[0] »<« values[2]
+    why: `<` needs the same unit on both sides, got kg and m
+    fix: use quantities of the same kind on both sides

@@ -1,9 +1,21 @@
 -- CTV: undeclared variable, immutable reassignment, undefined function, wrong arity --
-line 1: LEC3001: undeclared variable 'missing_var'
-    show missing_var
-line 2: LEC3003: cannot reassign 'x' - declared with ensure (immutable)
-    x = 10
-line 1: LEC3004: call to undefined function 'ghost'
-    show ghost(1, 2)
-line 4: LEC3005: wrong number of arguments in call to 'add'
-    show add(1, 2, 3)
+line 1:6  LEC3001
+    show »missing_var«
+    why: undeclared variable 'missing_var'
+    fix: declare it first with ensure or suppose
+1 error, program did not run
+line 2:1  LEC3003
+    »x« = 10
+    why: cannot reassign 'x' - declared with ensure (immutable)
+    fix: declare it with suppose if it must change
+1 error, program did not run
+line 1:6  LEC3004
+    show »ghost«(1, 2)
+    why: call to undefined function 'ghost'
+    fix: write the function with make, or check the spelling
+1 error, program did not run
+line 4:6  LEC3005
+    show »add«(1, 2, 3)
+    why: wrong number of arguments in call to 'add'
+    fix: give as many arguments as the function has parameters
+1 error, program did not run

@@ -1,0 +1,5 @@
+é 1 kg 3 m
+tests/error_places.lep:8:28  LER2001
+    show not true and items[0] »<« lengths[0]
+    why: `<` needs the same unit on both sides, got kg and m
+    fix: use quantities of the same kind on both sides

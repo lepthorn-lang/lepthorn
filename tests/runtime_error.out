@@ -1,2 +1,5 @@
 empty: true
-lepthorn: runtime error: LER3006: ring::get: RingBuffer is empty
+tests/runtime_error.lep:3:6  LER3006
+    show »ring::get«(r)
+    why: ring::get: RingBuffer is empty
+    fix: check ring::is_empty first

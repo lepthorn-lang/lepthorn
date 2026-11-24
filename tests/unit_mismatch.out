@@ -1,2 +1,5 @@
 before
-lepthorn: runtime error: LER2001: dimension mismatch in `+`: kg and m
+tests/unit_mismatch.lep:6:16  LER2001
+    show values[0] »+« values[1]
+    why: `+` needs the same unit on both sides, got kg and m
+    fix: use quantities of the same kind on both sides

@@ -1,10 +1,12 @@
 LEC3101: unit_mismatch
-message: `{1}` needs the same unit on both sides, got {2} and {3}
-fix:     Make both sides the same kind of quantity, or convert one of them.
+    why: cannot {1} {2} and {3}
+    fix: use quantities of the same kind on both sides
 exit: 0
 LER2001: unit_mismatch_run
-message: dimension mismatch in `{1}`: {2} and {3}
-fix:     Both sides must have the same unit.
+    why: `{1}` needs the same unit on both sides, got {2} and {3}
+    fix: use quantities of the same kind on both sides
 exit: 0
-lepthornc: no error code NOPE0000 (run 'lepthornc explain' to see them all)
+lepthornc  LEC6010
+    why: there is no error code NOPE0000
+    fix: run lepthornc explain to see them all
 exit: 2

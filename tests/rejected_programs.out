@@ -1,45 +1,196 @@
 stop_at_top eval: 1 check: 1
-build/test/rejected/stop_at_top.lep:2: LEC3006: `stop` used outside a loop
-    stop
+build/test/rejected/stop_at_top.lep:2:1  LEC3006
+    »stop«
+    why: `stop` used outside a loop
+    fix: use it inside repeat, every or loop_hz
+1 error, program did not run
 next_in_function eval: 1 check: 1
-build/test/rejected/next_in_function.lep:2: LEC3007: `next` used outside a loop
-    next
+build/test/rejected/next_in_function.lep:2:5  LEC3007
+    »next«
+    why: `next` used outside a loop
+    fix: use it inside repeat, every or loop_hz
+1 error, program did not run
 open_comment eval: 1 check: 1
-build/test/rejected/open_comment.lep:2: LEC1001: unterminated comment
-    (* never closed
+build/test/rejected/open_comment.lep:2:1  LEC1001
+    »(*« never closed
+    why: this comment is never closed
+    fix: close it with *)
+1 error, program did not run
 loop_hz_zero eval: 1 check: 1
-build/test/rejected/loop_hz_zero.lep:1: LEC3010: loop_hz expects a positive frequency in Hz, got 0Hz
-    loop_hz 0Hz
+build/test/rejected/loop_hz_zero.lep:1:1  LEC3010
+    »loop_hz« 0Hz
+    why: loop_hz expects a positive frequency in Hz, got 0Hz
+    fix: the rate must be more than 0
+1 error, program did not run
 loop_hz_period eval: 1 check: 1
-build/test/rejected/loop_hz_period.lep:1: LEC3011: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
-    loop_hz 10ms
+build/test/rejected/loop_hz_period.lep:1:1  LEC3011
+    »loop_hz« 10ms
+    why: loop_hz expects a frequency in Hz, got 10ms; for a period use every 10ms
+    fix: loop_hz takes a rate (100Hz); every takes a period (10ms)
+1 error, program did not run
 case_mixed eval: 1 check: 1
-build/test/rejected/case_mixed.lep:4: LEC3014: `choose`: case labels must all be the same kind - "b" is not like the first label
-    case "b"
+build/test/rejected/case_mixed.lep:4:6  LEC3014
+    case »"b"«
+    why: `choose`: case labels must all be the same kind - "b" is not like the first label
+    fix: use only numbers, only Text, or only true/false in one choose
+1 error, program did not run
 case_twice eval: 1 check: 1
-build/test/rejected/case_twice.lep:4: LEC3015: `choose`: case 1 appears twice
-    case 1
+build/test/rejected/case_twice.lep:4:6  LEC3015
+    case »1«
+    why: `choose`: case 1 appears twice
+    fix: each label may appear once
+1 error, program did not run
 bitwise_vs_compare eval: 1 check: 1
-build/test/rejected/bitwise_vs_compare.lep:2: LEC3016: `&` needs whole numbers, but one side is true/false; & binds looser than comparisons, so write (a & b) == c
-    show a & 3 == 2
+build/test/rejected/bitwise_vs_compare.lep:2:8  LEC3016
+    show a »&« 3 == 2
+    why: `&` needs whole numbers, but one side is true or false
+    fix: put the bitwise part in parentheses, as in (a & b) == c
+1 error, program did not run
 unit_add eval: 1 check: 1
-build/test/rejected/unit_add.lep:1: LEC3101: `+` needs the same unit on both sides, got kg and m
-    ensure d = 2kg + 3m
+build/test/rejected/unit_add.lep:1:16  LEC3101
+    ensure d = 2kg »+« 3m
+    why: cannot add `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
 unit_compare eval: 1 check: 1
-build/test/rejected/unit_compare.lep:1: LEC3101: `<` needs the same unit on both sides, got kg and m
-    show 1kg < 2m
+build/test/rejected/unit_compare.lep:1:10  LEC3101
+    show 1kg »<« 2m
+    why: cannot compare `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
 unit_assign eval: 1 check: 1
-build/test/rejected/unit_assign.lep:2: LEC3102: 'speed' holds m/s, it cannot take a value in kg
-    speed = 5kg
+build/test/rejected/unit_assign.lep:2:1  LEC3102
+    »speed« = 5kg
+    why: 'speed' holds `m/s` (speed), it cannot take a value in `kg` (mass)
+    fix: give it a value of the same kind, or use a new variable
+1 error, program did not run
 unit_in_call eval: 1 check: 1
-build/test/rejected/unit_in_call.lep:4: LEC3103: in this call to 'add': `+` needs the same unit on both sides, got kg and m
-    show add(2kg, 3m)
+build/test/rejected/unit_in_call.lep:4:6  LEC3103
+    show »add«(2kg, 3m)
+    why: in this call to 'add': cannot add `kg` (mass) and `m` (length)
+    fix: give the function units that fit what it does
+1 error, program did not run
 unit_from_call eval: 1 check: 1
-build/test/rejected/unit_from_call.lep:5: LEC3101: `+` needs the same unit on both sides, got m/s and kg
-    show v + 1kg
+build/test/rejected/unit_from_call.lep:5:8  LEC3101
+    show v »+« 1kg
+    why: cannot add `m/s` (speed) and `kg` (mass)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
+show_comma eval: 1 check: 1
+build/test/rejected/show_comma.lep:1:7  LEC2007
+    show 1»,« 2
+    why: show takes its values with spaces between them
+    fix: remove the comma
+1 error, program did not run
+text_open eval: 1 check: 1
+build/test/rejected/text_open.lep:2:6  LEC1003
+    show »"never closed«
+    why: this text is never closed
+    fix: close it with a double quote
+1 error, program did not run
+comment_end_alone eval: 1 check: 1
+build/test/rejected/comment_end_alone.lep:2:1  LEC1004
+    »*)«
+    why: no comment is open here
+    fix: remove the *), or open the comment with (*
+1 error, program did not run
+comment_open_inside eval: 1 check: 1
+build/test/rejected/comment_open_inside.lep:2:1  LEC1001
+    »(*« a (* b *)
+    why: this comment is never closed
+    fix: close it with *)
+1 error, program did not run
+show_spaced_minus eval: 1 check: 1
+build/test/rejected/show_spaced_minus.lep:3:8  LEC2006
+    show a »-«b
+    why: this could be a - b, or two values
+    fix: write a - b with a space on both sides
+1 error, program did not run
+show_spaced_bracket eval: 1 check: 1
+build/test/rejected/show_spaced_bracket.lep:2:8  LEC2008
+    show a »[«0]
+    why: this could be an item of the array, or two values
+    fix: write a[0] with no space before the bracket
+1 error, program did not run
+show_spaced_call eval: 1 check: 1
+build/test/rejected/show_spaced_call.lep:4:8  LEC2009
+    show f »(«3)
+    why: this could be a call, or two values
+    fix: write f(3) with no space before the bracket
+1 error, program did not run
+line_comment eval: 1 check: 1
+build/test/rejected/line_comment.lep:1:8  LEC1002
+    show 1 »//« one
+    why: `//` is not a comment in Lepthorn
+    fix: write the comment as (* ... *)
+build/test/rejected/line_comment.lep:2:8  LEC1002
+    show 2 »//« two
+    why: `//` is not a comment in Lepthorn
+    fix: write the comment as (* ... *)
+2 errors, program did not run
+unit_equal eval: 1 check: 1
+build/test/rejected/unit_equal.lep:1:10  LEC3101
+    show 1kg »==« 1m
+    why: cannot compare `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
+unit_not_equal eval: 1 check: 1
+build/test/rejected/unit_not_equal.lep:1:10  LEC3101
+    show 1kg »!=« 1m
+    why: cannot compare `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
+use_no_file eval: 1 check: 1
+build/test/rejected/use_no_file.lep:2:1  LEC4001
+    »use "no_such.lep"«
+    why: there is no file no_such.lep
+    fix: check the name; the path starts at the file that has the use line
+1 error, program did not run
+use_no_module eval: 1 check: 1
+build/test/rejected/use_no_module.lep:1:1  LEC4002
+    »use no::such«
+    why: there is no module no::such
+    fix: check the name; a::b is src/a/b/module.lep or src/a/b.lep
+1 error, program did not run
+no_unit eval: 1 check: 1
+build/test/rejected/no_unit.lep:1:8  LEC3108
+    show 2 »3xq«
+    why: there is no unit `xq`
+    fix: use a unit from the unit table
+1 error, program did not run
+no_shape_field eval: 1 check: 1
+build/test/rejected/no_shape_field.lep:4:8  LEC3018
+    show P(»y« = 1)
+    why: shape 'P' has no field 'y'
+    fix: check the field name
+build/test/rejected/no_shape_field.lep:4:6  LEC3019
+    show »P«(y = 1)
+    why: shape 'P' needs the field 'x'
+    fix: give every field when building a shape
+build/test/rejected/no_shape_field.lep:5:6  LEC3017
+    show »Q«(a = 1)
+    why: there is no shape 'Q'
+    fix: declare it with shape, or check the spelling
+3 errors, program did not run
+no_builtin eval: 1 check: 1
+build/test/rejected/no_builtin.lep:1:6  LEC3020
+    show »text::lenght«(1)
+    why: there is no built-in function 'text::lenght'
+    fix: check the spelling
+build/test/rejected/no_builtin.lep:2:6  LEC3021
+    show »text::length«(1, 2)
+    why: 'text::length' takes 1 value(s), got 2
+    fix: give as many values as it takes
+2 errors, program did not run
 syntax_error eval: 1 check: 1
-build/test/rejected/syntax_error.lep:2: LEC2001: expected a value, found the end of the line
-    show a +
+build/test/rejected/syntax_error.lep:2:9  LEC2001
+    show a +»«
+    why: expected a value, found the end of the line
+    fix: write a value here: a number, a name, a text, true or false
+1 error, program did not run
 error_in_used_file eval: 1 check: 1
-build/test/rejected/helper.lep:2: LEC3001: undeclared variable 'missing'
-    done(n * missing)
+build/test/rejected/helper.lep:2:14  LEC3001
+    done(n * »missing«)
+    why: undeclared variable 'missing'
+    fix: declare it first with ensure or suppose
+1 error, program did not run
