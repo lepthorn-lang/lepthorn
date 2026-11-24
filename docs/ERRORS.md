@@ -1,17 +1,36 @@
 # Errors
 
-Every error in a program has a code and a message. (Messages about
-`manifest.lepm`, the command line and `use` files have no code yet.)
-Codes that start with `LEC` are
-found **before** the program runs; codes that start with `LER` are
-found **while** it runs.
+Every error has a code. Codes that start with `LEC` are found
+**before** the program runs; codes that start with `LER` are found
+**while** it runs. Both look the same:
 
 ```text
-main.lep:3: LEC3101: `+` needs the same unit on both sides, got kg and m
-    ensure d = 2kg + 3m
-
-lepthorn: runtime error: LER3002: index 5 is out of bounds for an array of length 3
+main.lep:1:16  LEC3101
+    ensure d = 2kg »+« 3m
+    why: cannot add `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
 ```
+
+```text
+main.lep:3:6  LER3002
+    show »items«[5]
+    why: index 5 is out of bounds for an array of length 3
+    fix: indexes start at 0 and stop before length(array)
+```
+
+- The first line is the file, the line, the column, and the code.
+- The wrong part of the line stands between `»` and `«`.
+- `why` is the reason. `fix` is what to do.
+- Errors go to standard error. The exit status is 1.
+- On a terminal the code and the wrong part are red and `fix:` is
+  green. `--no-color` or the environment variable `NO_COLOR` turns
+  colors off. With `--ascii` the marks are `>>` and `<<`.
+- A release program shows the place but not the line itself: it does
+  not carry its own source. `eval`, debug builds and tests show the
+  line.
+- An error in the manifest or in a command has no line or column of a
+  program; it starts with `manifest.lepm:4` or with `lepthornc`.
 
 ## Look up a code
 
@@ -22,8 +41,8 @@ lepthornc explain             # every error, one per line
 
 ```text
 LEC3101: unit_mismatch
-message: `{1}` needs the same unit on both sides, got {2} and {3}
-fix:     Make both sides the same kind of quantity, or convert one of them.
+    why: cannot {1} {2} and {3}
+    fix: use quantities of the same kind on both sides
 ```
 
 `{1}`, `{2}`, ... are filled in with the names and units of your
@@ -33,10 +52,13 @@ program.
 
 | Codes | Found by | What happens |
 |---|---|---|
-| `LEC1xxx` | the lexer, reading the text | the program does not run (`LEC1002` is only a message) |
+| `LEC1xxx` | the lexer, reading the text | the program does not run |
 | `LEC2xxx` | the parser, the grammar | the program does not run |
 | `LEC30xx` | the checker: names, `ensure`, loops, `choose`, `loop_hz` | the program does not run |
 | `LEC31xx` | the checker: units | the program does not run |
+| `LEC4xxx` | `use`: a file that is not there | the program does not run |
+| `LEC5xxx` | the manifest | nothing runs, exit status 2 |
+| `LEC6xxx` | the command itself: clang, targets, files | nothing runs |
 | `LEC7xxx` | the code generator | no program is written |
 | `LER1xxx` | values and operators | the program stops, exit status 1 |
 | `LER2xxx` | units and physics functions | the program stops, exit status 1 |
@@ -47,8 +69,7 @@ program.
 | `LER9xxx` | a bug in the compiler itself | the program stops; please report it |
 
 Errors before running print every mistake with its file and line, then
-nothing runs. Errors while running print
-`lepthorn: runtime error: CODE: message` on standard error.
+nothing runs. A warning has the word `warning` after its code.
 
 ## Where the errors live
 
@@ -60,6 +81,9 @@ These errors are in one place, `src/core/errors/`, one file per group:
 | `parser_errors.lep` | `LEC2xxx` |
 | `checker_errors.lep` | `LEC30xx` |
 | `unit_errors.lep` | `LEC31xx`, `LER2xxx` |
+| `use_errors.lep` | `LEC4xxx` |
+| `manifest_errors.lep` | `LEC5xxx` |
+| `tool_errors.lep` | `LEC6xxx` |
 | `codegen_errors.lep` | `LEC7xxx` |
 | `runtime_errors.lep` | `LER1xxx`, `LER3xxx`-`LER5xxx`, `LER9xxx` |
 | `realtime_errors.lep` | `LER6xxx` |
@@ -75,16 +99,16 @@ One line in the file of its group:
 
 ```lepthorn
 add_error(list, "LEC3101", "unit_mismatch",
-    "`{1}` needs the same unit on both sides, got {2} and {3}",
-    "Make both sides the same kind of quantity, or convert one of them.")
+    "cannot {1} {2} and {3}",
+    "use quantities of the same kind on both sides")
 ```
 
 | Part | Meaning |
 |---|---|
 | code | the next free code in the group's range |
 | name | how the compiler's code asks for it |
-| message | what is printed; `{1}`, `{2}`, ... are filled in |
-| help | one line on how to fix it, shown by `lepthornc explain` |
+| why | the reason, one sentence; `{1}`, `{2}`, ... are filled in |
+| fix | what to do, one sentence |
 
 Then use it by name:
 

@@ -68,8 +68,10 @@ Every language decision is checked against these seven rules:
 25. `loop_hz 100Hz` as well as `loop_hz(100)`.
 26. `stop` and `next` outside a loop are errors before the program
     runs.
-27. Errors found before the program runs show the file, the line,
-    and the source line.
+27. Errors show the file, the line, the column, the wrong part of the
+    line, the reason, and what to do, before running and while running,
+    in eval and in compiled programs. A release program leaves out the
+    source line.
 28. `lepthornc help`, and `lepthornc resolve` for a whole project.
 
 ## Remaining work
@@ -86,8 +88,9 @@ Every language decision is checked against these seven rules:
   with units, variables, `*` and `/`, function calls). Input, shape
   fields, array items and collections are checked while running; a
   mismatch there stops the program.
-- Under `eval`, deep recursion stops before a depth of 10000.
 - `ensure` does not lock array items or shape fields.
+- The parser accepts some wrong programs, and a few make the compiler
+  itself fail: the list is in `docs/GRAMMAR.md`.
 - More conformance tests, especially error paths.
 - Keep `README.md`, this file, and the documentation in step with
   the compiler.
@@ -154,7 +157,7 @@ Covers:
     - Error-code naming: `LEC` for errors found before the program
       runs and `LER` for errors while it runs. Done: these errors are
       in `src/core/errors/`, and `lepthornc explain CODE` shows them.
-      The manifest and command-line messages have no codes yet.
+      The manifest and the command line use them too.
 18. `use` lines are found only outside comments and texts, so a
     comment that talks about `use "file.lep"` never pulls in a file.
     Done.
@@ -183,8 +186,7 @@ Covers:
 6. A unit mismatch found while running stops the program instead of
    continuing with the value 0. Done.
 7. Comparisons check units. For example, `1kg < 2m` is an error.
-   Done for `<`, `>`, `<=` and `>=`; `1kg == 1m` still gives false
-   with no error.
+   Done for `<`, `>`, `<=`, `>=`, `==` and `!=`.
 8. Units are checked everywhere a value goes: function parameters and
    return values, array items, shape fields, `take` and `read` input,
    `choose`, `every`, and `loop_hz`.
@@ -199,6 +201,13 @@ Covers:
     time. A unit is retained at run time only where it is needed:
     printing, input, dynamic values, and error messages.
 12. Native and eval conformance tests for units.
+13. Planned, not implemented: converting a value to a named unit with
+    `as`, for example `1km as m`. It comes
+    after item 9.
+    - Both sides must have the same dimension.
+    - `1kg as m` and `1kg as N` are errors before the program runs.
+    - The result is shown in the unit it was converted to.
+    - Eval and native give the same result.
 
 ### Phase 2
 *Memory, resource, and real-time correctness model*

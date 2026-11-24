@@ -50,8 +50,9 @@ COMMENT     = '(*' { any text or COMMENT } '*)'
 Comments nest: `(* a (* b *) c *)` is one comment. A comment that is
 never closed gives `LEC1001`, and the program does not run.
 
-`//` is not a comment in Lepthorn. The lexer prints `LEC1002`, skips to
-the end of the line, and goes on.
+`//` is not a comment in Lepthorn. It is an error (`LEC1002`), and the
+program does not run. A text that is not closed on its line is
+`LEC1003`; a `*)` with no open comment is `LEC1004`.
 
 ### Line breaks
 
@@ -162,7 +163,7 @@ statement   = 'ensure' IDENT '=' expr
             | IDENT '.' IDENT '=' expr
             | IDENT '[' expr ']' '=' expr
             | call
-            | 'show' expr { expr }
+            | 'show' { expr }
             | 'take' IDENT
             | 'read' IDENT
             | when_stmt
@@ -209,6 +210,11 @@ task        = 'priority' expr NEWLINE block DONE_EMPTY
 
 Notes:
 
+- `show` alone prints an empty line. The values of `show` have spaces
+  between them. Where a space could mean two things, it is an error:
+  `show a -b` (`LEC2006`), `show 1, 2` (`LEC2007`), `show a [0]`
+  (`LEC2008`), `show f (3)` (`LEC2009`). Write `a - b`, `1 2`, `a[0]`,
+  `f(3)`.
 - `x += e` means `x = x + e`. The same goes for every compound
   operator.
 - A `case` label is a literal: a number (with or without a unit),
@@ -258,12 +264,33 @@ Notes:
 - A comparison cannot be chained: write `a < b and b < c`, not
   `a < b < c`.
 - The bitwise operators are below the comparisons, unlike C. So
-  `a & b == c` means `a & (b == c)`, which is an error at run time
-  because `&` needs numbers.
+  `a & b == c` means `a & (b == c)`, which is an error before the
+  program runs (`LEC3016`) because `&` needs whole numbers.
 - `not` is low: `not a == b` means `not (a == b)`.
 - `Name(field = value, ...)` builds a shape. The parser tells it apart
   from a call by the `=` after the first name.
 - `and` and `or` always evaluate both sides.
+
+## What the parser does not check yet
+
+These programs are wrong, but today the parser does not say so. Each was
+run on 2026-11-24.
+
+| Written | What happens today |
+|---|---|
+| `a == 2` as a statement | taken as `a = 2` |
+| `ensure 5 = 3` | accepted |
+| `ensure show = 1` (a keyword as a name) | accepted |
+| `f(1 2)`, `[1 2 3]`, `f(1,)` | the comma is not needed, or may be extra |
+| `show (1 + 2` | the missing `)` is not seen |
+| `show [1, 2` | the compiler itself fails |
+| `show a::b::c(1)`, `show ring::create` | the compiler itself fails |
+| `make` with no name | the compiler does not end |
+| `make f(a b)` | read as one parameter |
+| a block with no `done()` at the end of the file | accepted |
+| `a + 2` as a statement | accepted, does nothing |
+| `x Number` in a shape, without the `:` | accepted |
+| `interrupt x` without the brackets | accepted, reads past the next line |
 
 ## Things the grammar does not have
 
@@ -278,9 +305,7 @@ Notes:
 
 ### A trap with show
 
-`show` takes several expressions side by side, separated only by
-spaces. An expression that starts with `(` or `[` right after another
-one is read as a new argument:
+Only a plain name can be indexed, so a second `[ ]` starts a new value:
 
 ```lepthorn
 suppose grid = [[1, 2], [3, 4]]

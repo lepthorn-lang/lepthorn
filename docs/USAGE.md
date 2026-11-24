@@ -71,29 +71,35 @@ lepthornc resolve               # show what manifest.lepm means on this machine
 | `--emit-llvm` | `compile`, `build` | keep the `.ll` file next to the program |
 | `--cc <program>` | every command | the Clang to use |
 | `--ascii` | `run`, `eval`, `test` | print units in ASCII |
+| `--no-color` | every command | no colors in errors |
 | `--unicode` | `run`, `eval` | print units in Unicode (the default) |
 
 ## How errors look
 
-Errors found before the program runs (lexer, parser and verifier) start
-with the file and line, and show the line below:
+An error starts with the file, the line, the column and the code. The
+wrong part of the line stands between `»` and `«`:
 
 ```text
-main.lep:2: LEC2001: expected a value, found the end of the line
-    show speed +
+main.lep:1:16  LEC3101
+    ensure d = 2kg »+« 3m
+    why: cannot add `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
+1 error, program did not run
 ```
 
 When the error is in a file pulled in with `use`, that file is named:
 
 ```text
-src/physics/drag.lep:14: LEC3001: undeclared variable 'area'
-    done(0.5 * rho * v * v * area)
+src/physics/drag.lep:2:30  LEC3001
+    done(0.5 * rho * v * v * »area«)
+    why: undeclared variable 'area'
+    fix: declare it first with ensure or suppose
 ```
 
 Every error in the program is printed, not only the first, and nothing
 runs. The codes are explained in [ERRORS.md](ERRORS.md) and by
 `lepthornc explain CODE`. Errors while the program runs (`LERxxxx`)
-are printed as `lepthorn: runtime error: CODE: <message>`.
+look the same; a release program leaves out the line of the source.
 
 ## How units are printed
 

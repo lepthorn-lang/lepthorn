@@ -220,7 +220,10 @@ is no arithmetic on them yet.
 
 | Value | Printed as |
 |---|---|
-| Number, no unit | at most 6 significant digits: `42`, `0.333333`, `1e+06` |
+| Number, whole, below 10^15 | all digits: `42`, `1234567` |
+| Number from 1000, with a part | at most 3 digits after the point: `1234567.5`, `1176.798` |
+| Number below 1000, with a part | at most 6 significant digits: `0.333333` |
+| Number from 10^15, or below 0.0001 | with an e: `1e+15`, `9e-05` |
 | Number with a unit | the number, a space, the unit: `25 kg` |
 | Text | the text, no quotes |
 | Boolean | `true` or `false` |

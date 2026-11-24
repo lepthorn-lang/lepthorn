@@ -40,8 +40,9 @@ runner checks this.
 - Inside `( )` and `[ ]` a line break does not end the statement.
 - Comments are `(* ... *)` and can nest. A comment that is never
   closed is an error (`LEC1001`) and the program does not run.
-- `//` is not a comment. The lexer prints `LEC1002`, skips the rest of
-  the line and goes on.
+- `//` is not a comment: it is an error (`LEC1002`). So are a text that
+  is not closed on its line (`LEC1003`) and a `*)` with no open comment
+  (`LEC1004`).
 - Indentation does not matter to the compiler. Blocks end with
   `done()`. The examples indent by four spaces.
 
@@ -218,8 +219,10 @@ suppose c = a + b
 ```
 
 ```text
-file.lep:3: LEC3101: `+` needs the same unit on both sides, got kg and m
-    suppose c = a + b
+file.lep:3:15  LEC3101
+    suppose c = a »+« b
+    why: cannot add `kg` (mass) and `m` (length)
+    fix: use quantities of the same kind on both sides
 ```
 
 ```lepthorn
@@ -228,8 +231,10 @@ speed = 5kg
 ```
 
 ```text
-file.lep:2: LEC3102: 'speed' holds m/s, it cannot take a value in kg
-    speed = 5kg
+file.lep:2:1  LEC3102
+    »speed« = 5kg
+    why: 'speed' holds `m/s` (speed), it cannot take a value in `kg` (mass)
+    fix: give it a value of the same kind, or use a new variable
 ```
 
 A mistake inside a function is shown at the call that gives the wrong
@@ -243,8 +248,10 @@ show add(2kg, 3m)
 ```
 
 ```text
-file.lep:4: LEC3103: in this call to 'add': `+` needs the same unit on both sides, got kg and m
-    show add(2kg, 3m)
+file.lep:4:6  LEC3103
+    show »add«(2kg, 3m)
+    why: in this call to 'add': cannot add `kg` (mass) and `m` (length)
+    fix: give the function units that fit what it does
 ```
 
 When the units are only known while running, for example in array
@@ -256,7 +263,10 @@ show values[0] + values[1]
 ```
 
 ```text
-lepthorn: runtime error: LER2001: dimension mismatch in `+`: kg and m
+file.lep:2:16  LER2001
+    show values[0] »+« values[1]
+    why: `+` needs the same unit on both sides, got kg and m
+    fix: use quantities of the same kind on both sides
 ```
 
 An exponent with a unit (`2 ** 1kg`) stops the program with `LER2002`.
@@ -304,8 +314,16 @@ show "speed:" speed "at" time
 ```
 
 `show` prints its arguments on one line, separated by one space, and
-ends the line. Arguments are written next to each other, with no
-commas.
+ends the line. `show` alone prints an empty line. Arguments are written
+next to each other, with spaces and no commas. Four lines that could be
+read in two ways are errors:
+
+| Written | Error | Write |
+|---|---|---|
+| `show a -b` | `LEC2006` | `show a - b` |
+| `show 1, 2` | `LEC2007` | `show 1 2` |
+| `show a [0]` | `LEC2008` | `show a[0]` |
+| `show f (3)` | `LEC2009` | `show f(3)` |
 
 ### take and read
 
@@ -379,7 +397,10 @@ Checked when `choose` starts, for every label, before any case runs
 - a number label must have the same unit as the value.
 
 ```text
-lepthorn: runtime error: LER5003: `choose`: case label type mismatch - the value is Number, case label is Text
+file.lep:5:6  LER5003
+    case »"1"«
+    why: `choose`: case label type mismatch - the value is Number, case label is Text
+    fix: use labels of the same kind as the value
 ```
 
 ## 8. Loops
@@ -446,7 +467,10 @@ The frequency must be a positive frequency. A literal that is not
 Any other value is checked when the loop starts:
 
 ```text
-lepthorn: runtime error: loop_hz expects a positive frequency in Hz, got 0.01 s (for a period, use every)
+file.lep:2:1  LER2011
+    »loop_hz« rates[0]
+    why: loop_hz expects a positive frequency in Hz, got 0.01 s (for a period, use every)
+    fix: give a rate more than 0, such as 100Hz
 ```
 
 The start times stay on a fixed grid: if the body takes longer one
@@ -591,10 +615,12 @@ The file functions do not stop the program when they fail. Check
 | `sys::run(command)` | runs a shell command, returns its exit status |
 | `sys::capture(command)` | runs a shell command, returns what it printed |
 | `sys::exit(code)` | ends the program with that exit status |
-| `sys::fail(reason)` | ends the program with `LER1018: reason`, status 1 |
-| `sys::error(message)` | ends the program like any runtime error: `lepthorn: runtime error: message`, status 1 |
+| `sys::fail(reason)` | ends the program with `LER1018` and the reason, status 1 |
+| `sys::error(message)` | ends the program like any runtime error, with `LER1019`, status 1 |
 | `sys::warn(message)` | writes one line to standard error; `true` |
-| `sys::at_place(place)` | for interpreters: names the place (`main.lep:3`) that errors while running are shown at; `true` |
+| `sys::at_place(place)` | for interpreters: the place that errors while running are shown at. Four lines of Text: `file:line:column`, then the line of the program before, in and after the wrong part. An empty Text goes back; `true` |
+| `sys::stop_with(text)` | for interpreters: prints a finished error (`CODE`, two spaces, ...) and ends, status 1 |
+| `sys::recursion_limit(n)` | for interpreters: how many calls may be open at once (10000 at the start); `true` |
 | `sys::is_terminal()` | `true` when standard error is a terminal, not a file or a pipe |
 | `sys::cwd()`, `sys::chdir(path)` | current directory; change it (`true` if it worked) |
 | `sys::is_dir(path)`, `sys::mkdir(path)` | Booleans |
@@ -643,8 +669,14 @@ runs on one thread.
 The warnings look like this and do not stop the program:
 
 ```text
-lepthorn: warning: LER6001: Deadline Missed - took 0.005s, budget 0.001s
+file.lep:1:1  LER6001  warning
+    »deadline« 1ms
+    why: the block took 0.005s, its deadline is 0.001s
+    fix: make the block faster, or give it a longer deadline
 ```
+
+The time is checked when the block ends, also when `done(value)`,
+`stop` or `next` leaves it early.
 
 Real threads, and running `watch`/`interrupt` bodies on real events,
 are not done yet.
@@ -653,19 +685,23 @@ are not done yet.
 
 | Code | When | What happens |
 |---|---|---|
-| `LEC1xxx` | reading the source | the program does not run (`LEC1002` is only a message) |
+| `LEC1xxx` | reading the source | the program does not run |
 | `LEC2xxx` | parsing | the program does not run |
 | `LEC30xx`, `LEC31xx` | checking, before running | the program does not run |
+| `LEC4xxx` | a `use` file that is not there | the program does not run |
+| `LEC5xxx`, `LEC6xxx` | the manifest; the command itself | nothing runs |
 | `LEC7xxx` | making native code | no program is written |
-| `LER1xxx`-`LER5xxx` | while running | `lepthorn: runtime error: CODE: ...` on stderr, exit status 1 |
-| `LER6xxx` | while running | `lepthorn: warning: CODE: ...`; the program goes on |
+| `LER1xxx`-`LER5xxx` | while running | the error on standard error, exit status 1 |
+| `LER6xxx` | while running | a warning; the program goes on |
 
 Every error is described in [ERRORS.md](ERRORS.md), and
 `lepthornc explain CODE` shows one.
 
 ## 16. Not in the language yet
 
-- checking units before the program runs
+- checking the units of input, shape fields and array items before the
+  program runs
+- converting to a named unit (`1km as m`)
 - typed declarations (`ensure mass : Mass = 10kg`)
 - unary minus, escape sequences in text
 - real threads; `watch` and `interrupt` on real events

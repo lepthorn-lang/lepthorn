@@ -291,9 +291,8 @@ with `LER2001`.
 
 ### Errors
 
-Every error in a program, with its code, is in one place,
-`src/core/errors/` (see [ERRORS.md](ERRORS.md)). The manifest and
-command-line messages are not there yet. The lexer, parser, checker and code
+Every error, with its code, is in one place,
+`src/core/errors/` (see [ERRORS.md](ERRORS.md)). The lexer, parser, checker and code
 generator ask for an error by name (`error_line("unit_mismatch", [op,
 a, b])`). The run-time code asks for the same messages when it is
 written (`rt_error`), with each `{n}` turned into a printf format, so
@@ -324,6 +323,12 @@ leave a function from deep inside nested `when` and `repeat` blocks.
 (`env`) holding only its parameters. `shared` values live in a separate
 list that every function can see.
 
+**Places.** Before an operation that can fail, the interpreter tells
+the runtime where the program is (`sys::at_place`), so the same report
+prints the error in both modes. Each call of the program takes several
+calls of the interpreter, so the interpreter raises its own limit
+(`sys::recursion_limit`) and counts the program's calls itself.
+
 **Same values as compiled programs.** The interpreter is itself a
 compiled Lepthorn program. When the program being interpreted says
 `a + b`, the interpreter does `a + b` with its own real values, so the
@@ -351,7 +356,13 @@ for each processor, and LLVM does the optimizing.
 - Arithmetic and printing are calls into the runtime: `@lep_qty`,
   `@lep_mul`, `@lep_div`, `@lep_show_arg`, ...
 - The call depth is counted and stops at 10,000, so endless recursion
-  gives a clear error.
+  gives a clear error. The program raises its own stack to 100 MB at
+  the start, so 10,000 calls fit.
+- Every place that can fail is a *spot* (`places.lep`): file, line,
+  column. `@lep.place` holds the number of the spot; it is written just
+  before a call that can fail. The fast way of `+ - * /` and the
+  comparisons takes the number as its last value and writes it only
+  when it fails, so it costs nothing.
 
 This program:
 
