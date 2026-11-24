@@ -620,6 +620,7 @@ The file functions do not stop the program when they fail. Check
 | `sys::warn(message)` | writes one line to standard error; `true` |
 | `sys::at_place(place)` | for interpreters: the place that errors while running are shown at. Four lines of Text: `file:line:column`, then the line of the program before, in and after the wrong part. An empty Text goes back; `true` |
 | `sys::stop_with(text)` | for interpreters: prints a finished error (`CODE`, two spaces, ...) and ends, status 1 |
+| `sys::has_unit(v)` | `true` for a number with a unit |
 | `sys::recursion_limit(n)` | for interpreters: how many calls may be open at once (10000 at the start); `true` |
 | `sys::is_terminal()` | `true` when standard error is a terminal, not a file or a pipe |
 | `sys::cwd()`, `sys::chdir(path)` | current directory; change it (`true` if it worked) |

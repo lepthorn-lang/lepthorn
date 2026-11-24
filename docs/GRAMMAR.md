@@ -270,23 +270,23 @@ Notes:
 - `Name(field = value, ...)` builds a shape. The parser tells it apart
   from a call by the `=` after the first name.
 - `and` and `or` always evaluate both sides.
+- A list has a comma between two items and none after the last:
+  `f(1, 2)`, `[1, 2]`. Anything else is an error (`LEC2010`,
+  `LEC2017`).
+- A name after `::` may be a word of the language: `sys::read`. The
+  names of functions, of their parameters and of the fields given to a
+  shape may not (`LEC2012`).
 
 ## What the parser does not check yet
 
-These programs are wrong, but today the parser does not say so. Each was
-run on 2026-11-24.
+These programs are wrong, but today the parser does not say so.
 
 | Written | What happens today |
 |---|---|
 | `a == 2` as a statement | taken as `a = 2` |
 | `ensure 5 = 3` | accepted |
 | `ensure show = 1` (a keyword as a name) | accepted |
-| `f(1 2)`, `[1 2 3]`, `f(1,)` | the comma is not needed, or may be extra |
 | `show (1 + 2` | the missing `)` is not seen |
-| `show [1, 2` | the compiler itself fails |
-| `show a::b::c(1)`, `show ring::create` | the compiler itself fails |
-| `make` with no name | the compiler does not end |
-| `make f(a b)` | read as one parameter |
 | a block with no `done()` at the end of the file | accepted |
 | `a + 2` as a statement | accepted, does nothing |
 | `x Number` in a shape, without the `:` | accepted |
