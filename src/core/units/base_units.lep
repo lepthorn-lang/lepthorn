@@ -181,7 +181,7 @@ done()
    `unit` is the unit being added, for the error message. *)
 make dimension_from_text(written, unit)
     when not brackets_match(written)
-        sys::error(error_line("unit_brackets", [unit, written]))
+        stop_with_error(error_block("unit_brackets", [unit, written], "in the unit list"))
     done()
     suppose result = no_dimension()
     suppose below = false
@@ -203,7 +203,7 @@ make dimension_from_text(written, unit)
             result = add_word(result, word, below, unit)
             word = ""
             when below
-                sys::error(error_line("unit_two_slashes", [unit, written]))
+                stop_with_error(error_block("unit_two_slashes", [unit, written], "in the unit list"))
             done()
             below = true
         otherwise
@@ -256,12 +256,12 @@ make add_word(d, word, below, unit)
         name = text::slice(word, 0, hat)
         ensure power_text = text::slice(word, hat + 1, text::length(word))
         when not is_whole_number_text(power_text)
-            sys::error(error_line("unit_power_not_whole", [unit, word]))
+            stop_with_error(error_block("unit_power_not_whole", [unit, word], "in the unit list"))
         done()
         power = text::to_number(power_text)
     done()
     when not is_base_unit(name)
-        sys::error(error_line("unit_not_base", [unit, name]))
+        stop_with_error(error_block("unit_not_base", [unit, name], "in the unit list"))
     done()
     when below
         power = 0 - power
@@ -329,4 +329,40 @@ make make_quantity(magnitude, d)
     result = result * (1cd ** d.luminosity)
     result = result * (1rad ** d.angle)
     done(result)
+done()
+
+(* -- the names of common dimensions, for messages -- *)
+
+(* "m/s" -> "speed"; "" when there is no common name *)
+make dimension_name(unit)
+    when unit == "kg"
+        done("mass")
+    otherwise when unit == "m"
+        done("length")
+    otherwise when unit == "s"
+        done("time")
+    otherwise when unit == "A"
+        done("current")
+    otherwise when unit == "K"
+        done("temperature")
+    otherwise when unit == "mol"
+        done("amount")
+    otherwise when unit == "cd"
+        done("light")
+    otherwise when unit == "rad"
+        done("angle")
+    otherwise when unit == "m²"
+        done("area")
+    otherwise when unit == "m/s"
+        done("speed")
+    otherwise when unit == "m/s²"
+        done("acceleration")
+    otherwise when unit == "kg·m/s²"
+        done("force")
+    otherwise when unit == "1/s"
+        done("frequency")
+    otherwise when unit == "kg/(m·s²)"
+        done("pressure")
+    done()
+    done("")
 done()

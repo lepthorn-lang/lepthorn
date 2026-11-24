@@ -128,7 +128,35 @@ make dim_text(d)
     when top == ""
         done("1/" + bottom)
     done()
+    when text_index(bottom, "·") >= 0
+        done(top + "/(" + bottom + ")")
+    done()
     done(top + "/" + bottom)
+done()
+
+(* a dimension in words, for messages: `kg` (mass), `m/s` (speed) *)
+make dim_words(d)
+    ensure unit = dim_text(d)
+    when same_dimension(d, no_dimension())
+        done(unit)
+    done()
+    ensure name = dimension_name(unit)
+    when name == ""
+        done("`" + unit + "`")
+    done()
+    done("`" + unit + "` (" + name + ")")
+done()
+
+(* what an operator does, for messages: "cannot add ..." *)
+make operator_verb(op)
+    when op == "+"
+        done("add")
+    otherwise when op == "-"
+        done("subtract")
+    otherwise when op == "%"
+        done("take the remainder of")
+    done()
+    done("compare")
 done()
 
 (* -- a list that grows by itself (a ring has a fixed size) -- *)
@@ -248,6 +276,9 @@ make dim_is_same_dimension_op(op)
     when op == "+" or op == "-" or op == "%"
         done(true)
     done()
+    when op == "==" or op == "!="
+        done(true)
+    done()
     done(op == "<" or op == ">" or op == "<=" or op == ">=")
 done()
 
@@ -303,9 +334,9 @@ make dim_of_binop(ctx, vars, node)
         done(dim_unknown())
     done()
     when not same_dimension(left.dimension, right.dimension)
-        ensure a = dim_text(left.dimension)
-        ensure b = dim_text(right.dimension)
-        dim_report(ctx, node.pos, error_line("unit_mismatch", [op, a, b]))
+        ensure a = dim_words(left.dimension)
+        ensure b = dim_words(right.dimension)
+        dim_report(ctx, node.pos, error_line("unit_mismatch", [operator_verb(op), a, b]))
         done(dim_unknown())
     done()
     when op == "+" or op == "-" or op == "%"
@@ -501,8 +532,8 @@ make dim_check_assign(ctx, vars, node)
     ensure both_known = value.known and old.known
     when both_known
         when not same_dimension(value.dimension, old.dimension)
-            ensure a = dim_text(old.dimension)
-            ensure b = dim_text(value.dimension)
+            ensure a = dim_words(old.dimension)
+            ensure b = dim_words(value.dimension)
             dim_report(ctx, node.pos, error_line("variable_unit_changed", [node.op, a, b]))
         done()
     done()

@@ -4,61 +4,65 @@
 make add_unit_errors(list)
     (* before the program runs *)
     add_error(list, "LEC3101", "unit_mismatch",
-        "`{1}` needs the same unit on both sides, got {2} and {3}",
-        "Make both sides the same kind of quantity, or convert one of them.")
+        "cannot {1} {2} and {3}",
+        "use quantities of the same kind on both sides")
     add_error(list, "LEC3102", "variable_unit_changed",
         "'{1}' holds {2}, it cannot take a value in {3}",
-        "A variable keeps the unit of its first value.")
+        "give it a value of the same kind, or use a new variable")
     add_error(list, "LEC3103", "unit_error_in_call",
         "in this call to '{1}': {2}",
-        "The units given to the function do not fit what it does with them.")
+        "give the function units that fit what it does")
+
+    add_error(list, "LEC3108", "no_such_unit",
+        "there is no unit `{1}`",
+        "use a unit from the unit table")
 
     (* in a unit's dimension text, in src/core/units/ *)
     add_error(list, "LEC3104", "unit_not_base",
         "unit {1}: {2} is not a base unit (kg m s A K mol cd rad)",
-        "Write the dimension with base units only, for example 'kg / m s^2'.")
+        "write the dimension with base units only, for example 'kg / m s^2'")
     add_error(list, "LEC3105", "unit_power_not_whole",
         "unit {1}: the power in {2} must be a whole number",
-        "Write a power such as ^2 or ^-1.")
+        "write a power such as ^2 or ^-1")
     add_error(list, "LEC3106", "unit_two_slashes",
         "unit {1}: '{2}' has more than one /",
-        "Put everything below the line after one /: 'kg / m s^2'.")
+        "put everything below the line after one /: 'kg / m s^2'")
     add_error(list, "LEC3107", "unit_brackets",
         "unit {1}: the brackets in '{2}' do not match",
-        "Close every ( with a ).")
+        "close every ( with a )")
 
     (* while the program runs *)
     add_error(list, "LER2001", "unit_mismatch_run",
-        "dimension mismatch in `{1}`: {2} and {3}",
-        "Both sides must have the same unit.")
+        "`{1}` needs the same unit on both sides, got {2} and {3}",
+        "use quantities of the same kind on both sides")
     add_error(list, "LER2002", "exponent_with_unit",
         "the exponent of `**` must be a plain number, got {1}",
-        "Write the power as a number without a unit.")
+        "write the power as a number without a unit")
     add_error(list, "LER2003", "fractional_power",
         "`**`: a dimensioned base requires a whole-number exponent (fractional powers of a physical dimension are not defined)",
-        "Raise a number with a unit only to a whole power.")
+        "raise a number with a unit only to a whole power")
     add_error(list, "LER2004", "unknown_unit",
         "unknown unit suffix '{1}'",
-        "Use a unit from the unit table (see examples/19_units_and_conversion.lep).")
+        "use a unit from the unit table (see examples/19_units_and_conversion.lep)")
     add_error(list, "LER2005", "gravity_needs_mass",
         "force::gravity: argument must have mass dimension [kg]",
-        "Give a mass, such as 10kg.")
+        "give a mass, such as 10kg")
     add_error(list, "LER2006", "acceleration_needs_force_and_mass",
         "force::acceleration: arguments must be a force [N] and a mass [kg]",
-        "Give a force and a mass.")
+        "give a force and a mass")
     add_error(list, "LER2007", "velocity_needs_length_and_time",
         "motion::velocity: arguments must be a length [m] and a time [s]",
-        "Give a distance and a time.")
+        "give a distance and a time")
     add_error(list, "LER2008", "rotation_needs_angle",
         "matrix::rotationZ: argument must have angle dimension [rad]",
-        "Give an angle, such as 90deg.")
+        "give an angle, such as 90deg")
     add_error(list, "LER2009", "vector_needs_quantity",
         "vector: expected a quantity value",
-        "Give three numbers.")
+        "give three numbers")
     add_error(list, "LER2010", "period_needs_time",
         "`{1}` requires a time (e.g. 10ms) or frequency (e.g. 100Hz) quantity",
-        "Give a time such as 10ms, or a frequency such as 100Hz.")
+        "give a time such as 10ms, or a frequency such as 100Hz")
     add_error(list, "LER2011", "loop_hz_bad_rate",
         "loop_hz expects a positive frequency in Hz, got {1} (for a period, use every)",
-        "Give a rate more than 0, such as 100Hz.")
+        "give a rate more than 0, such as 100Hz")
 done()
