@@ -279,18 +279,26 @@ Notes:
 
 ## What the parser does not check yet
 
-These programs are wrong, but today the parser does not say so.
+These programs are wrong, but today the parser does not say so. The
+list has the kinds that are known.
 
 | Written | What happens today |
 |---|---|
 | `a == 2` as a statement | taken as `a = 2` |
 | `ensure 5 = 3` | accepted |
 | `ensure show = 1` (a keyword as a name) | accepted |
-| `show (1 + 2` | the missing `)` is not seen |
+| `show (1 + 2`, `show a[0` | the missing `)` or `]` is not seen |
+| `ensure a = 1 ensure b = 2` | two statements on one line are accepted |
 | a block with no `done()` at the end of the file | accepted |
 | `a + 2` as a statement | accepted, does nothing |
+| `done(1)` outside a function, `shared show 1` | accepted |
+| two functions, parameters or fields with one name | accepted; the last function is used |
+| `x: Banana` in a shape | any type name is accepted |
+| a name made inside a block and used after it | accepted; fails while running if the block did not run |
+| `ensure x = 1` and then `ensure x = 2` | accepted; the second one changes the first |
 | `x Number` in a shape, without the `:` | accepted |
 | `interrupt x` without the brackets | accepted, reads past the next line |
+| about 1000 brackets inside each other | the compiler itself stops with `LER5001` (900 are fine) |
 
 ## Things the grammar does not have
 

@@ -17,6 +17,9 @@ Every language decision is checked against these seven rules:
 
 ## Direction
 
+- A language for autonomous systems, scientific computing and
+  engineering: robots, drones, vehicles, controllers, and the
+  calculations behind them.
 - Native code close to the machine, with performance as a primary
   design goal comparable to systems languages such as Rust.
 - No pointers and no borrows in user code.
@@ -73,25 +76,54 @@ Every language decision is checked against these seven rules:
     in eval and in compiled programs. A release program leaves out the
     source line.
 28. `lepthornc help`, and `lepthornc resolve` for a whole project.
+29. Every error has a code, a reason and a fix, kept in one place
+    (`src/core/errors/`), and `lepthornc explain CODE` shows it. This
+    includes the manifest, `use` files and the command line.
+30. Unit mismatches are found before running where the units are known,
+    and stop the program otherwise, for `+`, `-`, comparisons, `==` and
+    `!=`.
+31. Units, shapes, their fields and built-in functions that do not
+    exist are errors before the program runs.
+32. Nested comments. A comment or a text that is never closed, `//`,
+    and a stray `*)` are errors.
+33. `show` with clear spacing rules, and an empty line with `show`
+    alone. Whole numbers are printed with all digits.
+34. Recursion up to 10000 calls deep, the same in `eval` and in
+    compiled programs.
+35. A late `deadline` or `timeout` shows its line, also when the block
+    is left early.
+36. An array index must be a whole number without a unit.
 
 ## Remaining work
 
-- Runtime hardening: memory is not yet reclaimed. Lepthorn has no
-  garbage collector, but it also does not yet provide a complete
-  explicit ownership or region-based release model.
+Before Phase 0:
+
+1. Harden the parser. It still accepts some wrong programs; the list is
+   in `docs/GRAMMAR.md`. It no longer fails or hangs on unfinished
+   lists, calls or functions. Very deeply nested brackets still make it
+   fail.
+2. Reject numbers with a part where a whole number is needed, such as
+   `text::char_at(t, 1.5)` and `repeat 2.5`, instead of cutting them.
+3. Make `ensure` protect array items and shape fields before running.
+   It will not yet protect a value that is reached through another
+   variable or a function parameter; that is part of the memory model
+   (Phase 2A).
+
+Tests, especially for errors, and documentation are part of each step.
+
+In a later phase:
+
+- Units of input, shape fields, array items and collections are checked
+  only while running; a mismatch there stops the program (Phase 1).
+- `parallel` has no OS threads in compiled programs; `watch` and
+  `interrupt` run their body once (Phase 2C).
+- Trigonometry, and arithmetic on vectors and matrices (Phase 4A).
 - Portability: only x86-64 Linux; other architectures and operating
   systems need their system constants. Verified with Clang 22.1.8,
   glibc 2.43, and musl 1.2.5.
-- `parallel` has no OS threads in compiled programs;
-  `watch` and `interrupt` run their body once.
-- Units are checked before running where they can be known (numbers
-  with units, variables, `*` and `/`, function calls). Input, shape
-  fields, array items and collections are checked while running; a
-  mismatch there stops the program.
-- `ensure` does not lock array items or shape fields.
-- The parser accepts some wrong programs, and a few make the compiler
-  itself fail: the list is in `docs/GRAMMAR.md`.
-- More conformance tests, especially error paths.
+
+Always:
+
 - Keep `README.md`, this file, and the documentation in step with
   the compiler.
 
@@ -108,7 +140,7 @@ Every language decision is checked against these seven rules:
 
 Covers:
 
-1. Final lexical rules and nested comments.
+1. Final lexical rules and nested comments. Comments and texts: done.
 2. Numbers. Every number has a value and one of four kinds:
    - **Dimensioned quantity**: a value with a unit (`23kg`, `23m`,
      `23s`, `23A`). `1m` and `100cm` have the same dimension and
@@ -130,7 +162,8 @@ Covers:
 8. Loops and timing syntax.
 9. Concurrency syntax.
 10. Collections.
-11. Parser diagnostics.
+11. Parser diagnostics. The error design is done; the stricter parser
+    is in progress.
 12. Compile-time validation rules.
 13. Native and eval conformance tests.
 14. Documentation synchronization.
