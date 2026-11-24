@@ -4,7 +4,8 @@ Lepthorn
 > Code that knows its physics, timing, and limits
 
 Lepthorn is a correctness-first systems language for
-real-time and autonomous systems.
+real-time and autonomous systems, scientific computing
+and engineering.
 
 It is designed for robots, drones, vehicles, embedded
 controllers, and engineering systems where physical
