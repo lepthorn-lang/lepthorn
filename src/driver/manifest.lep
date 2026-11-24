@@ -30,13 +30,37 @@ shape MfState
     legacy_line: Number
 done()
 
-make mf_fail(line, msg)
+(* an error in the manifest: the line is shown between the thorns *)
+make mf_fail(line, error)
     when line > 0
-        show "lepthornc: manifest.lepm:" + text::from_number(line) + ": " + msg
+        ensure where = "manifest.lepm:" + text::from_number(line)
+        print_error(where, between_thorns(mf_line_text(line)), error)
     otherwise
-        show "lepthornc: manifest.lepm: " + msg
+        print_error("manifest.lepm", "", error)
     done()
     sys::exit(2)
+done()
+
+(* the text of one line of the manifest *)
+make mf_line_text(line)
+    ensure new_line = text::from_code(10)
+    ensure body = drv_read("manifest.lepm")
+    suppose at = 1
+    suppose words = ""
+    suppose i = 0
+    repeat
+        when i >= text::length(body) or at > line
+            stop
+        done()
+        ensure c = text::char_at(body, i)
+        when c == new_line
+            at = at + 1
+        otherwise when at == line
+            words = words + c
+        done()
+        i = i + 1
+    done()
+    done(drv_trim(words))
 done()
 
 make mf_word_in(word, words)
@@ -282,14 +306,14 @@ make mf_text_value(raw, line)
     ensure q = text::from_code(34)
     ensure n = text::length(raw)
     when n < 2
-        mf_fail(line, "expected a quoted value, got: " + raw)
+        mf_fail(line, error_line("value_not_quoted", [raw]))
     done()
     when text::char_at(raw, 0) != q or text::char_at(raw, n - 1) != q
-        mf_fail(line, "expected a quoted value, got: " + raw)
+        mf_fail(line, error_line("value_not_quoted", [raw]))
     done()
     ensure inner = text::slice(raw, 1, n - 1)
     when drv_contains(inner, q)
-        mf_fail(line, "a value can't contain a quote: " + raw)
+        mf_fail(line, error_line("value_has_quote", [raw]))
     done()
     done(inner)
 done()
@@ -299,7 +323,7 @@ make mf_list_value(raw, line)
     ensure q = text::from_code(34)
     ensure n = text::length(raw)
     when not drv_ends_with(raw, "]") or n < 2
-        mf_fail(line, "a list must end with ]: " + raw)
+        mf_fail(line, error_line("list_not_closed", [raw]))
     done()
     ensure inner = text::slice(raw, 1, n - 1)
     ensure m = text::length(inner)
@@ -311,12 +335,12 @@ make mf_list_value(raw, line)
             stop
         done()
         when text::char_at(inner, i) != q
-            mf_fail(line, "list items must be quoted: " + raw)
+            mf_fail(line, error_line("list_item_not_quoted", [raw]))
         done()
         suppose close = i + 1
         repeat
             when close >= m
-                mf_fail(line, "unterminated quote in list: " + raw)
+                mf_fail(line, error_line("list_quote_open", [raw]))
             done()
             when text::char_at(inner, close) == q
                 stop
@@ -331,7 +355,7 @@ make mf_list_value(raw, line)
         i = mf_skip_spaces(inner, close + 1)
         when i < m
             when text::char_at(inner, i) != ","
-                mf_fail(line, "expected , between list items: " + raw)
+                mf_fail(line, error_line("list_no_comma", [raw]))
             done()
             i = mf_skip_spaces(inner, i + 1)
         done()
@@ -346,7 +370,7 @@ make mf_handle_line(st, entries, line, lineno)
     when drv_starts_with(line, "[")
         ensure kind = mf_section_kind(line)
         when kind == ""
-            mf_fail(lineno, "unknown section " + line + " (sections: " + mf_sections() + ")")
+            mf_fail(lineno, error_line("unknown_section", [line, mf_sections()]))
         done()
         ensure probe = Manifest(entries = entries)
         ensure sinst = mf_count(probe, kind)
@@ -363,12 +387,12 @@ make mf_handle_line(st, entries, line, lineno)
     done()
     ensure eq = drv_first_index(line, "=")
     when eq >= text::length(line)
-        mf_fail(lineno, "expected a [Section] or `key = value`, got: " + line)
+        mf_fail(lineno, error_line("not_a_manifest_line", [line]))
     done()
     ensure key = drv_trim(text::slice(line, 0, eq))
     ensure raw = drv_trim(text::slice(line, eq + 1, text::length(line)))
     when not mf_is_ident(key)
-        mf_fail(lineno, "bad key: " + key)
+        mf_fail(lineno, error_line("bad_key", [key]))
     done()
     suppose inst = 0
     when st.block != ""
@@ -376,25 +400,25 @@ make mf_handle_line(st, entries, line, lineno)
     done()
     when st.block == ""
         when not mf_word_in(key, mf_legacy_keys())
-            mf_fail(lineno, key + " must be inside a section (sections: " + mf_sections() + ")")
+            mf_fail(lineno, error_line("key_outside_section", [key, mf_sections()]))
         done()
         when st.legacy_line == 0
             st.legacy_line = lineno
         done()
     otherwise when not mf_word_in(key, mf_keys(st.block))
-        mf_fail(lineno, "unknown key " + key + " in " + mf_section_name(st.block) + " (keys: " + mf_keys(st.block) + ")")
+        mf_fail(lineno, error_line("unknown_key", [key, mf_section_name(st.block), mf_keys(st.block)]))
     done()
     when mf_has(Manifest(entries = entries), st.block, inst, key)
-        mf_fail(lineno, key + " is set twice")
+        mf_fail(lineno, error_line("key_twice", [key]))
     done()
     ensure is_list = drv_starts_with(raw, "[")
     (* `tests` takes one folder or file, or a list of them *)
     ensure takes_both = key == "tests"
     when not takes_both and is_list != mf_word_in(key, "authors libraries")
         when is_list
-            mf_fail(lineno, key + " takes quoted text, not a list")
+            mf_fail(lineno, error_line("key_wants_text", [key]))
         done()
-        mf_fail(lineno, key + " takes a list, e.g. [" + text::from_code(34) + "..." + text::from_code(34) + "]")
+        mf_fail(lineno, error_line("key_wants_list", [key]))
     done()
     suppose value = ""
     when is_list
@@ -418,7 +442,7 @@ make mf_from_legacy(m)
     when kind == "library"
         tkind = "library"
     otherwise when kind != "" and kind != "application"
-        mf_fail(mf_line(m, "", 0, "kind"), "kind must be application or library, got " + kind)
+        mf_fail(mf_line(m, "", 0, "kind"), error_line("old_kind", [kind]))
     done()
     mf_add(entries, "package", 0, "", "")
     mf_add(entries, "package", 0, "name", mf_get(m, "", 0, "project"))
@@ -473,7 +497,7 @@ make mf_strip_comments(body)
             i = i + 2
         otherwise when not in_quote and pair == "*)"
             when depth == 0
-                mf_fail(line, "*) without a (* before it")
+                mf_fail(line, error_line_plain("manifest_comment_end"))
             done()
             depth = depth - 1
             outs = outs + "  "
@@ -487,7 +511,7 @@ make mf_strip_comments(body)
         done()
     done()
     when depth > 0
-        mf_fail(open_line, "this (* comment is never closed with *)")
+        mf_fail(open_line, error_line_plain("manifest_comment_open"))
     done()
     done(outs)
 done()
@@ -519,7 +543,7 @@ make mf_parse(text_in)
     ensure m = Manifest(entries = entries)
     when st.legacy_line > 0
         when st.blocks > 0
-            mf_fail(st.legacy_line, "keys before the first section are the old flat form; put them in [Package], [Target] and [Test]")
+            mf_fail(st.legacy_line, error_line_plain("old_flat_form"))
         done()
         done(mf_from_legacy(m))
     done()
@@ -531,7 +555,7 @@ done()
 make mf_require(m, block, inst, key)
     ensure v = mf_get(m, block, inst, key)
     when v == ""
-        mf_fail(mf_line(m, block, inst, key), mf_section_name(block) + " needs " + key)
+        mf_fail(mf_line(m, block, inst, key), error_line("key_missing", [mf_section_name(block), key]))
     done()
     done(v)
 done()
@@ -539,7 +563,7 @@ done()
 make mf_check_name(m, block, inst, key)
     ensure v = mf_require(m, block, inst, key)
     when not mf_is_name(v)
-        mf_fail(mf_line(m, block, inst, key), key + " may use only letters, digits, _ . and - (not first), got " + v)
+        mf_fail(mf_line(m, block, inst, key), error_line("bad_name", [key, v]))
     done()
     done(v)
 done()
@@ -550,10 +574,10 @@ make mf_check_path(m, block, inst, key, must_exist)
         done(v)
     done()
     when drv_starts_with(v, "/") or drv_starts_with(v, "~")
-        mf_fail(mf_line(m, block, inst, key), key + " must be relative to the project root, got " + v)
+        mf_fail(mf_line(m, block, inst, key), error_line("path_not_relative", [key, v]))
     done()
     when must_exist and not file::exists(v)
-        mf_fail(mf_line(m, block, inst, key), key + " " + v + " does not exist")
+        mf_fail(mf_line(m, block, inst, key), error_line("path_missing", [key, v]))
     done()
     done(v)
 done()
@@ -570,7 +594,7 @@ make mf_check_unique(m, block, key)
                 stop
             done()
             when mf_get(m, block, a, key) == mf_get(m, block, b, key)
-                mf_fail(mf_line(m, block, b, key), "two " + mf_section_name(block) + " sections with " + key + " " + mf_get(m, block, b, key))
+                mf_fail(mf_line(m, block, b, key), error_line("section_twice", [mf_section_name(block), key, mf_get(m, block, b, key)]))
             done()
             b = b + 1
         done()
@@ -587,7 +611,7 @@ make mf_check_test_paths(m)
         done()
         ensure path = ring::get(items)
         when drv_starts_with(path, "/") or drv_starts_with(path, "~")
-            mf_fail(mf_line(m, "test", 0, "tests"), "tests must be relative to the project root, got " + path)
+            mf_fail(mf_line(m, "test", 0, "tests"), error_line("path_not_relative", ["tests", path]))
         done()
     done()
 done()
@@ -673,21 +697,21 @@ done()
    run from the project root *)
 make mf_validate(m)
     when mf_count(m, "package") == 0
-        mf_fail(0, "needs a [Package] section")
+        mf_fail(0, error_line_plain("no_package"))
     done()
     when mf_count(m, "package") > 1
-        mf_fail(mf_line(m, "package", 1, ""), "only one [Package] section")
+        mf_fail(mf_line(m, "package", 1, ""), error_line("one_section", ["[Package]"]))
     done()
     mf_check_name(m, "package", 0, "name")
     mf_require(m, "package", 0, "version")
     ensure lic = mf_get(m, "package", 0, "license")
     when lic != "" and not mf_spdx_ok(lic)
-        mf_fail(mf_line(m, "package", 0, "license"), "license must be an SPDX expression, e.g. Apache-2.0 or MIT OR Apache-2.0 (AND, OR, WITH in capitals), got " + lic)
+        mf_fail(mf_line(m, "package", 0, "license"), error_line("bad_license", [lic]))
     done()
     mf_check_path(m, "package", 0, "license_file", true)
     mf_check_path(m, "package", 0, "readme", true)
     when mf_count(m, "target") == 0
-        mf_fail(0, "needs at least one [Target] section (kind bin or library)")
+        mf_fail(0, error_line_plain("no_target"))
     done()
     suppose t = 0
     repeat
@@ -697,7 +721,7 @@ make mf_validate(m)
         mf_check_name(m, "target", t, "name")
         ensure kind = mf_require(m, "target", t, "kind")
         when kind != "bin" and kind != "library"
-            mf_fail(mf_line(m, "target", t, "kind"), "target kind must be bin or library, got " + kind)
+            mf_fail(mf_line(m, "target", t, "kind"), error_line("bad_target_kind", [kind]))
         done()
         mf_require(m, "target", t, "source")
         mf_check_path(m, "target", t, "source", true)
@@ -705,7 +729,7 @@ make mf_validate(m)
     done()
     mf_check_unique(m, "target", "name")
     when mf_count(m, "test") > 1
-        mf_fail(mf_line(m, "test", 1, ""), "only one [Test] section")
+        mf_fail(mf_line(m, "test", 1, ""), error_line("one_section", ["[Test]"]))
     done()
     mf_check_test_paths(m)
     t = 0
@@ -716,7 +740,7 @@ make mf_validate(m)
         mf_check_name(m, "profile", t, "name")
         ensure o = mf_require(m, "profile", t, "optimization")
         when not mf_opt_ok(o)
-            mf_fail(mf_line(m, "profile", t, "optimization"), "optimization must be none, O0, O1, O2, O3, Os or Oz, got " + o)
+            mf_fail(mf_line(m, "profile", t, "optimization"), error_line("bad_optimization", [o]))
         done()
         t = t + 1
     done()
@@ -730,21 +754,21 @@ make mf_validate(m)
         ensure tl = mf_line(m, "target_platform", t, "triple")
         ensure sname = mf_get(m, "target_platform", t, "")
         when sname != triple
-            mf_fail(mf_line(m, "target_platform", t, ""), "section [Target_" + sname + "] has triple " + triple + "; name it [Target_" + triple + "]")
+            mf_fail(mf_line(m, "target_platform", t, ""), error_line("section_not_triple", [sname, triple]))
         done()
         when not drv_starts_with(triple, "x86_64-") or not drv_contains(triple, "-linux")
-            mf_fail(tl, "triple " + triple + ": the runtime supports x86-64 Linux only")
+            mf_fail(tl, error_line("bad_triple", [triple]))
         done()
         ensure libc = mf_require(m, "target_platform", t, "libc")
         when libc != "glibc" and libc != "musl"
-            mf_fail(mf_line(m, "target_platform", t, "libc"), "libc must be glibc or musl, got " + libc)
+            mf_fail(mf_line(m, "target_platform", t, "libc"), error_line("bad_libc", [libc]))
         done()
         when (libc == "musl") != drv_ends_with(triple, "musl")
-            mf_fail(mf_line(m, "target_platform", t, "libc"), "libc " + libc + " doesn't match triple " + triple)
+            mf_fail(mf_line(m, "target_platform", t, "libc"), error_line("libc_not_triple", [libc, triple]))
         done()
         ensure link = mf_get(m, "target_platform", t, "link")
         when link != "" and link != "static" and link != "dynamic"
-            mf_fail(mf_line(m, "target_platform", t, "link"), "link must be static or dynamic, got " + link)
+            mf_fail(mf_line(m, "target_platform", t, "link"), error_line("bad_link", [link]))
         done()
         ensure libs = mf_items(mf_get(m, "target_platform", t, "libraries"))
         repeat
@@ -753,7 +777,7 @@ make mf_validate(m)
             done()
             ensure lib = ring::get(libs)
             when not mf_is_name(lib)
-                mf_fail(mf_line(m, "target_platform", t, "libraries"), "a library is a name like m, not a path or a flag: " + lib)
+                mf_fail(mf_line(m, "target_platform", t, "libraries"), error_line("bad_library", [lib]))
             done()
         done()
         t = t + 1

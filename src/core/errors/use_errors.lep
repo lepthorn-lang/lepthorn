@@ -1,0 +1,10 @@
+(* use_errors.lep - a use line whose file is not there. LEC4xxx. *)
+
+make add_use_errors(list)
+    add_error(list, "LEC4001", "use_no_file",
+        "there is no file {1}",
+        "check the name; the path starts at the file that has the use line")
+    add_error(list, "LEC4002", "use_no_module",
+        "there is no module {1}",
+        "check the name; a::b is src/a/b/module.lep or src/a/b.lep")
+done()

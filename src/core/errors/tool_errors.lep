@@ -1,0 +1,79 @@
+(* tool_errors.lep - mistakes in a lepthornc command. LEC6xxx. *)
+
+make add_tool_errors(list)
+    add_error(list, "LEC6001", "no_clang",
+        "there is no {1}",
+        "install clang, put it on PATH, or set LEPTHORN_CLANG")
+    add_error(list, "LEC6002", "no_profile",
+        "there is no profile {1}",
+        "use debug, release, or a [Profile] of manifest.lepm")
+    add_error(list, "LEC6003", "target_not_declared",
+        "manifest.lepm has no target {1}; it has {2}",
+        "use one of those, or add a [Target_...] section")
+    add_error(list, "LEC6004", "unknown_target",
+        "there is no target {1}",
+        "use x86_64-linux-gnu, x86_64-linux-musl, or a [Target_...] of manifest.lepm")
+    add_error(list, "LEC6005", "clang_no_triple",
+        "{1} -print-target-triple does not work",
+        "check that this is clang")
+    add_error(list, "LEC6006", "host_not_supported",
+        "{1} builds for {2}",
+        "use a clang for x86-64")
+    add_error(list, "LEC6007", "no_sysroot",
+        "there is no {3} for {1} in {2}",
+        "install it, or set LEPTHORN_SYSROOT")
+    add_error(list, "LEC6008", "clang_failed",
+        "clang stopped with {1}",
+        "read the message of clang above")
+    add_error(list, "LEC6009", "library_failed",
+        "building the library stopped with {1}",
+        "read the message above")
+    add_error(list, "LEC6010", "no_error_code",
+        "there is no error code {1}",
+        "run lepthornc explain to see them all")
+    add_error(list, "LEC6011", "no_manifest",
+        "there is no manifest.lepm here or in a folder above",
+        "go into a project, or make one with lepthornc new")
+    add_error(list, "LEC6012", "no_such_target",
+        "there is no such target; the targets are {1}",
+        "use one of those")
+    add_error(list, "LEC6013", "o_many_targets",
+        "-o names one file, but there are many targets",
+        "pick one with --bin or --lib")
+    add_error(list, "LEC6014", "o_for_library",
+        "-o is for programs; a library goes to build/<profile>/lib/",
+        "leave out -o")
+    add_error(list, "LEC6015", "nothing_to_promote",
+        "there is no {1} to promote",
+        "build it first")
+    add_error(list, "LEC6016", "no_test_file",
+        "there is no test file {1}",
+        "check tests in manifest.lepm")
+    add_error(list, "LEC6017", "no_test_folder",
+        "there is no test folder {1}",
+        "check tests in manifest.lepm")
+    add_error(list, "LEC6018", "already_there",
+        "{1} is already there",
+        "use another name")
+    add_error(list, "LEC6019", "bad_project_name",
+        "a project cannot be called {1}",
+        "use letters, digits, _ . and -")
+    add_error(list, "LEC6020", "no_project_file",
+        "there is no project file {1}",
+        "a project file is called manifest.lepm")
+    add_error(list, "LEC6021", "unknown_command",
+        "there is no command {1}",
+        "run lepthornc help to see the commands")
+    add_error(list, "LEC6022", "new_needs_name",
+        "new needs a name",
+        "write lepthornc new <name>")
+    add_error(list, "LEC6023", "command_needs_file",
+        "{1} needs a file",
+        "write the file after the command")
+    add_error(list, "LEC6024", "no_such_file",
+        "there is no file {1}",
+        "check the name")
+    add_error(list, "LEC6025", "cannot_write",
+        "cannot write {1}",
+        "check that you may write in this folder")
+done()

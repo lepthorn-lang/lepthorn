@@ -161,28 +161,28 @@ make read_open_state(open, line)
             stop
         done()
         ensure c = text::char_at(line, place)
-        when open.in_text
-            when c == quote
-                open.in_text = false
+        suppose step = 1
+        when c == quote
+            when open.comments == 0
+                open.in_text = not open.in_text
             done()
-            place = place + 1
-        otherwise when is_pair(line, place, n, "(", "*")
-            open.comments = open.comments + 1
-            place = place + 2
-        otherwise when open.comments > 0
-            when is_pair(line, place, n, "*", ")")
+        otherwise when open.in_text
+        otherwise when c == "("
+            when is_pair(line, place, n, "(", "*")
+                open.comments = open.comments + 1
+                step = 2
+            done()
+        otherwise when c == "*"
+            when open.comments > 0 and is_pair(line, place, n, "*", ")")
                 open.comments = open.comments - 1
-                place = place + 1
+                step = 2
             done()
-            place = place + 1
-        otherwise when is_pair(line, place, n, "/", "/")
-            stop
-        otherwise
-            when c == quote
-                open.in_text = true
+        otherwise when c == "/"
+            when open.comments == 0 and is_pair(line, place, n, "/", "/")
+                step = n
             done()
-            place = place + 1
         done()
+        place = place + step
     done()
 done()
 
@@ -263,15 +263,13 @@ done()
 
 (* `use A::B::C`: src/A/B/C/module.lep if it exists, else file C.lep
    inside module A::B *)
-make drv_resolve_ns(st, src_root, dotted)
+make drv_resolve_ns(src_root, dotted)
     ensure as_module = drv_module_file(src_root, dotted)
     when file::exists(as_module)
         done(as_module)
     done()
     ensure k = drv_last_index(dotted, ":")
     when k < 0
-        show "lepthornc: no module `" + dotted + "` (expected " + as_module + ")"
-        st.failed = true
         done("")
     done()
     suppose pk = k
@@ -290,9 +288,23 @@ make drv_resolve_ns(st, src_root, dotted)
     when file::exists(prefix_module)
         done(drv_concat(drv_dotted_to_dir(src_root, prefix), file_seg + ".lep"))
     done()
-    show "lepthornc: no module `" + dotted + "` or `" + prefix + "` found (looked for " + as_module + " and " + prefix_module + ")"
-    st.failed = true
     done("")
+done()
+
+(* the text of a used file. When there is no such file, the error
+   `name` is shown at the use line: line `line_no` of file `shown`. *)
+make drv_use_file(st, src_root, visited, path, shown, line_no, line, name, target)
+    suppose found = path != ""
+    when found
+        found = file::exists(path)
+    done()
+    when not found
+        ensure where = shown + ":" + text::from_number(line_no) + ":1"
+        print_error(where, between_thorns(drv_trim(line)), error_line(name, [target]))
+        st.failed = true
+        done("")
+    done()
+    done(drv_resolve_uses(st, src_root, visited, path))
 done()
 
 make drv_resolve_uses(st, src_root, visited, path)
@@ -301,11 +313,6 @@ make drv_resolve_uses(st, src_root, visited, path)
         done("")
     done()
     ring::write(visited, canonical)
-    when not file::exists(path)
-        show "lepthornc: cannot read " + path
-        st.failed = true
-        done("")
-    done()
     ensure raw = drv_read(path)
     ensure dir = drv_dirname(path)
     ensure nl = text::from_code(10)
@@ -344,14 +351,10 @@ make drv_resolve_uses(st, src_root, visited, path)
                     when not drv_starts_with(target, "/")
                         rel = drv_concat(dir, target)
                     done()
-                    piece = drv_resolve_uses(st, src_root, visited, rel)
+                    piece = drv_use_file(st, src_root, visited, rel, shown, line_no, line, "use_no_file", target)
                 otherwise
-                    ensure resolved = drv_resolve_ns(st, src_root, target)
-                    when resolved == ""
-                        piece = ""
-                    otherwise
-                        piece = drv_resolve_uses(st, src_root, visited, resolved)
-                    done()
+                    ensure resolved = drv_resolve_ns(src_root, target)
+                    piece = drv_use_file(st, src_root, visited, resolved, shown, line_no, line, "use_no_module", target)
                 done()
                 piece = piece + nl + drv_marker(shown, line_no + 1)
             done()
@@ -418,7 +421,11 @@ done()
 make drv_source(st, path)
     ensure src_root = drv_concat(sys::cwd(), "src")
     ensure visited = ring::create(10000)
-    done(drv_resolve_uses(st, src_root, visited, path))
+    ensure joined = drv_resolve_uses(st, src_root, visited, path)
+    when st.failed
+        print_error_count()
+    done()
+    done(joined)
 done()
 
 make drv_write(path, content)
@@ -541,7 +548,7 @@ done()
 
 make drv_have_clang(cc)
     when drv_clang_path(cc) == ""
-        show "lepthornc: " + cc + " not found - install clang, put it on PATH, or set LEPTHORN_CLANG"
+        tool_error("no_clang", [cc])
         done(false)
     done()
     done(true)
@@ -581,7 +588,7 @@ make drv_profile_opt(m, pname)
     when pname == "release"
         done("-O2")
     done()
-    show "lepthornc: no profile " + pname + " (debug, release, or a [Profile] in manifest.lepm)"
+    tool_error("no_profile", [pname])
     sys::exit(2)
 done()
 
@@ -599,7 +606,7 @@ make drv_platform(m, triple)
     when mf_count(m, "target_platform") > 0
         ensure pi = mf_find(m, "target_platform", "triple", triple)
         when pi < 0
-            show "lepthornc: target " + triple + " is not declared in manifest.lepm (declared: " + mf_names(m, "target_platform", "triple") + ")"
+            tool_error("target_not_declared", [triple, mf_names(m, "target_platform", "triple")])
             sys::exit(2)
         done()
         ensure libc = mf_get(m, "target_platform", pi, "libc")
@@ -618,7 +625,7 @@ make drv_platform(m, triple)
     when triple == "x86_64-linux-musl"
         done(Platform(triple = triple, libc = "musl", link = "static", libs = ""))
     done()
-    show "lepthornc: unknown target " + triple + " (x86_64-linux-gnu, x86_64-linux-musl, or a [Target_<triple>] in manifest.lepm)"
+    tool_error("unknown_target", [triple])
     sys::exit(2)
 done()
 
@@ -629,11 +636,11 @@ done()
 make drv_target_flags(cc, pf, for_library)
     ensure host = drv_host_triple(cc)
     when host == ""
-        show "lepthornc: could not run " + cc + " -print-target-triple"
+        tool_error("clang_no_triple", [cc])
         sys::exit(2)
     done()
     when text::slice(host, 0, drv_first_index(host, "-")) != "x86_64"
-        show "lepthornc: " + cc + " builds for " + host + "; the runtime supports x86-64 only"
+        tool_error("host_not_supported", [cc, host])
         sys::exit(2)
     done()
     ensure want_musl = pf.libc == "musl"
@@ -664,7 +671,7 @@ make drv_target_flags(cc, pf, for_library)
         ci = ci + 1
     done()
     when libdir == ""
-        show "lepthornc: no sysroot for " + pf.triple + " (looked in " + root + "); install " + pf.libc + " for this target or set LEPTHORN_SYSROOT"
+        tool_error("no_sysroot", [pf.triple, root, pf.libc])
         sys::exit(2)
     done()
     done("--target=" + pf.triple + " --sysroot=" + drv_quote(root) + " -B" + drv_quote(libdir) + " -L" + drv_quote(libdir) + link)
@@ -740,7 +747,6 @@ make drv_compile(src_path, out_path, cfg, keep_ll)
     drv_mkdirs(drv_dirname(out_path))
     ensure ll = out_path + ".ll"
     when not codegen_program(source, ll)
-        show "lepthornc: compilation failed"
         done(false)
     done()
     ensure cmd = cfg.cc + " " + cfg.opt + " -w " + cfg.cflags + " -o " + drv_quote(out_path) + " " + drv_quote(ll) + cfg.libs
@@ -749,7 +755,7 @@ make drv_compile(src_path, out_path, cfg, keep_ll)
         file::delete(ll)
     done()
     when status != 0
-        show "lepthornc: clang failed (exit " + text::from_number(status) + ")"
+        tool_error("clang_failed", [text::from_number(status)])
         done(false)
     done()
     done(true)
@@ -789,7 +795,6 @@ make drv_compile_lib(src_path, libdir, name, cfg, keep_ll)
     ensure base = drv_concat(libdir, "lib" + name)
     ensure ll = base + ".ll"
     when not codegen_library(source, ll, name)
-        show "lepthornc: compilation failed"
         done(false)
     done()
     ensure obj = base + ".o"
@@ -807,7 +812,7 @@ make drv_compile_lib(src_path, libdir, name, cfg, keep_ll)
         file::delete(ll)
     done()
     when status != 0
-        show "lepthornc: building the library failed (exit " + text::from_number(status) + ")"
+        tool_error("library_failed", [text::from_number(status)])
         done(false)
     done()
     done(true)
@@ -833,12 +838,11 @@ make drv_cmd_explain()
     ensure code = sys::arg(2)
     ensure e = find_error_code(code)
     when e.code == ""
-        show "lepthornc: no error code " + code + " (run 'lepthornc explain' to see them all)"
+        tool_error("no_error_code", [code])
         sys::exit(2)
     done()
     show e.code + ": " + e.name
-    show "message: " + e.message
-    show "fix:     " + e.help
+    show why_and_fix(e.message, e.help)
     sys::exit(0)
 done()
 
@@ -883,6 +887,7 @@ make drv_usage()
     show "  --emit-llvm           Keep the LLVM IR (<out>.ll)"
     show "  --ascii               Show units in ASCII (kg*m/s^2)"
     show "  --cc <clang>          The clang to use"
+    show "  --no-color            No colors in errors"
     show "  -h, --help            Show this help"
     show ""
     show "Targets:"
@@ -959,7 +964,7 @@ make drv_enter_project()
         done()
         dir = drv_dirname(dir)
     done()
-    show "lepthornc: no manifest.lepm in this directory or any parent"
+    tool_error("no_manifest", [""])
     sys::exit(2)
 done()
 
@@ -1035,11 +1040,11 @@ make drv_cmd_build()
     ensure m = drv_load_project()
     ensure picked = drv_count_selected(m)
     when picked == 0
-        show "lepthornc: no such target (targets: " + mf_names(m, "target", "name") + ")"
+        tool_error("no_such_target", [mf_names(m, "target", "name")])
         sys::exit(2)
     done()
     when out_flag != "" and picked > 1
-        show "lepthornc: -o needs a single target; pick one with --bin <name> or --lib <name>"
+        tool_error("o_many_targets", [""])
         sys::exit(2)
     done()
     suppose t = 0
@@ -1049,7 +1054,7 @@ make drv_cmd_build()
         done()
         when drv_selected(m, t)
             when out_flag != "" and mf_get(m, "target", t, "kind") == "library"
-                show "lepthornc: -o applies to bin targets; a library goes to build/<profile>/lib/"
+                tool_error("o_for_library", [""])
                 sys::exit(2)
             done()
             when not drv_build_target(m, t, out_flag, self_exe)
@@ -1084,7 +1089,7 @@ make drv_promote_one(m, t, cfg)
     ensure out_root = drv_out_root(cfg)
     suppose cand = out_root + "/bin/" + name
     when not file::exists(cand)
-        show "lepthornc: nothing to promote - " + cand + " does not exist; build it first"
+        tool_error("nothing_to_promote", [cand])
         sys::exit(2)
     done()
     when name == "lepthornc"
@@ -1188,13 +1193,13 @@ done()
 make drv_add_test_cases(cases, root, first)
     when drv_ends_with(root, ".lep")
         when not file::exists(root)
-            show "lepthornc: test file " + root + " does not exist"
+            tool_error("no_test_file", [root])
             sys::exit(2)
         done()
         ring::write(cases, TestCase(name = drv_strip_ext(root), src = root))
     otherwise
         when not sys::is_dir(root)
-            show "lepthornc: test directory " + root + " does not exist"
+            tool_error("no_test_folder", [root])
             sys::exit(2)
         done()
         ensure entries = sys::list_dir(root)
@@ -1441,12 +1446,12 @@ done()
 
 make drv_cmd_new(path)
     when file::exists(path) or sys::is_dir(path)
-        show "lepthornc: " + path + " already exists"
+        tool_error("already_there", [path])
         sys::exit(2)
     done()
     ensure name = drv_basename(path)
     when not mf_is_name(name)
-        show "lepthornc: a project name may use only letters, digits, _ . and -, got " + name
+        tool_error("bad_project_name", [name])
         sys::exit(2)
     done()
     ensure nl = text::from_code(10)
@@ -1480,6 +1485,11 @@ make drv_cmd_new(path)
     sys::exit(0)
 done()
 
+(* an error in the command itself, not in a program *)
+make tool_error(name, values)
+    sys::warn(error_block(name, values, "lepthornc"))
+done()
+
 make lepthornc_main()
     ensure argc = sys::arg_count()
     when argc < 2
@@ -1487,6 +1497,12 @@ make lepthornc_main()
         sys::exit(2)
     done()
     ensure cmd = sys::arg(1)
+    colors_on = sys::is_terminal() and sys::getenv("NO_COLOR") == ""
+    when drv_has_flag("--no-color")
+        colors_on = false
+        (* the programs it runs show no colors either *)
+        sys::setenv("NO_COLOR", "1")
+    done()
     (* unit display for this process and the programs it runs *)
     when drv_has_flag("--ascii")
         sys::setenv("LEPTHORN_OUTPUT", "ascii")
@@ -1522,7 +1538,7 @@ make lepthornc_main()
         ensure target = sys::arg(2)
         when drv_ends_with(target, ".lepm")
             when drv_basename(target) != "manifest.lepm" or not file::exists(target)
-                show "lepthornc: no such project file: " + target + " (a project file is called manifest.lepm)"
+                tool_error("no_project_file", [target])
                 sys::exit(2)
             done()
             sys::chdir(drv_dirname(target))
@@ -1531,15 +1547,14 @@ make lepthornc_main()
     done()
     ensure known = cmd == "compile" or cmd == "run" or cmd == "eval" or cmd == "check" or cmd == "resolve" or cmd == "new"
     when not known
-        show "lepthornc: unknown command '" + cmd + "'"
-        show "Run 'lepthornc help' to see the commands."
+        tool_error("unknown_command", [cmd])
         sys::exit(2)
     done()
     when argc < 3
         when cmd == "new"
-            show "lepthornc: new needs a name: lepthornc new <name> [--lib]"
+            tool_error("new_needs_name", [""])
         otherwise
-            show "lepthornc: " + cmd + " needs a file: lepthornc " + cmd + " <file.lep>"
+            tool_error("command_needs_file", [cmd])
         done()
         sys::exit(2)
     done()
@@ -1548,7 +1563,7 @@ make lepthornc_main()
         drv_cmd_new(src)
     done()
     when not file::exists(src)
-        show "lepthornc: no such file: " + src
+        tool_error("no_such_file", [src])
         sys::exit(2)
     done()
     when cmd == "compile"

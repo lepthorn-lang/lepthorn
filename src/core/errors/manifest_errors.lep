@@ -1,0 +1,109 @@
+(* manifest_errors.lep - mistakes in manifest.lepm. LEC5xxx. *)
+
+make add_manifest_errors(list)
+    add_error(list, "LEC5001", "value_not_quoted",
+        "expected a text in quotes, got {1}",
+        "put the value in double quotes")
+    add_error(list, "LEC5002", "value_has_quote",
+        "a value cannot hold a quote: {1}",
+        "remove the quote inside the value")
+    add_error(list, "LEC5003", "list_not_closed",
+        "this list is never closed: {1}",
+        "end the list with ]")
+    add_error(list, "LEC5004", "list_item_not_quoted",
+        "every item of a list must be in quotes: {1}",
+        "put each item in double quotes")
+    add_error(list, "LEC5005", "list_quote_open",
+        "a text in this list is never closed: {1}",
+        "close it with a double quote")
+    add_error(list, "LEC5006", "list_no_comma",
+        "the items of a list need commas: {1}",
+        "write a comma between the items")
+    add_error(list, "LEC5007", "unknown_section",
+        "there is no section {1}; the sections are {2}",
+        "check the spelling")
+    add_error(list, "LEC5008", "not_a_manifest_line",
+        "this is not a [Section] and not a key = value",
+        "write a [Section] or key = value")
+    add_error(list, "LEC5009", "bad_key",
+        "{1} cannot be a key",
+        "use letters, digits and _")
+    add_error(list, "LEC5010", "key_outside_section",
+        "{1} stands before any section; the sections are {2}",
+        "put it under its section")
+    add_error(list, "LEC5011", "unknown_key",
+        "there is no key {1} in {2}; its keys are {3}",
+        "check the spelling")
+    add_error(list, "LEC5012", "key_twice",
+        "{1} is set twice",
+        "keep one of them")
+    add_error(list, "LEC5013", "key_wants_text",
+        "{1} takes one text, not a list",
+        "remove the [ and ]")
+    add_error(list, "LEC5014", "key_wants_list",
+        "{1} takes a list",
+        "put the values between [ and ]")
+    add_error(list, "LEC5015", "old_kind",
+        "kind must be application or library, got {1}",
+        "write application or library")
+    add_error(list, "LEC5016", "manifest_comment_end",
+        "no comment is open here",
+        "remove the *), or open the comment with (*")
+    add_error(list, "LEC5017", "manifest_comment_open",
+        "this comment is never closed",
+        "close it with *)")
+    add_error(list, "LEC5018", "old_flat_form",
+        "keys before the first section are the old form",
+        "put them in [Package], [Target] and [Test]")
+    add_error(list, "LEC5019", "key_missing",
+        "{1} needs {2}",
+        "add the key")
+    add_error(list, "LEC5020", "bad_name",
+        "{1} cannot be {2}",
+        "use letters, digits, _ . and -, and start with a letter, a digit or _")
+    add_error(list, "LEC5021", "path_not_relative",
+        "{1} must be a path inside the project, got {2}",
+        "write the path from the project folder")
+    add_error(list, "LEC5022", "path_missing",
+        "{1}: there is no file {2}",
+        "check the path, or make the file")
+    add_error(list, "LEC5023", "section_twice",
+        "two {1} sections have the same {2} {3}",
+        "give each its own")
+    add_error(list, "LEC5024", "no_package",
+        "there is no [Package] section",
+        "add one")
+    add_error(list, "LEC5025", "one_section",
+        "there may be only one {1} section",
+        "join them into one")
+    add_error(list, "LEC5026", "bad_license",
+        "license {1} is not an SPDX expression",
+        "write for example Apache-2.0, or MIT OR Apache-2.0")
+    add_error(list, "LEC5027", "no_target",
+        "there is no [Target] section",
+        "add one, with kind bin or library")
+    add_error(list, "LEC5028", "bad_target_kind",
+        "a target kind must be bin or library, got {1}",
+        "write bin or library")
+    add_error(list, "LEC5029", "bad_optimization",
+        "there is no optimization {1}",
+        "write none, O0, O1, O2, O3, Os or Oz")
+    add_error(list, "LEC5030", "section_not_triple",
+        "section [Target_{1}] has the triple {2}",
+        "name the section after its triple")
+    add_error(list, "LEC5031", "bad_triple",
+        "{1} is not supported",
+        "use a triple for x86-64 Linux")
+    add_error(list, "LEC5032", "bad_libc",
+        "libc must be glibc or musl, got {1}",
+        "write glibc or musl")
+    add_error(list, "LEC5033", "libc_not_triple",
+        "libc {1} does not fit the triple {2}",
+        "use musl for a musl triple, glibc for a gnu one")
+    add_error(list, "LEC5034", "bad_link",
+        "link must be static or dynamic, got {1}",
+        "write static or dynamic")
+    add_error(list, "LEC5035", "bad_library",
+        "{1} is not the name of a library",
+        "write only its name, such as m")
+done()
