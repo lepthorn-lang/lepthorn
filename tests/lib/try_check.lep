@@ -1,0 +1,25 @@
+(* try(name, source): checks a program that must be rejected and shows the
+   errors. A check that takes more than 5 seconds is stopped. *)
+ensure compiler = sys::getenv("LEPTHORNC")
+when compiler == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+sys::mkdir("build")
+sys::mkdir("build/test")
+sys::mkdir("build/test/parser")
+
+make try(compiler, name, source)
+    ensure quote = text::from_code(34)
+    ensure path = "build/test/parser/" + name + ".lep"
+    ensure log = "build/test/parser/" + name + ".txt"
+    ensure file = file::open(path, "w")
+    file::write(file, source)
+    file::close(file)
+    ensure command = quote + compiler + quote + " check " + path
+    ensure status = sys::run("ulimit -t 5; " + command + " > " + log + " 2>&1")
+    ensure seen = file::open(log, "r")
+    ensure errors = file::load(seen, sys::file_size(log))
+    file::close(seen)
+    show name status
+    show text::slice(errors, 0, text::length(errors) - 1)
+done()

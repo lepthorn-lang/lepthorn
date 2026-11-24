@@ -1,0 +1,84 @@
+array_open 1
+build/test/parser/array_open.lep:1:11  LEC2010
+    show [1, 2»«
+    why: expected `,` or `]`, found the end of the file
+    fix: write it here
+1 error, program did not run
+call_open 1
+build/test/parser/call_open.lep:1:16  LEC2010
+    show length([1]»«
+    why: expected `,` or `)`, found the end of the file
+    fix: write it here
+1 error, program did not run
+array_commas 1
+build/test/parser/array_commas.lep:1:9  LEC2010
+    show [1 »2« 3]
+    why: expected `,` or `]`, found '2'
+    fix: write it here
+1 error, program did not run
+call_commas 1
+build/test/parser/call_commas.lep:4:10  LEC2010
+    show f(1 »2«)
+    why: expected `,` or `)`, found '2'
+    fix: write it here
+1 error, program did not run
+extra_comma 1
+build/test/parser/extra_comma.lep:1:19  LEC2017
+    show length([1, 2]»,«)
+    why: nothing comes after this comma
+    fix: remove the comma
+1 error, program did not run
+array_extra_comma 1
+build/test/parser/array_extra_comma.lep:1:11  LEC2017
+    show [1, 2»,«]
+    why: nothing comes after this comma
+    fix: remove the comma
+1 error, program did not run
+member_twice 1
+build/test/parser/member_twice.lep:1:6  LEC2021
+    show »a::b::c«(1)
+    why: `a::b` is a function, it needs ( )
+    fix: write ( and the values, then )
+1 error, program did not run
+member_no_call 1
+build/test/parser/member_no_call.lep:1:18  LEC2021
+    show ring::create»«
+    why: `ring::create` is a function, it needs ( )
+    fix: write ( and the values, then )
+1 error, program did not run
+member_no_name 1
+build/test/parser/member_no_name.lep:1:7  LEC2011
+    ring::»«
+    why: expected a name, found the end of the line
+    fix: write a name: letters, digits and _, with a letter first
+1 error, program did not run
+make_no_name 1
+build/test/parser/make_no_name.lep:1:5  LEC2011
+    make»«
+    why: expected a name, found the end of the line
+    fix: write a name: letters, digits and _, with a letter first
+1 error, program did not run
+make_no_params 1
+build/test/parser/make_no_params.lep:1:7  LEC2010
+    make f»«
+    why: expected `(`, found the end of the line
+    fix: write it here
+1 error, program did not run
+make_number 1
+build/test/parser/make_number.lep:1:8  LEC2011
+    make f(»5«)
+    why: expected a name, found '5'
+    fix: write a name: letters, digits and _, with a letter first
+1 error, program did not run
+make_commas 1
+build/test/parser/make_commas.lep:1:10  LEC2010
+    make f(a »b«)
+    why: expected `,` or `)`, found 'b'
+    fix: write it here
+1 error, program did not run
+length_nothing 1
+build/test/parser/length_nothing.lep:1:6  LEC3005
+    show »length«()
+    why: wrong number of arguments in call to 'length'
+    fix: give as many arguments as the function has parameters
+1 error, program did not run

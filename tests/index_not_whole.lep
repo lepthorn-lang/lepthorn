@@ -1,0 +1,5 @@
+(* an index must be a whole number without a unit *)
+ensure list = [1, 2]
+ensure half = [0.5]
+show list[0]
+show list[half[0]]

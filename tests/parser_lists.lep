@@ -1,0 +1,43 @@
+(* lists and calls that are not finished *)
+use "lib/try_check.lep"
+
+try(compiler, "array_open", "show [1, 2
+")
+try(compiler, "call_open", "show length([1]
+")
+try(compiler, "array_commas", "show [1 2 3]
+")
+try(compiler, "call_commas", "make f(a, b)
+    done(a + b)
+done()
+show f(1 2)
+")
+try(compiler, "extra_comma", "show length([1, 2],)
+")
+try(compiler, "array_extra_comma", "show [1, 2,]
+")
+try(compiler, "member_twice", "show a::b::c(1)
+")
+try(compiler, "member_no_call", "show ring::create
+")
+try(compiler, "member_no_name", "ring::
+show 1
+")
+try(compiler, "make_no_name", "make
+    show 1
+done()
+")
+try(compiler, "make_no_params", "make f
+    show 1
+done()
+")
+try(compiler, "make_number", "make f(5)
+    show 1
+done()
+")
+try(compiler, "make_commas", "make f(a b)
+    show 1
+done()
+")
+try(compiler, "length_nothing", "show length()
+")

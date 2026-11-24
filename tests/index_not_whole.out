@@ -1,0 +1,5 @@
+1
+tests/index_not_whole.lep:5:6  LER3001
+    show »list«[half[0]]
+    why: an array index must be a whole number without a unit
+    fix: use a whole number without a unit as an index
