@@ -117,7 +117,8 @@ In a later phase:
   only while running; a mismatch there stops the program (Phase 1).
 - `parallel` has no OS threads in compiled programs; `watch` and
   `interrupt` run their body once (Phase 2C).
-- Trigonometry, and arithmetic on vectors and matrices (Phase 4A).
+- `sin`, `cos`, `tan` and `sqrt` (Phase 1), and arithmetic on vectors
+  and matrices (Phase 4A).
 - Portability: only x86-64 Linux; other architectures and operating
   systems need their system constants. Verified with Clang 22.1.8,
   glibc 2.43, and musl 1.2.5.
@@ -241,6 +242,14 @@ Covers:
     - `1kg as m` and `1kg as N` are errors before the program runs.
     - The result is shown in the unit it was converted to.
     - Eval and native give the same result.
+14. Planned, not implemented: `sin`, `cos`, `tan` and `sqrt`, with
+    units. They are needed for robot arms and for scientific
+    computing.
+    - `sin`, `cos` and `tan` take an angle and give a plain number.
+      Another unit, as in `sin(5m)`, is an error.
+    - `sqrt` halves the dimension: `sqrt(4m * 1m)` is `2 m`. A
+      dimension that cannot be halved, as in `sqrt(4m)`, and a negative
+      value are errors.
 
 ### Phase 2
 *Memory, resource, and real-time correctness model*
