@@ -1,0 +1,184 @@
+(* source_errors.lep - finds the wrong part of a line, for errors.
+
+   An error knows one place in the program's text. Here that place
+   grows to the whole word or operator around it. *)
+
+(* a part of the program's text: from `first` up to, not with, `after` *)
+shape Part
+    first: Number
+    after: Number
+done()
+
+make is_word_character(c)
+    when is_alnum(c) or c == "_"
+        done(true)
+    done()
+    done(c == "." or c == ":")
+done()
+
+make is_operator_character(c)
+    done(text_index("+-*/%=<>!&|^~", c) >= 0)
+done()
+
+make is_same_kind(c, word)
+    when word
+        done(is_word_character(c))
+    done()
+    done(is_operator_character(c))
+done()
+
+(* the first place of the line that holds `place` *)
+make line_first(source, place)
+    ensure new_line = text::from_code(10)
+    suppose first = place
+    repeat
+        when first <= 0
+            stop
+        done()
+        when text::char_at(source, first - 1) == new_line
+            stop
+        done()
+        first = first - 1
+    done()
+    done(first)
+done()
+
+(* grows a part to both sides while the characters are the same kind *)
+make grow_part(source, place, word)
+    ensure n = text::length(source)
+    suppose first = place
+    suppose after = place + 1
+    repeat
+        when first <= 0
+            stop
+        done()
+        when not is_same_kind(text::char_at(source, first - 1), word)
+            stop
+        done()
+        first = first - 1
+    done()
+    repeat
+        when after >= n
+            stop
+        done()
+        when not is_same_kind(text::char_at(source, after), word)
+            stop
+        done()
+        after = after + 1
+    done()
+    done(Part(first = first, after = after))
+done()
+
+(* a quote opens a text when an even number of quotes stand before it *)
+make quote_opens(source, place)
+    ensure quote = text::from_code(34)
+    suppose quotes = 0
+    suppose i = line_first(source, place)
+    repeat
+        when i >= place
+            stop
+        done()
+        when text::char_at(source, i) == quote
+            quotes = quotes + 1
+        done()
+        i = i + 1
+    done()
+    done(quotes % 2 == 0)
+done()
+
+(* the part a quote belongs to: to the line end for a text that opens
+   here, back to the opening quote for one that closes here *)
+make quote_part(source, place)
+    ensure n = text::length(source)
+    when quote_opens(source, place)
+        done(Part(first = place, after = skip_to_line_end(source, place, n)))
+    done()
+    ensure quote = text::from_code(34)
+    suppose first = place - 1
+    repeat
+        when first <= 0
+            stop
+        done()
+        when text::char_at(source, first) == quote
+            stop
+        done()
+        first = first - 1
+    done()
+    done(Part(first = first, after = place + 1))
+done()
+
+make is_mark_pair(source, place, n)
+    when is_pair(source, place, n, "(", "*")
+        done(true)
+    done()
+    when is_pair(source, place, n, "*", ")")
+        done(true)
+    done()
+    done(is_pair(source, place, n, "/", "/"))
+done()
+
+(* the wrong part around `place` *)
+make wrong_part(source, place)
+    ensure n = text::length(source)
+    when place >= n
+        done(Part(first = n, after = n))
+    done()
+    ensure c = text::char_at(source, place)
+    when c == text::from_code(10)
+        done(Part(first = place, after = place))
+    done()
+    when is_mark_pair(source, place, n)
+        done(Part(first = place, after = place + 2))
+    done()
+    when c == text::from_code(34)
+        done(quote_part(source, place))
+    done()
+    when is_word_character(c)
+        done(grow_part(source, place, true))
+    done()
+    when is_operator_character(c)
+        done(grow_part(source, place, false))
+    done()
+    done(Part(first = place, after = place + 1))
+done()
+
+(* the line of the program with the wrong part between the thorns *)
+make line_with_thorns(source, part)
+    ensure n = text::length(source)
+    ensure first = line_first(source, part.first)
+    ensure last = skip_to_line_end(source, part.after, n)
+    ensure before = text::slice(source, skip_spaces_tabs(source, first, part.first), part.first)
+    ensure wrong = text::slice(source, part.first, part.after)
+    ensure rest = text::slice(source, part.after, last)
+    done(before + between_thorns(wrong) + rest)
+done()
+
+(* the column of a place, counted from 1 in characters: a letter such
+   as é is more than one byte, and only its first byte counts *)
+make column_of(source, place)
+    suppose column = 1
+    suppose i = line_first(source, place)
+    repeat
+        when i >= place
+            stop
+        done()
+        ensure c = text::char_at(source, i)
+        ensure inside_letter = c >= text::from_code(128) and c < text::from_code(192)
+        when not inside_letter
+            column = column + 1
+        done()
+        i = i + 1
+    done()
+    done(column)
+done()
+
+(* prints an error found at `place`. `line` is "CODE: why". *)
+make src_error(source, place, line)
+    suppose at = place
+    when at > text::length(source)
+        at = text::length(source)
+    done()
+    ensure part = wrong_part(source, at)
+    ensure where = src_where(source, part.first) + ":" + text::from_number(column_of(source, part.first))
+    print_error(where, line_with_thorns(source, part), line)
+done()

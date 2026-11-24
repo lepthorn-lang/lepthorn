@@ -1,6 +1,7 @@
 (* data_types.lep - token/cursor shapes and the lexer. No deps. *)
 
 use core::errors
+use core::lang_syntax::source_errors
 
 (* The lexer turns source text into tokens, using the text::
    primitives.
@@ -505,6 +506,7 @@ make cur_take(tok_buf, cur)
 done()
 
 make lex_all(source)
+    error_count = 0
     ensure n = text::length(source)
     ensure tok_buf = ring::create(n + 1)
     suppose i = 0
@@ -642,56 +644,4 @@ make src_marker_where(source, m, lines)
         line = first + lines - 1
     done()
     done(text::slice(body, 0, sp) + ":" + text::from_number(line))
-done()
-
-(* the source line holding an offset, without its newline *)
-make src_line_text(source, offset)
-    ensure nl = text::from_code(10)
-    ensure n = text::length(source)
-    suppose a = offset
-    when a > n
-        a = n
-    done()
-    when a < 0
-        a = 0
-    done()
-    suppose b = a
-    repeat
-        when a <= 0
-            stop
-        done()
-        when text::char_at(source, a - 1) == nl
-            stop
-        done()
-        a = a - 1
-    done()
-    repeat
-        when b >= n
-            stop
-        done()
-        when text::char_at(source, b) == nl
-            stop
-        done()
-        b = b + 1
-    done()
-    repeat
-        when a >= b
-            stop
-        done()
-        ensure c = text::char_at(source, a)
-        when c != " " and c != text::from_code(9)
-            stop
-        done()
-        a = a + 1
-    done()
-    done(text::slice(source, a, b))
-done()
-
-(* an error message with where it is, then the line itself *)
-make src_error(source, offset, msg)
-    show src_where(source, offset) + ": " + msg
-    ensure line = src_line_text(source, offset)
-    when line != ""
-        show "    " + line
-    done()
 done()

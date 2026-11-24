@@ -1,0 +1,131 @@
+(* printer.lep - how an error looks:
+
+       main.lep:3:10  LEC3101
+           show 2kg »+« 3m
+           why: cannot add `kg` (mass) and `m` (length)
+           fix: use quantities of the same kind on both sides
+
+   The wrong part of the line stands between » and «. `why` gives only
+   the reason, `fix` only what to do. Errors go to standard error. *)
+
+(* how many errors were printed for this program *)
+shared suppose error_count = 0
+
+(* true when the output is a terminal that shows colors *)
+shared suppose colors_on = false
+
+(* where the program being interpreted is now, such as main.lep:3 *)
+shared suppose run_place = ""
+
+(* `words` in a color: 31 is red, 32 is green *)
+make paint(words, color)
+    when not colors_on
+        done(words)
+    done()
+    ensure escape = text::from_code(27)
+    done(escape + "[" + color + "m" + words + escape + "[0m")
+done()
+
+make red(words)
+    done(paint(words, "31"))
+done()
+
+make green(words)
+    done(paint(words, "32"))
+done()
+
+(* `words` between the two thorns *)
+make between_thorns(words)
+    when sys::getenv("LEPTHORN_OUTPUT") == "ascii"
+        done(red(">>" + words + "<<"))
+    done()
+    done(red("»" + words + "«"))
+done()
+
+(* "LEC3101: cannot add ..." -> "LEC3101" *)
+make code_of(line)
+    ensure at = error_find_text(line, ": ")
+    when at < 0
+        done("")
+    done()
+    done(text::slice(line, 0, at))
+done()
+
+(* the why and fix lines of an error *)
+make why_and_fix(why, fix)
+    ensure new_line = text::from_code(10)
+    suppose lines = "    why: " + why
+    when fix != ""
+        lines = lines + new_line + "    " + green("fix:") + " " + fix
+    done()
+    done(lines)
+done()
+
+(* prints an error. `where` is file:line:column, `shown` is the line of
+   the program with the thorns in it, `line` is "CODE: why". *)
+make print_error(where, shown, line)
+    ensure new_line = text::from_code(10)
+    ensure entry = find_error_code(code_of(line))
+    error_count = error_count + 1
+    suppose lines = where + "  " + red(entry.code) + new_line
+    when shown != ""
+        lines = lines + "    " + shown + new_line
+    done()
+    sys::warn(lines + why_and_fix(without_code(line), entry.help))
+done()
+
+(* after all errors of a program: "2 errors, program did not run" *)
+make print_error_count()
+    suppose word = " errors"
+    when error_count == 1
+        word = " error"
+    done()
+    sys::warn(text::from_number(error_count) + word + ", program did not run")
+done()
+
+(* an error that is found at `where`, as one text:
+       main.lep:3  LER3002
+           why: ...
+           fix: ... *)
+make placed_block(where, entry, why)
+    ensure first = where + "  " + red(entry.code) + text::from_code(10)
+    done(first + why_and_fix(why, entry.help))
+done()
+
+(* the same for the error called `name` *)
+make error_block(name, values, where)
+    ensure entry = find_error(name)
+    done(placed_block(where, entry, fill_message(entry.message, values)))
+done()
+
+(* the error, at the place the interpreted program is now *)
+make run_block(name, values)
+    when run_place == ""
+        done(error_block(name, values, "while running"))
+    done()
+    done(error_block(name, values, run_place))
+done()
+
+make run_block_plain(name)
+    done(run_block(name, [""]))
+done()
+
+(* an error for the run-time code of a compiled program, with no colors:
+       LER3002  while running
+           why: ...
+           fix: ...
+   The program itself adds its place and the colors. *)
+make run_time_text(entry, why, fix, when_found)
+    ensure new_line = text::from_code(10)
+    suppose words = entry.code + "  " + when_found + new_line + "    why: " + why
+    when fix != ""
+        words = words + new_line + "    fix: " + fix
+    done()
+    done(words)
+done()
+
+(* prints such an error and ends the program *)
+make stop_with_error(block)
+    sys::warn(block)
+    sys::exit(1)
+done()

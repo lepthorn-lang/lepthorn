@@ -1,6 +1,7 @@
 (* errors - every error message, with its code, in one place.
    registrar.lep keeps the list; each file adds one group. *)
 use core::errors::registrar
+use core::errors::printer
 use core::errors::lexer_errors
 use core::errors::parser_errors
 use core::errors::checker_errors
