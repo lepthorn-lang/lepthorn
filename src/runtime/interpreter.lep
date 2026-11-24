@@ -36,7 +36,8 @@ shape IState
     next_sig: Number
     depth: Number
     places: Number
-    now: Number
+    statement: Number
+    limit: Number
 done()
 
 shape Sig
@@ -93,7 +94,7 @@ done()
 
 (* stops the program the way a runtime error in compiled code does *)
 make ifail(msg)
-    stop_with_error(msg)
+    sys::stop_with(msg)
 done()
 
 (* -- environments: a ring of Var, one per distinct name; redeclaring a
@@ -133,6 +134,7 @@ make env_get(st, env, name)
     when j >= 0
         done(var_value(ring::peek(st.shared, j)))
     done()
+    go_to_node(st, st.statement)
     ifail(run_block("run_undefined_variable", [name]))
     done(0)
 done()
@@ -150,6 +152,7 @@ make env_assign(st, env, name, value)
         sv.value = value
         done(true)
     done()
+    go_to_node(st, st.statement)
     ifail(run_block("run_assign_undeclared", [name]))
 done()
 
@@ -380,11 +383,15 @@ make eval_node(st, env, idx)
         done(env_get(st, env, node.op))
     done()
     when k == "FIELD_ACCESS"
-        done(field_value(tshape_field(st, env_get(st, env, node.op), node.params)))
+        ensure fbase = env_get(st, env, node.op)
+        go_to_node(st, node)
+        done(field_value(tshape_field(st, fbase, node.params)))
     done()
     when k == "INDEX_ACCESS"
         ensure abase = env_get(st, env, node.op)
-        done(cell_value(tarray_cell(abase, eval_node(st, env, node.left))))
+        ensure aindex = eval_node(st, env, node.left)
+        go_to_node(st, node)
+        done(cell_value(tarray_cell(abase, aindex)))
     done()
     when k == "SHAPE_CONSTRUCT"
         done(construct_shape(st, env, node))
@@ -395,12 +402,14 @@ make eval_node(st, env, idx)
     when k == "CALL"
         ensure csig = eval_call(st, env, node)
         when csig.kind != "RETURN"
+            go_to_node(st, node)
             ifail(run_block("no_return_value", [node.op]))
         done()
         done(sig_value(csig))
     done()
     when k == "UNARY"
         ensure uv = eval_node(st, env, node.left)
+        go_to_node(st, node)
         when node.op == "~"
             done(~uv)
         done()
@@ -417,6 +426,7 @@ make eval_binop(st, env, node)
     ensure l = eval_node(st, env, node.left)
     ensure r = eval_node(st, env, node.right)
     ensure op = node.op
+    go_to_node(st, node)
     when op == "+"
         done(l + r)
     done()
@@ -489,8 +499,9 @@ make eval_call(st, env, node)
     when fi < 0
         when op == "length"
             ensure larr = eval_node(st, env, node.left)
+            go_to_node(st, node)
             when sys::kind(larr) != "TArray"
-                ifail(run_block("length_not_array", [sys::kind(larr)]))
+                ifail(run_block("wrong_kind", ["length", "an Array", kind_name(larr)]))
             done()
             done(Sig(kind = "RETURN", value = ring::size(larr.cells)))
         done()
@@ -500,6 +511,7 @@ make eval_call(st, env, node)
             ensure vy = eval_node(st, env, vnode.sibling)
             ensure vnode2 = arena_get(st.arena, vnode.sibling)
             ensure vz = eval_node(st, env, vnode2.sibling)
+            go_to_node(st, node)
             done(Sig(kind = "RETURN", value = vector(vx, vy, vz)))
         done()
         ifail(run_block("run_unknown_function", [op]))
@@ -541,12 +553,15 @@ make call_function(st, env, f, arg_start)
         aidx = anode.sibling
     done()
     st.depth = st.depth + 1
-    when st.depth > 10000
+    when st.depth > st.limit
+        when f.body != none_idx()
+            go_to_node(st, arena_get(st.arena, f.body))
+        done()
         ifail(run_block("recursion_too_deep", [f.name]))
     done()
-    ensure caller = st.now
+    ensure caller = st.statement
     ensure sig = exec_block(st, fenv, f.body)
-    use_place(st, caller)
+    st.statement = caller
     st.depth = st.depth - 1
     when sig.kind == "RETURN"
         done(sig)
@@ -632,6 +647,11 @@ make eval_builtin(st, env, node)
                 a3 = eval_node(st, env, n2.sibling)
             done()
         done()
+    done()
+    go_to_node(st, node)
+    when op == "sys::recursion_limit"
+        st.limit = a1
+        done(true)
     done()
     done(builtin_apply(st, op, a1, a2, a3))
 done()
@@ -814,6 +834,9 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::warn"
         done(sys::warn(a1))
     done()
+    when op == "sys::stop_with"
+        done(sys::stop_with(a1))
+    done()
     when op == "sys::at_place"
         done(sys::at_place(a1))
     done()
@@ -847,31 +870,38 @@ done()
 
 (* -- statements -- *)
 
-(* the program is now at `place`; errors while running are shown there *)
-make go_to_place(st, place)
-    ensure entry = line_place(st.places, place)
-    ensure now = st.now
-    when entry.first != now.first
-        use_place(st, entry)
+(* The program is now at this node; an error while running is shown
+   there. The text for it is made once and kept in the node. *)
+make go_to_node(st, node)
+    when node.kind == "TEXT"
+        ensure spot = spot_at(st.places, node.pos)
+        sys::at_place(spot_text(st.places, spot))
+        done(true)
     done()
+    when node.text_value == ""
+        ensure new_spot = spot_at(st.places, node.pos)
+        suppose changed = node
+        changed.text_value = spot_text(st.places, new_spot)
+    done()
+    sys::at_place(node.text_value)
 done()
 
-make use_place(st, entry)
-    st.now = entry
-    run_place = place_words(st.places, entry)
-    sys::at_place(run_place)
+(* before the first statement *)
+make no_node()
+    done(mk_node("NONE", 0, false, "", 0, 0))
 done()
 
-make leave_place()
-    run_place = ""
-    sys::at_place("")
-done()
-
-(* a condition, with errors shown at its own line *)
-make eval_condition(st, env, idx)
+(* a condition; only one that may not be true or false can fail *)
+make eval_condition(st, env, idx, word)
+    ensure value = eval_node(st, env, idx)
     ensure node = arena_get(st.arena, idx)
-    go_to_place(st, node.pos)
-    done(eval_node(st, env, idx))
+    when not is_boolean_value(node)
+        go_to_node(st, node)
+        when kind_name(value) != "Boolean"
+            ifail(run_block("condition_not_boolean", [word, kind_name(value)]))
+        done()
+    done()
+    done(value)
 done()
 
 make exec_block(st, env, start)
@@ -881,7 +911,7 @@ make exec_block(st, env, start)
             stop
         done()
         ensure node = arena_get(st.arena, idx)
-        go_to_place(st, node.pos)
+        st.statement = node
         ensure sig = exec_stmt(st, env, node)
         when sig.kind != "NORMAL"
             done(sig)
@@ -937,7 +967,9 @@ make exec_stmt(st, env, node)
     done()
     when k == "FIELD_ASSIGN_STMT"
         ensure fval = eval_node(st, env, node.left)
-        suppose tf = tshape_field(st, env_get(st, env, node.op), node.params)
+        ensure fowner = env_get(st, env, node.op)
+        go_to_node(st, node)
+        suppose tf = tshape_field(st, fowner, node.params)
         tf.value = fval
         done(st.normal)
     done()
@@ -945,12 +977,13 @@ make exec_stmt(st, env, node)
         ensure ibase = env_get(st, env, node.op)
         ensure iidx = eval_node(st, env, node.left)
         ensure ival = eval_node(st, env, node.right)
+        go_to_node(st, node)
         suppose tc = tarray_cell(ibase, iidx)
         tc.value = ival
         done(st.normal)
     done()
     when k == "WHEN_STMT"
-        when eval_condition(st, env, node.left)
+        when eval_condition(st, env, node.left, "when")
             done(exec_block(st, env, node.right))
         done()
         when node.alt != none_idx()
@@ -972,13 +1005,14 @@ make exec_stmt(st, env, node)
             when usig.kind == "STOP" or usig.kind == "RETURN"
                 done(loop_exit(st, usig))
             done()
-            when eval_condition(st, env, node.left)
+            when eval_condition(st, env, node.left, "until")
                 done(st.normal)
             done()
         done()
     done()
     when k == "REPEAT_COUNT_STMT"
         ensure count = eval_node(st, env, node.left)
+        go_to_node(st, node)
         repeat count
             ensure csig = exec_block(st, env, node.right)
             when csig.kind == "STOP" or csig.kind == "RETURN"
@@ -1003,12 +1037,14 @@ make exec_stmt2(st, env, node)
         done(exec_block(st, env, node.right))
     done()
     when k == "WAIT_STMT"
-        exec_wait(st, env, node.left)
+        exec_wait(st, env, node)
         done(st.normal)
     done()
     when k == "LOOP_HZ_STMT"
         suppose lsig = st.normal
-        loop_hz eval_node(st, env, node.left)
+        ensure rate = eval_node(st, env, node.left)
+        go_to_node(st, node)
+        loop_hz rate
             lsig = exec_block(st, env, node.right)
             when lsig.kind == "STOP" or lsig.kind == "RETURN"
                 stop
@@ -1018,7 +1054,9 @@ make exec_stmt2(st, env, node)
     done()
     when k == "EVERY_STMT"
         suppose esig = st.normal
-        every eval_node(st, env, node.left)
+        ensure period = eval_node(st, env, node.left)
+        go_to_node(st, node)
+        every period
             esig = exec_block(st, env, node.right)
             when esig.kind == "STOP" or esig.kind == "RETURN"
                 stop
@@ -1028,8 +1066,11 @@ make exec_stmt2(st, env, node)
     done()
     when k == "DEADLINE_STMT"
         suppose dsig = st.normal
-        deadline eval_node(st, env, node.left)
+        ensure budget = eval_node(st, env, node.left)
+        go_to_node(st, node)
+        deadline budget
             dsig = exec_block(st, env, node.right)
+            go_to_node(st, node)
         done()
         done(dsig)
     done()
@@ -1040,10 +1081,12 @@ make exec_stmt2(st, env, node)
         done(exec_parallel(st, env, node))
     done()
     when k == "TAKE_STMT"
+        go_to_node(st, node)
         env_declare(env, node.op, sys::take(node.op))
         done(st.normal)
     done()
     when k == "READ_STMT"
+        go_to_node(st, node)
         env_declare(env, node.op, sys::read(node.op))
         done(st.normal)
     done()
@@ -1057,6 +1100,7 @@ make exec_stmt2(st, env, node)
                 stop
             done()
             ensure lnode = arena_get(st.arena, cidx)
+            go_to_node(st, arena_get(st.arena, lnode.left))
             choose_check(subject, eval_node(st, env, lnode.left))
             cidx = lnode.sibling
         done()
@@ -1148,7 +1192,8 @@ done()
 
 (* `wait <Boolean>` polls the condition; `wait <duration>` sleeps -
    exactly what this language's own `wait` does *)
-make exec_wait(st, env, expr_idx)
+make exec_wait(st, env, node)
+    ensure expr_idx = node.left
     ensure w = eval_node(st, env, expr_idx)
     when sys::kind(w) == "Boolean"
         suppose now_ok = w
@@ -1160,19 +1205,29 @@ make exec_wait(st, env, expr_idx)
             now_ok = eval_node(st, env, expr_idx)
         done()
     otherwise
+        go_to_node(st, node)
         wait w
     done()
 done()
 
+(* the condition of a wait inside a timeout; a warning about the time
+   belongs to the timeout itself *)
+make poll_wait(st, env, node, expr_idx)
+    ensure value = eval_node(st, env, expr_idx)
+    go_to_node(st, node)
+    done(value)
+done()
+
 make exec_timeout(st, env, node)
     ensure budget = eval_node(st, env, node.left)
+    go_to_node(st, node)
     when node.right != none_idx()
         ensure only = arena_get(st.arena, node.right)
         when only.kind == "WAIT_STMT" and only.sibling == none_idx()
             ensure w0 = eval_node(st, env, only.left)
             when sys::kind(w0) == "Boolean"
                 timeout budget
-                    wait eval_node(st, env, only.left)
+                    wait poll_wait(st, env, node, only.left)
                 done()
                 done(st.normal)
             done()
@@ -1181,6 +1236,7 @@ make exec_timeout(st, env, node)
     suppose tsig = st.normal
     timeout budget
         tsig = exec_block(st, env, node.right)
+        go_to_node(st, node)
     done()
     done(tsig)
 done()
@@ -1196,7 +1252,12 @@ make exec_parallel(st, env, node)
             stop
         done()
         ensure tnode = arena_get(st.arena, tidx)
-        ring::write(tasks, PTask(prio = eval_node(st, env, tnode.left), body = tnode.right, used = false))
+        ensure prio = eval_node(st, env, tnode.left)
+        when kind_name(prio) != "Number"
+            go_to_node(st, node)
+            ifail(run_block_plain("priority_not_number"))
+        done()
+        ring::write(tasks, PTask(prio = prio, body = tnode.right, used = false))
         tidx = tnode.sibling
     done()
     suppose ran = 0
@@ -1265,7 +1326,7 @@ make report_parse_errors(arena, source)
 done()
 
 make new_state(arena, funcs, shapes, source)
-    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0, places = build_place_table(source), now = LinePlace(first = 0 - 1, file = 0, line = 0, words = "")))
+    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0, places = build_place_table(source), statement = no_node(), limit = 10000))
 done()
 
 (* lex -> parse -> CTV -> run *)
@@ -1291,8 +1352,10 @@ make run_program(source)
     done()
     ensure st = new_state(arena, funcs, shapes, source)
     ensure top = ring::create(count_decls(arena, first) + 2)
+    (* each call of the program needs several calls of the interpreter *)
+    sys::recursion_limit(10000000)
     exec_block(st, top, first)
-    leave_place()
+    sys::at_place("")
     done(true)
 done()
 

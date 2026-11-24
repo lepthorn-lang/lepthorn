@@ -120,28 +120,10 @@ make cg_block(ctx, arena, start)
     done()
 done()
 
-(* true when a value is surely true or false, so a condition need not
-   ask: a comparison, and, or, not, true, false *)
-make is_boolean_value(node)
-    when node.kind == "BOOL"
-        done(true)
-    done()
-    when node.kind == "UNARY"
-        done(node.op == "not")
-    done()
-    when node.kind != "BINOP"
-        done(false)
-    done()
-    when node.op == "and" or node.op == "or"
-        done(true)
-    done()
-    done(is_compare_operator(node.op))
-done()
-
 make cg_cond(ctx, arena, expr_idx, which)
     ensure condition = arena_get(arena, expr_idx)
-    cg_place(ctx, condition.pos)
     ensure cv = cg_expr(ctx, arena, expr_idx)
+    cg_place(ctx, condition.pos)
     when is_boolean_value(condition)
         ensure direct = cg_tmp(ctx)
         cg_emit(ctx, direct + " = icmp eq i64 " + cv + ", 7")
@@ -181,6 +163,7 @@ make cg_stmt(ctx, arena, node)
     done()
     when k == "RETURN_STMT"
         ensure rv = cg_expr(ctx, arena, node.left)
+        cg_leave_timers(ctx, "", true)
         when ctx.in_main
             cg_emit(ctx, "call void @lep_finish()")
             cg_emit(ctx, ctx.main_ret)
@@ -240,6 +223,7 @@ make cg_stmt(ctx, arena, node)
         when target == ""
             cg_fail(ctx, error_line_plain("codegen_stop_outside_loop"))
         otherwise
+            cg_leave_timers(ctx, ctx.break_label, false)
             cg_emit(ctx, "br label %" + target)
             ctx.terminated = true
         done()
@@ -265,10 +249,9 @@ make cg_stmt(ctx, arena, node)
         ensure dbud = cg_period(ctx, arena, node.left, "deadline")
         ensure dst = cg_tmp(ctx)
         cg_emit(ctx, dst + " = call double @lep_now()")
+        cg_open_timer(ctx, "lep_deadline_check", dst, dbud, node.pos)
         cg_block(ctx, arena, node.right)
-        when not ctx.terminated
-            cg_emit(ctx, "call void @lep_deadline_check(double " + dst + ", double " + dbud + ")")
-        done()
+        cg_close_timer(ctx)
         done(true)
     done()
     when k == "TIMEOUT_STMT"
@@ -309,7 +292,11 @@ make cg_choose(ctx, arena, node)
         done()
         ensure lnode = arena_get(arena, cidx)
         ensure lbl = cg_expr(ctx, arena, lnode.left)
+        ensure label_node = arena_get(arena, lnode.left)
+        ensure outer = ctx.place_now
+        cg_place(ctx, label_node.pos)
         cg_emit(ctx, "call void @lep_choose_check(i64 " + subj + ", i64 " + lbl + ")")
+        ctx.place_now = outer
         ring::write(labels, lbl)
         cidx = lnode.sibling
     done()
@@ -321,7 +308,7 @@ make cg_choose(ctx, arena, node)
         ensure cnode = arena_get(arena, cidx)
         ensure lreg = ring::get(labels)
         ensure eqv = cg_tmp(ctx)
-        cg_emit(ctx, eqv + " = call i64 @lep_eq(i64 " + subj + ", i64 " + lreg + ")")
+        cg_emit_line(ctx, eqv + " = call i64 @lep_eq(i64 " + subj + ", i64 " + lreg + ")")
         ensure hit = cg_tmp(ctx)
         cg_emit(ctx, hit + " = icmp eq i64 " + eqv + ", 7")
         ensure case_l = cg_newlabel(ctx, "case")
@@ -380,7 +367,7 @@ make cg_show(ctx, arena, node)
         cg_emit(ctx, "call void @lep_show_arg(i64 " + param_at(regs, i) + ", i64 " + first + ")")
         i = i + 1
     done()
-    cg_emit(ctx, "call void @lep_show_end()")
+    cg_emit_line(ctx, "call void @lep_show_end()")
 done()
 
 make cg_when(ctx, arena, node)
@@ -618,10 +605,9 @@ make cg_timeout(ctx, arena, node)
             done(true)
         done()
     done()
+    cg_open_timer(ctx, "lep_timeout_check", st, bud, node.pos)
     cg_block(ctx, arena, node.right)
-    when not ctx.terminated
-        cg_emit(ctx, "call void @lep_timeout_check(double " + st + ", double " + bud + ")")
-    done()
+    cg_close_timer(ctx)
 done()
 
 (* loop_hz / every: a fixed release grid - iteration k starts at
@@ -661,7 +647,7 @@ make cg_release_loop(ctx, arena, node, is_every)
     ensure i1 = cg_tmp(ctx)
     cg_emit(ctx, i1 + " = add i64 " + i0 + ", 1")
     cg_emit(ctx, "store i64 " + i1 + ", ptr " + slot)
-    cg_emit(ctx, "call void @lep_release_wait(double " + st + ", double " + per + ", i64 " + i1 + ")")
+    cg_emit_line(ctx, "call void @lep_release_wait(double " + st + ", double " + per + ", i64 " + i1 + ")")
     cg_emit(ctx, "br label %" + head_l)
     cg_label(ctx, exit_l)
 done()

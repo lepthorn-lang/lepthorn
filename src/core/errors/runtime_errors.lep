@@ -76,7 +76,6 @@ make add_runtime_errors(list)
     add_error(list, "LER3015", "code_out_of_range", "text::from_code: {1} is out of range (0-255)", "give a code from 0 to 255")
     add_error(list, "LER3016", "from_number_needs_number", "text::from_number: expected a Number", "give a number")
     add_error(list, "LER3017", "not_an_array", "expected an Array, got {1}", "give an array")
-    add_error(list, "LER3020", "length_not_array", "length: expected an Array, got {1}", "length() takes an array")
     add_error(list, "LER3018", "run_unknown_shape", "unknown shape '{1}'", "declare the shape first")
     add_error(list, "LER3019", "run_shape_missing_field",
         "shape '{1}' construction is missing field '{2}'",

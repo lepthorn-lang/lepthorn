@@ -14,9 +14,6 @@ shared suppose error_count = 0
 (* true when the output is a terminal that shows colors *)
 shared suppose colors_on = false
 
-(* where the program being interpreted is now, such as main.lep:3 *)
-shared suppose run_place = ""
-
 (* `words` in a color: 31 is red, 32 is green *)
 make paint(words, color)
     when not colors_on
@@ -98,12 +95,10 @@ make error_block(name, values, where)
     done(placed_block(where, entry, fill_message(entry.message, values)))
 done()
 
-(* the error, at the place the interpreted program is now *)
+(* an error of the interpreted program. The runtime adds its place. *)
 make run_block(name, values)
-    when run_place == ""
-        done(error_block(name, values, "while running"))
-    done()
-    done(error_block(name, values, run_place))
+    ensure entry = find_error(name)
+    done(run_time_text(entry, fill_message(entry.message, values), entry.help, "while running"))
 done()
 
 make run_block_plain(name)

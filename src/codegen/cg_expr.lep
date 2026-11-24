@@ -8,7 +8,16 @@ use core::lang_syntax::parser
 use runtime::primitives
 use codegen::cg_core
 
+(* An expression shows its own errors. After it, the place is again that
+   of the code around it. *)
 make cg_expr(ctx, arena, idx)
+    ensure outer = ctx.place_now
+    ensure value = cg_expr_value(ctx, arena, idx)
+    ctx.place_now = outer
+    done(value)
+done()
+
+make cg_expr_value(ctx, arena, idx)
     ensure node = arena_get(arena, idx)
     ensure k = node.kind
     when k == "NUM"
@@ -30,6 +39,7 @@ make cg_expr(ctx, arena, idx)
         ensure fbase = cg_load_var(ctx, node.op)
         ensure ffid = cg_field_id(ctx, node.params)
         ensure fr = cg_tmp(ctx)
+        cg_place(ctx, node.pos)
         cg_emit(ctx, fr + " = call i64 @lep_get_field(i64 " + fbase + ", i64 " + ffid + ")")
         done(fr)
     done()
@@ -37,6 +47,7 @@ make cg_expr(ctx, arena, idx)
         ensure ibase = cg_load_var(ctx, node.op)
         ensure iidx = cg_expr(ctx, arena, node.left)
         ensure ir = cg_tmp(ctx)
+        cg_place(ctx, node.pos)
         cg_emit(ctx, ir + " = call i64 @lep_index_get(i64 " + ibase + ", i64 " + iidx + ")")
         done(ir)
     done()
@@ -52,6 +63,7 @@ make cg_expr(ctx, arena, idx)
     when k == "UNARY"
         ensure uv = cg_expr(ctx, arena, node.left)
         ensure ur = cg_tmp(ctx)
+        cg_place(ctx, node.pos)
         when node.op == "~"
             cg_emit(ctx, ur + " = call i64 @lep_bnot(i64 " + uv + ")")
         otherwise
@@ -74,6 +86,7 @@ make cg_expr(ctx, arena, idx)
         ensure rv = cg_expr(ctx, arena, node.right)
         ensure br = cg_tmp(ctx)
         ensure call = br + " = call i64 " + fname + "(i64 " + lv + ", i64 " + rv
+        cg_place(ctx, node.pos)
         when cg_is_fast(fname)
             cg_emit_fast(ctx, call)
         otherwise
@@ -98,7 +111,7 @@ make cg_num_node(ctx, node)
     ensure d = ue.dimension
     ensure dims = cg_dimension_ir(d)
     ensure qr = cg_tmp(ctx)
-    cg_emit(ctx, qr + " = call i64 @lep_qty(double " + cg_double_lit(mag) + ", " + dims + ")")
+    cg_emit_line(ctx, qr + " = call i64 @lep_qty(double " + cg_double_lit(mag) + ", " + dims + ")")
     done(qr)
 done()
 
@@ -194,6 +207,7 @@ make cg_call(ctx, arena, node, need_value)
         done()
         ensure bargs = cg_args(ctx, arena, node.left)
         ensure bres = cg_tmp(ctx)
+        cg_place(ctx, node.pos)
         cg_emit(ctx, bres + " = call i64 " + cg_builtin_symbol(op) + "(" + bargs + ")")
         done(bres)
     done()
@@ -202,12 +216,14 @@ make cg_call(ctx, arena, node, need_value)
         when op == "length" and argc == 1
             ensure larg = cg_args(ctx, arena, node.left)
             ensure lres = cg_tmp(ctx)
+            cg_place(ctx, node.pos)
             cg_emit(ctx, lres + " = call i64 @lep_length(" + larg + ")")
             done(lres)
         done()
         when op == "vector" and argc == 3
             ensure vargs = cg_args(ctx, arena, node.left)
             ensure vres = cg_tmp(ctx)
+            cg_place(ctx, node.pos)
             cg_emit(ctx, vres + " = call i64 @lep_vector(" + vargs + ")")
             done(vres)
         done()
@@ -234,6 +250,7 @@ make cg_call(ctx, arena, node, need_value)
     ensure fnv = cg_tmp(ctx)
     cg_emit(ctx, fnv + " = ptrtoint ptr @.fn." + op + " to i64")
     ensure checked = cg_tmp(ctx)
+    cg_place(ctx, node.pos)
     cg_emit_fast(ctx, checked + " = call i64 @lep_need_value(i64 " + ures + ", i64 " + fnv)
     done(checked)
 done()
@@ -274,7 +291,7 @@ make cg_shape_construct(ctx, arena, node)
         cidx = cnode.sibling
     done()
     ensure sreg = cg_tmp(ctx)
-    cg_emit(ctx, sreg + " = call i64 @lep_shape_new(i64 " + text::from_number(sid) + ")")
+    cg_emit_line(ctx, sreg + " = call i64 @lep_shape_new(i64 " + text::from_number(sid) + ")")
     suppose j = 0
     repeat
         when j >= sd.field_count
@@ -287,7 +304,7 @@ make cg_shape_construct(ctx, arena, node)
         otherwise
             ensure finode = arena_get(arena, finit)
             ensure fv = cg_expr(ctx, arena, finode.left)
-            cg_emit(ctx, "call void @lep_shape_init(i64 " + sreg + ", i64 " + text::from_number(j) + ", i64 " + fv + ")")
+            cg_emit_line(ctx, "call void @lep_shape_init(i64 " + sreg + ", i64 " + text::from_number(j) + ", i64 " + fv + ")")
         done()
         j = j + 1
     done()
@@ -297,7 +314,7 @@ done()
 make cg_array_literal(ctx, arena, node)
     ensure n = cg_chain_len(arena, node.left)
     ensure areg = cg_tmp(ctx)
-    cg_emit(ctx, areg + " = call i64 @lep_array_new(i64 " + text::from_number(n) + ")")
+    cg_emit_line(ctx, areg + " = call i64 @lep_array_new(i64 " + text::from_number(n) + ")")
     suppose eidx = node.left
     suppose ei = 0
     repeat
@@ -306,7 +323,7 @@ make cg_array_literal(ctx, arena, node)
         done()
         ensure enode = arena_get(arena, eidx)
         ensure ev = cg_expr(ctx, arena, enode.left)
-        cg_emit(ctx, "call void @lep_array_init(i64 " + areg + ", i64 " + text::from_number(ei) + ", i64 " + ev + ")")
+        cg_emit_line(ctx, "call void @lep_array_init(i64 " + areg + ", i64 " + text::from_number(ei) + ", i64 " + ev + ")")
         eidx = enode.sibling
         ei = ei + 1
     done()

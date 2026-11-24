@@ -130,7 +130,7 @@ make parse_primary(tok_buf, cur, arena)
             when token_value(tok_buf, cur) == "."
                 cur_take(tok_buf, cur)
                 ensure field_tok = cur_take(tok_buf, cur)
-                node = Node(kind = "FIELD_ACCESS", num_value = 0, bool_value = false, text_value = "", op = val, params = field_tok.value, left = 0, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
+                node = Node(kind = "FIELD_ACCESS", num_value = 0, bool_value = false, text_value = "", op = val, params = field_tok.value, left = 0, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = name_place)
                 done(arena_add(arena, node))
             done()
             when token_value(tok_buf, cur) == "["
@@ -138,7 +138,7 @@ make parse_primary(tok_buf, cur, arena)
                 ensure idx_expr = parse_or(tok_buf, cur, arena)
                 cur_take(tok_buf, cur)
                 node = mk_node("INDEX_ACCESS", 0, false, val, idx_expr, 0)
-                done(arena_add(arena, node))
+                done(at_place(arena, arena_add(arena, node), name_place))
             done()
         done()
         node = mk_node("VAR", 0, false, val, 0, 0)
@@ -174,16 +174,18 @@ done()
 make parse_unary(tok_buf, cur, arena)
     when token_kind(tok_buf, cur) == "NOT"
         cur_take(tok_buf, cur)
+        ensure place = parse_pos
         ensure operand = parse_unary(tok_buf, cur, arena)
         ensure node = mk_node("UNARY", 0, false, "not", operand, 0)
-        done(arena_add(arena, node))
+        done(at_place(arena, arena_add(arena, node), place))
     done()
     when token_kind(tok_buf, cur) == "OP"
         when token_value(tok_buf, cur) == "~"
             cur_take(tok_buf, cur)
+            ensure place = parse_pos
             ensure boperand = parse_unary(tok_buf, cur, arena)
             ensure bnode = mk_node("UNARY", 0, false, "~", boperand, 0)
-            done(arena_add(arena, bnode))
+            done(at_place(arena, arena_add(arena, bnode), place))
         done()
     done()
     done(parse_primary(tok_buf, cur, arena))
@@ -210,6 +212,24 @@ make is_compare_operator(op)
         done(true)
     done()
     done(op == "<" or op == ">" or op == "<=" or op == ">=")
+done()
+
+(* true when a value is surely true or false, so a condition need not
+   ask: a comparison, and, or, not, true, false *)
+make is_boolean_value(node)
+    when node.kind == "BOOL"
+        done(true)
+    done()
+    when node.kind == "UNARY"
+        done(node.op == "not")
+    done()
+    when node.kind != "BINOP"
+        done(false)
+    done()
+    when node.op == "and" or node.op == "or"
+        done(true)
+    done()
+    done(is_compare_operator(node.op))
 done()
 
 make is_bitwise_operator(op)
@@ -301,43 +321,38 @@ done()
 make parse_not(tok_buf, cur, arena)
     when token_kind(tok_buf, cur) == "NOT"
         cur_take(tok_buf, cur)
+        ensure place = parse_pos
         ensure operand = parse_not(tok_buf, cur, arena)
         ensure node = mk_node("UNARY", 0, false, "not", operand, 0)
-        done(arena_add(arena, node))
+        done(at_place(arena, arena_add(arena, node), place))
     done()
     done(parse_bitwise(tok_buf, cur, arena))
 done()
 
 make parse_and(tok_buf, cur, arena)
     suppose left = parse_not(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
     repeat
-        when token_kind(tok_buf, cur) == "AND"
-            cur_take(tok_buf, cur)
-            right = parse_not(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "and", left, right)
-            left = arena_add(arena, node)
-        otherwise
+        when token_kind(tok_buf, cur) != "AND"
             stop
         done()
+        cur_take(tok_buf, cur)
+        ensure place = parse_pos
+        ensure right = parse_not(tok_buf, cur, arena)
+        left = operator_node(arena, "and", left, right, place)
     done()
     done(left)
 done()
 
 make parse_or(tok_buf, cur, arena)
     suppose left = parse_and(tok_buf, cur, arena)
-    suppose right = left
-    suppose node = mk_node("BINOP", 0, false, "", 0, 0)
     repeat
-        when token_kind(tok_buf, cur) == "OR"
-            cur_take(tok_buf, cur)
-            right = parse_and(tok_buf, cur, arena)
-            node = mk_node("BINOP", 0, false, "or", left, right)
-            left = arena_add(arena, node)
-        otherwise
+        when token_kind(tok_buf, cur) != "OR"
             stop
         done()
+        cur_take(tok_buf, cur)
+        ensure place = parse_pos
+        ensure right = parse_and(tok_buf, cur, arena)
+        left = operator_node(arena, "or", left, right, place)
     done()
     done(left)
 done()
@@ -1081,6 +1096,7 @@ make parse_statement_at(tok_buf, cur, arena)
     done()
     when kind == "IDENT"
         name_tok = cur_take(tok_buf, cur)
+        ensure name_place = parse_pos
         when token_kind(tok_buf, cur) == "OP"
             when token_value(tok_buf, cur) == "."
                 cur_take(tok_buf, cur)
@@ -1110,12 +1126,12 @@ make parse_statement_at(tok_buf, cur, arena)
             when token_value(tok_buf, cur) == "::"
                 cur_take(tok_buf, cur)
                 ensure member_tok = cur_take(tok_buf, cur)
-                ensure call_idx = parse_call(tok_buf, cur, arena, name_tok.value + "::" + member_tok.value)
+                ensure call_idx = at_place(arena, parse_call(tok_buf, cur, arena, name_tok.value + "::" + member_tok.value), name_place)
                 node = mk_node("EXPR_STMT", 0, false, "", call_idx, 0)
                 done(arena_add(arena, node))
             done()
             when token_value(tok_buf, cur) == "("
-                ensure bare_call_idx = parse_call(tok_buf, cur, arena, name_tok.value)
+                ensure bare_call_idx = at_place(arena, parse_call(tok_buf, cur, arena, name_tok.value), name_place)
                 node = mk_node("EXPR_STMT", 0, false, "", bare_call_idx, 0)
                 done(arena_add(arena, node))
             done()
@@ -1162,11 +1178,11 @@ make parse_statement_at(tok_buf, cur, arena)
             done()
             when compound_base != ""
                 cur_take(tok_buf, cur)
+                ensure operator_place = parse_pos
                 ensure rhs_idx = parse_or(tok_buf, cur, arena)
                 ensure lhs_var = mk_node("VAR", 0, false, name_tok.value, 0, 0)
                 ensure lhs_idx = arena_add(arena, lhs_var)
-                ensure combined = mk_node("BINOP", 0, false, compound_base, lhs_idx, rhs_idx)
-                ensure combined_idx = arena_add(arena, combined)
+                ensure combined_idx = operator_node(arena, compound_base, lhs_idx, rhs_idx, operator_place)
                 node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, combined_idx, 0)
                 done(arena_add(arena, node))
             done()

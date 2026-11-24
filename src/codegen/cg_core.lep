@@ -40,14 +40,77 @@ shape CgCtx
     places: Number
     place_now: Number
     place_kept: Number
+    timer: Number
+done()
+
+(* An open deadline or timeout: the function that checks its time, when
+   it started, how long it may take, its place, the loop it stands in,
+   and the one around it. *)
+shape CgTimer
+    check: Text
+    start: Text
+    budget: Text
+    place: Number
+    loop: Text
+    outer: Number
+done()
+
+make no_timer()
+    done(CgTimer(check = "", start = "", budget = "", place = 0, loop = "", outer = 0))
+done()
+
+make cg_open_timer(ctx, check, start, budget, place)
+    ctx.timer = CgTimer(check = check, start = start, budget = budget, place = place, loop = ctx.break_label, outer = ctx.timer)
+done()
+
+make cg_check_timer(ctx, timer)
+    ensure at = ctx.place_now
+    cg_place(ctx, timer.place)
+    cg_emit(ctx, "call void @" + timer.check + "(double " + timer.start + ", double " + timer.budget + ")")
+    ctx.place_now = at
+done()
+
+(* the end of the innermost one *)
+make cg_close_timer(ctx)
+    ensure timer = ctx.timer
+    when not ctx.terminated
+        cg_check_timer(ctx, timer)
+    done()
+    ctx.timer = timer.outer
+done()
+
+(* Leaving early checks every deadline that is left: all of them for
+   done(value), those inside the loop for stop and next. *)
+make cg_leave_timers(ctx, loop, all)
+    suppose timer = ctx.timer
+    repeat
+        when timer.check == ""
+            stop
+        done()
+        when not all and timer.loop != loop
+            stop
+        done()
+        cg_check_timer(ctx, timer)
+        timer = timer.outer
+    done()
 done()
 
 (* The program is now at `place`. An error while running is shown there:
-   @lep.place holds the file (upper half) and the line. It is written
-   only just before a call, because only a call can fail. *)
+   @lep.place holds the number of its spot. It is written only just
+   before a call, because only a call can fail. *)
 make cg_place(ctx, place)
-    ensure entry = line_place(ctx.places, place)
-    ctx.place_now = entry.file * 4294967296 + entry.line
+    ensure spot = spot_at(ctx.places, place)
+    ctx.place_now = spot.number
+done()
+
+(* the number of the spot the program is at, for its own code *)
+make cg_spot_number(ctx)
+    when ctx.place_now == 0
+        done("0")
+    done()
+    ensure table = ctx.places
+    ensure spot = ring::peek(table.spots, ctx.place_now - 1)
+    done(text::from_number(use_spot(table, spot)))
 done()
 
 (* after a label or a call of a function of the program, it is not known
@@ -78,7 +141,7 @@ done()
    it fails, so the fast way costs nothing. `call` is the text up to
    that value. *)
 make cg_emit_fast(ctx, call)
-    ensure line = call + ", i64 " + text::from_number(ctx.place_now) + ")"
+    ensure line = call + ", i32 " + cg_spot_number(ctx) + ")"
     when ctx.place_kept != ctx.place_now
         cg_place_lost(ctx)
     done()
@@ -103,7 +166,7 @@ make cg_keep_place(ctx, line)
     when ctx.place_now != ctx.place_kept
         when is_call_line(line)
             ctx.place_kept = ctx.place_now
-            ctx.cur = ctx.cur + "  store i64 " + text::from_number(ctx.place_now) + ", ptr @lep.place" + text::from_code(10)
+            ctx.cur = ctx.cur + "  store i32 " + cg_spot_number(ctx) + ", ptr @lep.place" + text::from_code(10)
         done()
     done()
 done()
@@ -428,7 +491,7 @@ make cg_builtin_arity(op)
     when op == "sys::arg_count" or op == "sys::cwd" or op == "sys::now" or op == "sys::is_terminal"
         done(0)
     done()
-    when op == "sys::arg" or op == "sys::run" or op == "sys::exit" or op == "sys::getenv" or op == "sys::is_dir" or op == "sys::mkdir" or op == "sys::file_size" or op == "sys::realpath" or op == "sys::kind" or op == "sys::take" or op == "sys::read" or op == "sys::list_dir" or op == "sys::fail" or op == "sys::capture" or op == "sys::chdir" or op == "sys::error" or op == "sys::warn" or op == "sys::at_place"
+    when op == "sys::arg" or op == "sys::run" or op == "sys::exit" or op == "sys::getenv" or op == "sys::is_dir" or op == "sys::mkdir" or op == "sys::file_size" or op == "sys::realpath" or op == "sys::kind" or op == "sys::take" or op == "sys::read" or op == "sys::list_dir" or op == "sys::fail" or op == "sys::capture" or op == "sys::chdir" or op == "sys::error" or op == "sys::warn" or op == "sys::at_place" or op == "sys::recursion_limit" or op == "sys::stop_with"
         done(1)
     done()
     when op == "text::format"

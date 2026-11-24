@@ -156,6 +156,7 @@ make cg_reset_fn(ctx)
     ctx.terminated = false
     ctx.break_label = ""
     ctx.continue_label = ""
+    ctx.timer = no_timer()
     cg_place_lost(ctx)
 done()
 
@@ -206,14 +207,14 @@ make cg_function(ctx, arena, f, out)
     done()
     suppose head = "define internal i64 @lf." + f.name + "(" + sig + ") {" + nl + "entry:" + nl + ctx.allocas + pstores
     head = head + "  %dep0 = load i64, ptr @lep_depth" + nl + "  %dep1 = add i64 %dep0, 1" + nl + "  store i64 %dep1, ptr @lep_depth" + nl
-    head = head + "  %depx = icmp sgt i64 %dep1, 10000" + nl + "  br i1 %depx, label %depfail, label %body" + nl
+    head = head + "  %depm = load i64, ptr @lep.depth_limit" + nl + "  %depx = icmp sgt i64 %dep1, %depm" + nl + "  br i1 %depx, label %depfail, label %body" + nl
     (* the place of the function itself *)
     when f.body != none_idx()
         ensure first_statement = arena_get(arena, f.body)
         cg_place(ctx, first_statement.pos)
     done()
-    ensure at = text::from_number(ctx.place_now)
-    head = head + "depfail:" + nl + "  store i64 " + at + ", ptr @lep.place" + nl + "  %depn = ptrtoint ptr @.fn." + f.name + " to i64" + nl + "  call void @lep_depth_fail(i64 %depn)" + nl + "  unreachable" + nl
+    ensure at = cg_spot_number(ctx)
+    head = head + "depfail:" + nl + "  store i32 " + at + ", ptr @lep.place" + nl + "  %depn = ptrtoint ptr @.fn." + f.name + " to i64" + nl + "  call void @lep_depth_fail(i64 %depn)" + nl + "  unreachable" + nl
     file::write(out, head)
     cg_flush_body(ctx, out)
     file::write(out, "}" + nl + nl)
@@ -305,6 +306,79 @@ make cg_file_names(ctx)
         i = i + 1
     done()
     cg_global(ctx, "@lep.files = internal constant [" + text::from_number(i) + " x ptr] [" + table + "]")
+    cg_spots(ctx)
+done()
+
+(* true when a program carries its own lines, to show them with an
+   error. A release carries only the file, line and column. *)
+shared suppose lines_in_program = true
+
+(* The tables of the spots. @lep.spots: file, line and column in one
+   number. @lep.spot_lines: the text of the line. @lep.spot_parts: where
+   the wrong part begins in it, and its length. *)
+make cg_spots(ctx)
+    ensure table = ctx.places
+    ensure spots = table.used
+    ensure count = text::from_number(ring::size(spots) + 1)
+    cg_spot_table(ctx, "spots", "i64", count, spots)
+    when lines_in_program
+        cg_global(ctx, "@lep.has_lines = internal constant i1 true")
+        cg_spot_table(ctx, "spot_lines", "ptr", count, spots)
+        cg_spot_table(ctx, "spot_parts", "i32", count, spots)
+        cg_line_texts(ctx, spots)
+    otherwise
+        cg_global(ctx, "@lep.has_lines = internal constant i1 false")
+        cg_global(ctx, "@lep.spot_lines = internal constant [1 x ptr] zeroinitializer")
+        cg_global(ctx, "@lep.spot_parts = internal constant [1 x i32] zeroinitializer")
+    done()
+done()
+
+make cg_spot_table(ctx, name, kind, count, spots)
+    cg_global(ctx, "@lep." + name + " = internal constant [" + count + " x " + kind + "] [")
+    suppose none = "0"
+    when kind == "ptr"
+        none = "null"
+    done()
+    cg_global(ctx, kind + " " + none)
+    suppose i = 0
+    repeat
+        when i >= ring::size(spots)
+            stop
+        done()
+        cg_global(ctx, ", " + kind + " " + cg_spot_value(name, ring::peek(spots, i)))
+        i = i + 1
+    done()
+    cg_global(ctx, "]")
+done()
+
+make cg_spot_value(name, spot)
+    when name == "spots"
+        ensure line_and_column = spot.line * 65536 + spot.column
+        done(text::from_number(spot.file * 1099511627776 + line_and_column))
+    done()
+    when name == "spot_lines"
+        done("@.line" + text::from_number(spot.line_first))
+    done()
+    ensure first = text::length(spot.before)
+    done(text::from_number(first * 65536 + text::length(spot.wrong)))
+done()
+
+(* the text of every line with a spot, once *)
+make cg_line_texts(ctx, spots)
+    ensure table = ctx.places
+    suppose i = 0
+    repeat
+        when i >= ring::size(spots)
+            stop
+        done()
+        ensure spot = ring::peek(spots, i)
+        suppose entry = line_place(table, spot.place)
+        when entry.spot != 0
+            cg_cstr_global(ctx, "@.line" + text::from_number(spot.line_first), spot.before + spot.wrong + spot.after)
+            entry.spot = 0
+        done()
+        i = i + 1
+    done()
 done()
 
 make codegen_module(source, ll_path, lib)
@@ -327,7 +401,7 @@ make codegen_module(source, ll_path, lib)
         print_error_count()
         done(false)
     done()
-    ensure ctx = CgCtx(counter = 0, cur = "", chunks = ring::create(cap + 1000), gcur = "", gchunks = ring::create(cap + 1000), allocas = "", terminated = false, break_label = "", continue_label = "", failed = false, fids = ring::create(cap + 100), shapes = shapes, funcs = funcs, locals = ring::create(cap + 100), shared_names = ring::create(cap + 100), unit_table = build_unit_table(), in_main = false, main_ret = "ret i32 0", places = build_place_table(source), place_now = 0, place_kept = 0)
+    ensure ctx = CgCtx(counter = 0, cur = "", chunks = ring::create(cap + 1000), gcur = "", gchunks = ring::create(cap + 1000), allocas = "", terminated = false, break_label = "", continue_label = "", failed = false, fids = ring::create(cap + 100), shapes = shapes, funcs = funcs, locals = ring::create(cap + 100), shared_names = ring::create(cap + 100), unit_table = build_unit_table(), in_main = false, main_ret = "ret i32 0", places = build_place_table(source), place_now = 0, place_kept = 0, timer = no_timer())
     cg_build_fids(ctx)
     cg_scan_shared(ctx, arena, first)
     ensure nfuncs = ring::size(funcs)

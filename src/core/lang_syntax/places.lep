@@ -1,20 +1,43 @@
-(* places.lep - which file and line a place in the program's text is.
+(* places.lep - which file, line and column a place in the program's
+   text is.
 
    The text of a program can come from many files. A table with one
    entry per line is made once, so finding a place is quick. *)
 
-(* one line: where it starts in the text, its file, its number there *)
+(* one line: where it starts in the text, its file, its number there,
+   and the first of the spots found on it (0: none yet) *)
 shape LinePlace
     first: Number
     file: Number
     line: Number
-    words: Text
+    spot: Number
+done()
+
+(* A spot is a place where the program can fail. `next` is the next spot
+   on the same line. A compiled program numbers the spots it uses, from
+   1; `used` is 0 until then.
+   The line of the program is split in three: before, wrong, after. *)
+shape Spot
+    number: Number
+    place: Number
+    file: Number
+    line: Number
+    column: Number
+    line_first: Number
+    before: Text
+    wrong: Text
+    after: Text
+    next: Number
+    used: Number
 done()
 
 (* lines: every LinePlace, in order. files: the file names. *)
 shape PlaceTable
+    source: Text
     lines: Number
     files: Number
+    spots: Number
+    used: Number
 done()
 
 make build_place_table(source)
@@ -23,7 +46,7 @@ make build_place_table(source)
     ensure lines = ring::create(n + 2)
     ensure files = ring::create(10001)
     ring::write(files, "")
-    ensure table = PlaceTable(lines = lines, files = files)
+    ensure table = PlaceTable(source = source, lines = lines, files = files, spots = ring::create(n + 2), used = ring::create(n + 2))
     suppose file = 0
     suppose line = 1
     suppose start = 0
@@ -43,7 +66,7 @@ make build_place_table(source)
                 file = file_number(files, text::slice(where, 0, colon))
                 line = text::to_number(text::slice(where, colon + 1, text::length(where))) - 1
             done()
-            ring::write(lines, LinePlace(first = start, file = file, line = line, words = ""))
+            ring::write(lines, LinePlace(first = start, file = file, line = line, spot = 0))
             line = line + 1
             start = i + 1
         done()
@@ -101,16 +124,55 @@ make line_place(table, place)
     done(ring::peek(table.lines, low))
 done()
 
-(* "main.lep:3", or "line 3" when the file has no name *)
-make place_words(table, entry)
-    when entry.words == ""
-        ensure name = ring::peek(table.files, entry.file)
-        suppose words = "line " + text::from_number(entry.line)
-        when name != ""
-            words = name + ":" + text::from_number(entry.line)
+(* the spot at `place`; made the first time it is asked for *)
+make spot_at(table, place)
+    suppose entry = line_place(table, place)
+    suppose number = entry.spot
+    repeat
+        when number == 0
+            stop
         done()
-        suppose changed = entry
-        changed.words = words
+        ensure known = ring::peek(table.spots, number - 1)
+        when known.place == place
+            done(known)
+        done()
+        number = known.next
     done()
-    done(entry.words)
+    ensure source = table.source
+    ensure part = wrong_part(source, place)
+    ensure first = line_first(source, part.first)
+    ensure shown = skip_spaces_tabs(source, first, part.first)
+    ensure last = skip_to_line_end(source, part.after, text::length(source))
+    ensure spot = Spot(number = ring::size(table.spots) + 1, place = place, file = entry.file, line = entry.line, column = column_of(source, part.first), line_first = shown, before = text::slice(source, shown, part.first), wrong = text::slice(source, part.first, part.after), after = text::slice(source, part.after, last), next = entry.spot, used = 0)
+    ring::write(table.spots, spot)
+    entry.spot = spot.number
+    done(spot)
+done()
+
+(* the number a compiled program knows a spot by *)
+make use_spot(table, spot)
+    when spot.used == 0
+        suppose changed = spot
+        ring::write(table.used, spot)
+        changed.used = ring::size(table.used)
+    done()
+    done(spot.used)
+done()
+
+(* "main.lep:3:10", or "line 3:10" when the file has no name *)
+make spot_where(table, spot)
+    ensure name = ring::peek(table.files, spot.file)
+    ensure numbers = text::from_number(spot.line) + ":" + text::from_number(spot.column)
+    when name == ""
+        done("line " + numbers)
+    done()
+    done(name + ":" + numbers)
+done()
+
+(* a spot as sys::at_place wants it: four lines, the place and the
+   three parts of the line *)
+make spot_text(table, spot)
+    ensure new_line = text::from_code(10)
+    ensure shown = spot.before + new_line + spot.wrong + new_line + spot.after
+    done(spot_where(table, spot) + new_line + shown)
 done()

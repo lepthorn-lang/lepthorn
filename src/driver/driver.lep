@@ -746,6 +746,7 @@ make drv_compile(src_path, out_path, cfg, keep_ll)
     done()
     drv_mkdirs(drv_dirname(out_path))
     ensure ll = out_path + ".ll"
+    lines_in_program = cfg.opt == "-O0" or testing
     when not codegen_program(source, ll)
         done(false)
     done()
@@ -794,6 +795,7 @@ make drv_compile_lib(src_path, libdir, name, cfg, keep_ll)
     done()
     ensure base = drv_concat(libdir, "lib" + name)
     ensure ll = base + ".ll"
+    lines_in_program = cfg.opt == "-O0" or testing
     when not codegen_library(source, ll, name)
         done(false)
     done()
@@ -1299,7 +1301,12 @@ make drv_test_one(tc, self_exe, cfg)
     done(false)
 done()
 
+(* tests always show the lines of the program, so one .out file is right
+   for every profile *)
+shared suppose testing = false
+
 make drv_cmd_test()
+    testing = true
     ensure self_exe = drv_self_path()
     ensure m = drv_load_project()
     ensure cfg = drv_config(m, false)

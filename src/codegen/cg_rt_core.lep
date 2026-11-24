@@ -55,7 +55,7 @@ make cg_rt_header()
     h = h + "declare void @exit(i32)" + nl + "declare double @strtod(ptr, ptr)" + nl + "declare double @fmod(double, double)" + nl + "declare double @pow(double, double)" + nl + "declare double @cos(double)" + nl + "declare double @sin(double)" + nl
     h = h + "declare i32 @open(ptr, i32, ...)" + nl + "declare i64 @read(i32, ptr, i64)" + nl + "declare i64 @write(i32, ptr, i64)" + nl + "declare i32 @close(i32)" + nl + "declare i32 @unlink(ptr)" + nl + "declare i32 @stat(ptr, ptr)" + nl
     h = h + "declare ptr @__errno_location()" + nl + "declare i32 @system(ptr)" + nl + "declare i64 @readlink(ptr, ptr, i64)" + nl + "declare ptr @getcwd(ptr, i64)" + nl + "declare ptr @getenv(ptr)" + nl + "declare i32 @mkdir(ptr, i32)" + nl + "declare ptr @realpath(ptr, ptr)" + nl
-    h = h + "declare i32 @clock_gettime(i32, ptr)" + nl + "declare i32 @nanosleep(ptr, ptr)" + nl + "declare i32 @getchar()" + nl + "declare i32 @isatty(i32)" + nl + "declare ptr @strstr(ptr, ptr)" + nl + "declare ptr @strchr(ptr, i32)" + nl + "declare double @llvm.fabs.f64(double)" + nl + "declare double @llvm.floor.f64(double)" + nl
+    h = h + "declare i32 @clock_gettime(i32, ptr)" + nl + "declare i32 @nanosleep(ptr, ptr)" + nl + "declare i32 @getchar()" + nl + "declare i32 @isatty(i32)" + nl + "declare i32 @getrlimit(i32, ptr)" + nl + "declare i32 @setrlimit(i32, ptr)" + nl + "declare ptr @strstr(ptr, ptr)" + nl + "declare ptr @strchr(ptr, i32)" + nl + "declare double @llvm.fabs.f64(double)" + nl + "declare double @llvm.floor.f64(double)" + nl
     h = h + "declare i32 @fprintf(ptr, ptr, ...)" + nl + "declare i32 @fputc(i32, ptr)" + nl + "declare ptr @open_memstream(ptr, ptr)" + nl + "declare i32 @fclose(ptr)" + nl
     h = h + "declare i32 @chdir(ptr)" + nl + "declare i32 @setenv(ptr, ptr, i32)" + nl
     h = h + "declare ptr @popen(ptr, ptr)" + nl + "declare i32 @pclose(ptr)" + nl + "declare i64 @fread(ptr, i64, i64, ptr)" + nl
@@ -75,7 +75,7 @@ done()
 
 make cg_rt_core(ctx)
     ensure nl = text::from_code(10)
-    rt(ctx, "@lep.hp = internal global ptr null|@lep.he = internal global ptr null|@lep_depth = internal global i64 0|@lep.ferr = internal global i64 0|@lep.argc = internal global i32 0|@lep.argv = internal global ptr null")
+    rt(ctx, "@lep.hp = internal global ptr null|@lep.he = internal global ptr null|@lep_depth = internal global i64 0|@lep.depth_limit = internal global i64 10000|@lep.ferr = internal global i64 0|@lep.argc = internal global i32 0|@lep.argv = internal global ptr null")
     rt(ctx, "@lep.dim0 = internal constant [8 x i32] zeroinitializer")
     cg_rt_chars(ctx)
     cg_rt_report(ctx)
@@ -106,7 +106,7 @@ make cg_rt_core(ctx)
     rt(ctx, "define internal void @lep.st(i64 %v, i64 %off, i64 %x) {|entry:|  %q = call ptr @lep.at(i64 %v, i64 %off)|  store i64 %x, ptr %q|  ret void|}")
     rt(ctx, "define internal ptr @lep.alloc(i64 %n) {|entry:|  %n1 = add i64 %n, 15|  %n2 = and i64 %n1, -16|  %cur = load ptr, ptr @lep.hp|  %end = load ptr, ptr @lep.he|  %ci = ptrtoint ptr %cur to i64|  %ei = ptrtoint ptr %end to i64|  %room = sub i64 %ei, %ci|  %fits = icmp uge i64 %room, %n2|  %live = icmp ne ptr %cur, null|  %ok = and i1 %fits, %live|  br i1 %ok, label %fast, label %slow")
     rt(ctx, "slow:|  %big = icmp ugt i64 %n2, 67108864|  %sz = select i1 %big, i64 %n2, i64 67108864|  %blk = call ptr @malloc(i64 %sz)|  %null = icmp eq ptr %blk, null|  br i1 %null, label %oom, label %got|oom:|  call void @lep.die(ptr @.rt.m_oom)|  unreachable|got:|  %be = getelementptr i8, ptr %blk, i64 %sz|  store ptr %be, ptr @lep.he|  %nb = getelementptr i8, ptr %blk, i64 %n2|  store ptr %nb, ptr @lep.hp|  ret ptr %blk|fast:|  %nc = getelementptr i8, ptr %cur, i64 %n2|  store ptr %nc, ptr @lep.hp|  ret ptr %cur|}")
-    rt(ctx, "define internal void @lep.die(ptr %msg) noinline cold {|entry:|  call void @lep.report(ptr %msg)|  call void @exit(i32 1)|  unreachable|}")
+    rt(ctx, "define internal void @lep.die(ptr %msg) noinline cold {|entry:|  call void @lep.report(ptr %msg, i1 false)|  call void @exit(i32 1)|  unreachable|}")
     rt(ctx, "define internal void @lep.die1(ptr %fmt, ptr %a) noinline cold {|entry:|  %buf = alloca [2048 x i8]|  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 2048, ptr %fmt, ptr %a)|  call void @lep.die(ptr %buf)|  unreachable|}")
     rt(ctx, "define internal void @lep.die2(ptr %fmt, ptr %a, ptr %b) noinline cold {|entry:|  %buf = alloca [2048 x i8]|  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 2048, ptr %fmt, ptr %a, ptr %b)|  call void @lep.die(ptr %buf)|  unreachable|}")
     rt(ctx, "define internal void @lep.die3(ptr %fmt, ptr %a, ptr %b, ptr %c) noinline cold {|entry:|  %buf = alloca [2048 x i8]|  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 2048, ptr %fmt, ptr %a, ptr %b, ptr %c)|  call void @lep.die(ptr %buf)|  unreachable|}")
@@ -169,26 +169,46 @@ done()
 make rt_warning(ctx, key, name, formats)
     ensure entry = find_error(name)
     ensure why = fill_message(entry.message, formats)
-    rt_str(ctx, key, run_time_text(entry, why, entry.help, "warning") + text::from_code(10))
+    rt_str(ctx, key, run_time_text(entry, why, entry.help, "warning"))
 done()
 
-(* How a compiled program shows an error. @lep.place is where it is now
-   (file in the upper half, line in the lower); @lep.fixed_place is set
-   by an interpreter instead. Colors only on a terminal, and not when
-   NO_COLOR is set. *)
+(* How a compiled program shows an error. @lep.place is the spot where it
+   is now; @lep.fixed_place is set by an interpreter instead (see
+   sys::at_place). Colors only on a terminal, and not when NO_COLOR is
+   set. A warning keeps the word after its code. *)
 make cg_rt_report(ctx)
     ensure escape = text::from_code(27)
-    rt_str(ctx, "e_fixed", "%s  ")
-    rt_str(ctx, "e_file", "%s:%lld  ")
-    rt_str(ctx, "e_line", "line %lld  ")
+    ensure nl = text::from_code(10)
+    ensure red = escape + "[31m"
+    ensure off = escape + "[0m"
+    rt_str(ctx, "e_where", "%.*s  ")
+    rt_str(ctx, "e_file", "%s:%lld:%lld  ")
+    rt_str(ctx, "e_line", "line %lld:%lld  ")
     rt_str(ctx, "e_code", "%.*s")
-    rt_str(ctx, "e_red", escape + "[31m%.*s" + escape + "[0m")
-    rt_str(ctx, "e_rest", "%s" + text::from_code(10))
-    rt_str(ctx, "e_green", "    " + escape + "[32mfix:" + escape + "[0m%s" + text::from_code(10))
+    rt_str(ctx, "e_red", red + "%.*s" + off)
+    rt_str(ctx, "e_rest", "%s" + nl)
+    rt_str(ctx, "e_green", "    " + escape + "[32mfix:" + off + "%s" + nl)
+    rt_str(ctx, "e_before", nl + "    %.*s")
+    rt_str(ctx, "e_thorn", "»%.*s«")
+    rt_str(ctx, "e_thorn_red", red + "»%.*s«" + off)
+    rt_str(ctx, "e_ascii", ">>%.*s<<")
+    rt_str(ctx, "e_ascii_red", red + ">>%.*s<<" + off)
+    rt_str(ctx, "e_after", "%s")
     rt_str(ctx, "e_gap", "  ")
     rt_str(ctx, "e_fix", "    fix:")
     rt_str(ctx, "e_nocolor", "NO_COLOR")
-    rt(ctx, "@lep.place = internal global i64 0")
+    rt(ctx, "@lep.place = internal global i32 0")
     rt(ctx, "define internal i1 @lep.colors() {|entry:|  %t = call i32 @isatty(i32 2)|  %tty = icmp ne i32 %t, 0|  %e = call ptr @getenv(ptr @.rt.e_nocolor)|  %none = icmp eq ptr %e, null|  br i1 %none, label %out, label %look|look:|  %c = load i8, ptr %e|  %empty = icmp eq i8 %c, 0|  %r = and i1 %tty, %empty|  ret i1 %r|out:|  ret i1 %tty|}")
-    rt(ctx, "define internal void @lep.report(ptr %msg) noinline cold {|entry:|  %fl = call i32 @fflush(ptr null)|  %col = call i1 @lep.colors()|  %fixed = load ptr, ptr @lep.fixed_place|  %hasf = icmp ne ptr %fixed, null|  br i1 %hasf, label %usefixed, label %own|usefixed:|  %w0 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_fixed, ptr %fixed)|  br label %code|own:|  %w = load i64, ptr @lep.place|  %no = icmp eq i64 %w, 0|  br i1 %no, label %code, label %place|place:|  %fi = lshr i64 %w, 32|  %ln = and i64 %w, 4294967295|  %fp = getelementptr ptr, ptr @lep.files, i64 %fi|  %fn = load ptr, ptr %fp|  %f0 = load i8, ptr %fn|  %nf = icmp eq i8 %f0, 0|  br i1 %nf, label %line, label %file|line:|  %w1 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_line, i64 %ln)|  br label %code|file:|  %w2 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_file, ptr %fn, i64 %ln)|  br label %code|code:|  %known = phi i1 [ true, %usefixed ], [ false, %own ], [ true, %line ], [ true, %file ]|  %gap = call ptr @strstr(ptr %msg, ptr @.rt.e_gap)|  %gi = ptrtoint ptr %gap to i64|  %mi = ptrtoint ptr %msg to i64|  %cl = sub i64 %gi, %mi|  %cn = trunc i64 %cl to i32|  %cf = select i1 %col, ptr @.rt.e_red, ptr @.rt.e_code|  %w3 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr %cf, i32 %cn, ptr %msg)|  %nl = call ptr @strchr(ptr %gap, i32 10)|  %rest = select i1 %known, ptr %nl, ptr %gap|  br i1 %col, label %tryfix, label %plain|tryfix:|  %fx = call ptr @strstr(ptr %rest, ptr @.rt.e_fix)|  %hasfix = icmp ne ptr %fx, null|  br i1 %hasfix, label %green, label %plain|green:|  %xi = ptrtoint ptr %fx to i64|  %ri = ptrtoint ptr %rest to i64|  %bl = sub i64 %xi, %ri|  %bn = trunc i64 %bl to i32|  %w4 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_code, i32 %bn, ptr %rest)|  %after = getelementptr i8, ptr %fx, i64 8|  %w5 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_green, ptr %after)|  ret void|plain:|  %w6 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_rest, ptr %rest)|  ret void|}")
+    (* the length of the first line of a text, and the text after it *)
+    rt(ctx, "define internal i32 @lep.linelen(ptr %s) {|entry:|  %nl = call ptr @strchr(ptr %s, i32 10)|  %none = icmp eq ptr %nl, null|  br i1 %none, label %all, label %part|all:|  %n = call i64 @strlen(ptr %s)|  %n32 = trunc i64 %n to i32|  ret i32 %n32|part:|  %a = ptrtoint ptr %nl to i64|  %b = ptrtoint ptr %s to i64|  %d = sub i64 %a, %b|  %d32 = trunc i64 %d to i32|  ret i32 %d32|}")
+    rt(ctx, "define internal ptr @lep.nextline(ptr %s) {|entry:|  %n = call i32 @lep.linelen(ptr %s)|  %n64 = sext i32 %n to i64|  %i = add i64 %n64, 1|  %p = getelementptr i8, ptr %s, i64 %i|  ret ptr %p|}")
+    (* the line of the program, with the wrong part between the thorns *)
+    rt(ctx, "define internal void @lep.showline(i1 %col, i32 %bn, ptr %before, i32 %wn, ptr %wrong, ptr %after) noinline cold {|entry:|  %uni = call i1 @lep.uni()|  %f1 = select i1 %col, ptr @.rt.e_thorn_red, ptr @.rt.e_thorn|  %f2 = select i1 %col, ptr @.rt.e_ascii_red, ptr @.rt.e_ascii|  %f = select i1 %uni, ptr %f1, ptr %f2|  %w1 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_before, i32 %bn, ptr %before)|  %w2 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr %f, i32 %wn, ptr %wrong)|  %w3 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_after, ptr %after)|  ret void|}")
+    (* prints the place, and returns false when it is not known *)
+    rt(ctx, "define internal i1 @lep.showplace(ptr %fixed) noinline cold {|entry:|  %hasf = icmp ne ptr %fixed, null|  br i1 %hasf, label %usefixed, label %own|usefixed:|  %n = call i32 @lep.linelen(ptr %fixed)|  %w0 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_where, i32 %n, ptr %fixed)|  ret i1 true|own:|  %s = load i32, ptr @lep.place|  %no = icmp eq i32 %s, 0|  br i1 %no, label %out, label %place|out:|  ret i1 false|place:|  %s64 = zext i32 %s to i64|  %wp = getelementptr i64, ptr @lep.spots, i64 %s64|  %w = load i64, ptr %wp|  %fi = lshr i64 %w, 40|  %l0 = lshr i64 %w, 16|  %ln = and i64 %l0, 16777215|  %cl = and i64 %w, 65535|  %fp = getelementptr ptr, ptr @lep.files, i64 %fi|  %fn = load ptr, ptr %fp|  %f0 = load i8, ptr %fn|  %nf = icmp eq i8 %f0, 0|  br i1 %nf, label %line, label %file|line:|  %w1 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_line, i64 %ln, i64 %cl)|  ret i1 true|file:|  %w2 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_file, ptr %fn, i64 %ln, i64 %cl)|  ret i1 true|}")
+    rt(ctx, "define internal void @lep.showspot(ptr %fixed, i1 %col) noinline cold {|entry:|  %hasf = icmp ne ptr %fixed, null|  br i1 %hasf, label %usefixed, label %own|usefixed:|  %b = call ptr @lep.nextline(ptr %fixed)|  %bn = call i32 @lep.linelen(ptr %b)|  %wr = call ptr @lep.nextline(ptr %b)|  %wn = call i32 @lep.linelen(ptr %wr)|  %af = call ptr @lep.nextline(ptr %wr)|  call void @lep.showline(i1 %col, i32 %bn, ptr %b, i32 %wn, ptr %wr, ptr %af)|  ret void|own:|  %has = load i1, ptr @lep.has_lines|  br i1 %has, label %lines, label %out|lines:|  %s = load i32, ptr @lep.place|  %s64 = zext i32 %s to i64|  %lp = getelementptr ptr, ptr @lep.spot_lines, i64 %s64|  %l = load ptr, ptr %lp|  %pp = getelementptr i32, ptr @lep.spot_parts, i64 %s64|  %pt = load i32, ptr %pp|  %first = lshr i32 %pt, 16|  %len = and i32 %pt, 65535|  %f64 = zext i32 %first to i64|  %w = getelementptr i8, ptr %l, i64 %f64|  %n64 = zext i32 %len to i64|  %a = getelementptr i8, ptr %w, i64 %n64|  call void @lep.showline(i1 %col, i32 %first, ptr %l, i32 %len, ptr %w, ptr %a)|  ret void|out:|  ret void|}")
+    (* the message is CODE, two spaces, a word, and then lines *)
+    rt(ctx, "define internal void @lep.report(ptr %msg, i1 %keep) noinline cold {|entry:|  %fl = call i32 @fflush(ptr null)|  %col = call i1 @lep.colors()|  %fixed = load ptr, ptr @lep.fixed_place|  %known = call i1 @lep.showplace(ptr %fixed)|  %gap = call ptr @strstr(ptr %msg, ptr @.rt.e_gap)|  %nogap = icmp eq ptr %gap, null|  br i1 %nogap, label %raw, label %code|raw:|  %w0 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_rest, ptr %msg)|  ret void|code:|  %gi = ptrtoint ptr %gap to i64|  %mi = ptrtoint ptr %msg to i64|  %cl = sub i64 %gi, %mi|  %cn = trunc i64 %cl to i32|  %cf = select i1 %col, ptr @.rt.e_red, ptr @.rt.e_code|  %w3 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr %cf, i32 %cn, ptr %msg)|  %hn = call i32 @lep.linelen(ptr %gap)|  %h64 = sext i32 %hn to i64|  %rest = getelementptr i8, ptr %gap, i64 %h64|  %unk = xor i1 %known, true|  %word = or i1 %unk, %keep|  br i1 %word, label %words, label %line|words:|  %w4 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_code, i32 %hn, ptr %gap)|  br label %line|line:|  br i1 %known, label %shown, label %text|shown:|  call void @lep.showspot(ptr %fixed, i1 %col)|  br label %text|text:|  br i1 %col, label %tryfix, label %plain|tryfix:|  %fx = call ptr @strstr(ptr %rest, ptr @.rt.e_fix)|  %hasfix = icmp ne ptr %fx, null|  br i1 %hasfix, label %green, label %plain|green:|  %xi = ptrtoint ptr %fx to i64|  %ri = ptrtoint ptr %rest to i64|  %bl = sub i64 %xi, %ri|  %bln = trunc i64 %bl to i32|  %w5 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_code, i32 %bln, ptr %rest)|  %aft = getelementptr i8, ptr %fx, i64 8|  %w6 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_green, ptr %aft)|  ret void|plain:|  %w7 = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @.rt.e_rest, ptr %rest)|  ret void|}")
+    (* a warning with one or two times in it; the program goes on *)
+    rt(ctx, "define internal void @lep.warn2(ptr %fmt, double %a, double %b) noinline cold {|entry:|  %buf = alloca [2048 x i8]|  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 2048, ptr %fmt, double %a, double %b)|  call void @lep.report(ptr %buf, i1 true)|  ret void|}")
 done()
