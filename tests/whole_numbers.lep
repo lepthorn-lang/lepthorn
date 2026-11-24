@@ -1,0 +1,37 @@
+(* a number with a part, where a whole number is needed, is an error *)
+ensure compiler = sys::getenv("LEPTHORNC")
+when compiler == ""
+    sys::fail("LEPTHORNC is not set - run this through lepthornc test")
+done()
+sys::mkdir("build")
+sys::mkdir("build/test")
+sys::mkdir("build/test/whole")
+
+make try(compiler, name, line)
+    ensure quote = text::from_code(34)
+    ensure path = "build/test/whole/" + name + ".lep"
+    ensure log = "build/test/whole/" + name + ".txt"
+    ensure file = file::open(path, "w")
+    file::write(file, "ensure q = text::from_code(34)" + text::from_code(10))
+    file::write(file, "ensure r = ring::create(3)" + text::from_code(10))
+    file::write(file, "ring::write(r, 5)" + text::from_code(10) + line + text::from_code(10))
+    file::close(file)
+    ensure status = sys::run(quote + compiler + quote + " eval " + path + " > " + log + " 2>&1")
+    ensure seen = file::open(log, "r")
+    ensure errors = file::load(seen, sys::file_size(log))
+    file::close(seen)
+    show name status
+    show text::slice(errors, 0, text::length(errors) - 1)
+done()
+
+try(compiler, "char_at", "show text::char_at(q, 0.5)")
+try(compiler, "slice_start", "show text::slice(q, 0.5, 1)")
+try(compiler, "slice_end", "show text::slice(q, 0, 0.9)")
+try(compiler, "from_code", "show text::from_code(65.5)")
+try(compiler, "create", "ensure s = ring::create(2.7)")
+try(compiler, "peek", "show ring::peek(r, 0.6)")
+try(compiler, "repeat", "repeat 2.5" + text::from_code(10) + "    show 1" + text::from_code(10) + "done()")
+try(compiler, "large", "show ring::peek(r, 10 ** 300)")
+try(compiler, "power_part", "show (0 - 8) ** 0.5")
+try(compiler, "power_zero", "show 0 ** (0 - 1)")
+try(compiler, "still_fine", "show 4 ** 0.5 (0 - 2) ** 3 2 ** (0 - 1) ring::peek(r, 6 / 3 - 2)")

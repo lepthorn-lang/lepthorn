@@ -270,6 +270,11 @@ file.lep:2:16  LER2001
 ```
 
 An exponent with a unit (`2 ** 1kg`) stops the program with `LER2002`.
+A negative number with a power that is not whole (`(0 - 8) ** 0.5`)
+stops it with `LER1021`, and 0 with a negative power with `LER1022`.
+
+Where a whole number is needed, as in `text::char_at(t, i)` or
+`repeat n`, a number with a part stops the program with `LER1020`.
 
 How units are printed is described in [DATATYPES.md](DATATYPES.md).
 

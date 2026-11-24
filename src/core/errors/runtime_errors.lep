@@ -45,6 +45,15 @@ make add_runtime_errors(list)
     add_error(list, "LER1017", "unknown_value", "show: unknown value", "this is a bug in the compiler; please report it")
     add_error(list, "LER1018", "program_failed", "{1}", "")
     add_error(list, "LER1019", "program_error", "{1}", "")
+    add_error(list, "LER1020", "needs_whole_number",
+        "{1} must be a whole number, got {2}",
+        "use a whole number here")
+    add_error(list, "LER1021", "power_has_no_value",
+        "`**`: a negative number has no power with a part",
+        "use a whole power, or a number that is not negative")
+    add_error(list, "LER1022", "power_of_zero",
+        "`**`: 0 has no negative power",
+        "check the number for 0 first")
 
     (* arrays, shapes, collections, text *)
     add_error(list, "LER3001", "index_not_number", "an array index must be a whole number without a unit", "use a whole number without a unit as an index")

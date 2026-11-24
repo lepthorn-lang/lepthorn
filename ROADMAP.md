@@ -93,6 +93,10 @@ Every language decision is checked against these seven rules:
 35. A late `deadline` or `timeout` shows its line, also when the block
     is left early.
 36. An array index must be a whole number without a unit.
+37. A number with a part is an error where a whole number is needed
+    (`text::char_at`, `text::slice`, `text::from_code`, `ring::create`,
+    `ring::peek`, `repeat`). `**` with no real value is an error, not
+    `nan`.
 
 ## Remaining work
 
@@ -102,9 +106,7 @@ Before Phase 0:
    in `docs/GRAMMAR.md`. It no longer fails or hangs on unfinished
    lists, calls or functions. Very deeply nested brackets still make it
    fail.
-2. Reject numbers with a part where a whole number is needed, such as
-   `text::char_at(t, 1.5)` and `repeat 2.5`, instead of cutting them.
-3. Make `ensure` protect array items and shape fields before running.
+2. Make `ensure` protect array items and shape fields before running.
    It will not yet protect a value that is reached through another
    variable or a function parameter; that is part of the memory model
    (Phase 2A).

@@ -1,0 +1,52 @@
+char_at 1
+build/test/whole/char_at.lep:4:6  LER1020
+    show »text::char_at«(q, 0.5)
+    why: text::char_at: the index must be a whole number, got 0.5
+    fix: use a whole number here
+slice_start 1
+build/test/whole/slice_start.lep:4:6  LER1020
+    show »text::slice«(q, 0.5, 1)
+    why: text::slice: the start must be a whole number, got 0.5
+    fix: use a whole number here
+slice_end 1
+build/test/whole/slice_end.lep:4:6  LER1020
+    show »text::slice«(q, 0, 0.9)
+    why: text::slice: the end must be a whole number, got 0.9
+    fix: use a whole number here
+from_code 1
+build/test/whole/from_code.lep:4:6  LER1020
+    show »text::from_code«(65.5)
+    why: text::from_code: the code must be a whole number, got 65.5
+    fix: use a whole number here
+create 1
+build/test/whole/create.lep:4:12  LER1020
+    ensure s = »ring::create«(2.7)
+    why: the size must be a whole number, got 2.7
+    fix: use a whole number here
+peek 1
+build/test/whole/peek.lep:4:6  LER1020
+    show »ring::peek«(r, 0.6)
+    why: ring::peek: the index must be a whole number, got 0.6
+    fix: use a whole number here
+repeat 1
+build/test/whole/repeat.lep:4:1  LER1020
+    »repeat« 2.5
+    why: `repeat`: the count must be a whole number, got 2.5
+    fix: use a whole number here
+large 1
+build/test/whole/large.lep:4:6  LER1020
+    show »ring::peek«(r, 10 ** 300)
+    why: ring::peek: the index must be a whole number, got 1e+300
+    fix: use a whole number here
+power_part 1
+build/test/whole/power_part.lep:4:14  LER1021
+    show (0 - 8) »**« 0.5
+    why: `**`: a negative number has no power with a part
+    fix: use a whole power, or a number that is not negative
+power_zero 1
+build/test/whole/power_zero.lep:4:8  LER1022
+    show 0 »**« (0 - 1)
+    why: `**`: 0 has no negative power
+    fix: check the number for 0 first
+still_fine 0
+2 -8 0.5 5
