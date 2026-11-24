@@ -190,19 +190,35 @@ make skip_trivia(source, start, n)
             stop
         done()
         ensure c = text::char_at(source, place)
-        when c == " " or c == tab
+        when c == " "
             place = place + 1
-        otherwise when is_pair(source, place, n, "(", "*")
-            place = skip_comment(source, place + 2, n)
-        otherwise when is_pair(source, place, n, "*", ")")
-            src_error(source, place, error_line_plain("stray_comment_end"))
-            done(n + 1)
-        otherwise when is_pair(source, place, n, "/", "/")
-            src_error(source, place, error_line_plain("line_comment"))
-            place = skip_to_line_end(source, place, n)
+        otherwise when c == "(" or c == "*" or c == "/"
+            ensure after = skip_mark(source, place, n)
+            when after == place
+                stop
+            done()
+            place = after
+        otherwise when c == tab
+            place = place + 1
         otherwise
             stop
         done()
+    done()
+    done(place)
+done()
+
+(* skips a comment that starts at `place`; the same place when none does *)
+make skip_mark(source, place, n)
+    when is_pair(source, place, n, "(", "*")
+        done(skip_comment(source, place + 2, n))
+    done()
+    when is_pair(source, place, n, "*", ")")
+        src_error(source, place, error_line_plain("stray_comment_end"))
+        done(n + 1)
+    done()
+    when is_pair(source, place, n, "/", "/")
+        src_error(source, place, error_line_plain("line_comment"))
+        done(skip_to_line_end(source, place, n))
     done()
     done(place)
 done()

@@ -1,0 +1,167 @@
+(* expect.lep - looks at the next token before taking it.
+
+   One mistake gives one error: after it the rest of the line is
+   skipped, and line_is_bad keeps the same line quiet. *)
+
+use core::lang_syntax::data_types
+use core::ast::ast
+
+shared suppose line_is_bad = false
+
+(* a token, in words for an error *)
+make found_words(token)
+    when token.kind == "NEWLINE"
+        done("the end of the line")
+    done()
+    when token.kind == "EOF"
+        done("the end of the file")
+    done()
+    when token.kind == "DONE_EMPTY"
+        done("done()")
+    done()
+    when token.kind == "ENSURE_BLOCK"
+        done("ensure!")
+    done()
+    when token.kind == "SUPPOSE_BLOCK"
+        done("suppose!")
+    done()
+    done("'" + token.value + "'")
+done()
+
+(* true at the end of a line, or at the end of the program *)
+make is_line_end(tok_buf, cur)
+    ensure kind = token_kind(tok_buf, cur)
+    done(kind == "NEWLINE" or kind == "EOF" or kind == "LEX_ERROR")
+done()
+
+(* moves to the end of the line *)
+make skip_line(tok_buf, cur)
+    repeat
+        when is_line_end(tok_buf, cur)
+            stop
+        done()
+        cur_take(tok_buf, cur)
+    done()
+done()
+
+(* An error at the current token. The result is the node that marks the
+   program as wrong. An error of the lexer was already shown. *)
+make problem(tok_buf, cur, arena, error)
+    suppose node = perr(tok_buf, cur, error)
+    when cur_is_empty(tok_buf, cur)
+        node.pos = parse_pos + 1
+    done()
+    when line_is_bad or token_kind(tok_buf, cur) == "LEX_ERROR"
+        node.op = ""
+    done()
+    line_is_bad = true
+    skip_line(tok_buf, cur)
+    done(arena_add(arena, node))
+done()
+
+(* the same, at the last token that was taken *)
+make problem_before(tok_buf, cur, arena, error)
+    suppose node = perr(tok_buf, cur, error)
+    node.pos = parse_pos
+    when line_is_bad
+        node.op = ""
+    done()
+    line_is_bad = true
+    skip_line(tok_buf, cur)
+    done(arena_add(arena, node))
+done()
+
+(* true when the current token is this symbol, such as ")" *)
+make at_symbol(tok_buf, cur, symbol)
+    ensure token = cur_current(tok_buf, cur)
+    done(token.kind == "OP" and token.value == symbol)
+done()
+
+(* takes the symbol, or says that it is missing. `expected` is how the
+   error calls it, such as "`)`" *)
+make take_symbol(tok_buf, cur, arena, symbol)
+    when at_symbol(tok_buf, cur, symbol)
+        cur_take(tok_buf, cur)
+        done(true)
+    done()
+    missing(tok_buf, cur, arena, "`" + symbol + "`")
+    done(false)
+done()
+
+make missing(tok_buf, cur, arena, expected)
+    ensure found = found_words(cur_current(tok_buf, cur))
+    problem(tok_buf, cur, arena, error_line("missing_symbol", [expected, found]))
+done()
+
+(* takes a name and gives it back; "" after an error *)
+make take_name(tok_buf, cur, arena)
+    ensure token = cur_current(tok_buf, cur)
+    when token.kind == "IDENT"
+        cur_take(tok_buf, cur)
+        done(token.value)
+    done()
+    when is_word_token(token)
+        problem(tok_buf, cur, arena, error_line("keyword_as_name", [token.value]))
+    otherwise
+        problem(tok_buf, cur, arena, error_line("name_expected", [found_words(token)]))
+    done()
+    done("")
+done()
+
+(* a word of the language, such as show *)
+make is_word_token(token)
+    when token.kind == "NUMBER" or token.value == ""
+        done(false)
+    done()
+    done(is_alpha(text::char_at(token.value, 0)))
+done()
+
+(* Lists: f(1, 2)  [1, 2]  P(x = 1, y = 2)  make f(a, b)
+
+   list_is_empty is asked after the opening bracket, list_goes_on after
+   each item. Both take the closing bracket. *)
+make list_is_empty(tok_buf, cur, closing)
+    when at_symbol(tok_buf, cur, closing)
+        cur_take(tok_buf, cur)
+        done(true)
+    done()
+    done(false)
+done()
+
+make list_goes_on(tok_buf, cur, arena, closing)
+    when at_symbol(tok_buf, cur, closing)
+        cur_take(tok_buf, cur)
+        done(false)
+    done()
+    when not at_symbol(tok_buf, cur, ",")
+        missing(tok_buf, cur, arena, "`,` or `" + closing + "`")
+        done(false)
+    done()
+    cur_take(tok_buf, cur)
+    when at_symbol(tok_buf, cur, closing)
+        problem_before(tok_buf, cur, arena, error_line_plain("extra_comma"))
+        done(false)
+    done()
+    done(true)
+done()
+
+(* a name after ::, where a word of the language is fine: sys::read *)
+make take_member_name(tok_buf, cur, arena)
+    ensure token = cur_current(tok_buf, cur)
+    when is_word_token(token)
+        cur_take(tok_buf, cur)
+        done(token.value)
+    done()
+    done(take_name(tok_buf, cur, arena))
+done()
+
+(* the name after ::, and the ( that must follow it *)
+make take_member(tok_buf, cur, arena, owner)
+    cur_take(tok_buf, cur)
+    ensure member = take_member_name(tok_buf, cur, arena)
+    when not at_symbol(tok_buf, cur, "(")
+        problem(tok_buf, cur, arena, error_line("member_needs_call", [owner + "::" + member]))
+        done("")
+    done()
+    done(owner + "::" + member)
+done()

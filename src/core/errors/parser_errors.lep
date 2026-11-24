@@ -12,7 +12,7 @@ make add_parser_errors(list)
         "loop_hz needs a frequency: loop_hz(100) or loop_hz 100Hz",
         "give the rate after loop_hz")
     add_error(list, "LEC2004", "bad_statement_start",
-        "a statement cannot start with '{1}'",
+        "a statement cannot start with {1}",
         "start the line with a keyword (ensure, show, when, ...) or a name")
     add_error(list, "LEC2005", "bad_case_label",
         "a case label must be a number, quoted Text, true or false, got '{1}'",
@@ -29,4 +29,19 @@ make add_parser_errors(list)
     add_error(list, "LEC2009", "show_spaced_call",
         "this could be a call, or two values",
         "write f(3) with no space before the bracket")
+    add_error(list, "LEC2010", "missing_symbol",
+        "expected {1}, found {2}",
+        "write it here")
+    add_error(list, "LEC2011", "name_expected",
+        "expected a name, found {1}",
+        "write a name: letters, digits and _, with a letter first")
+    add_error(list, "LEC2012", "keyword_as_name",
+        "`{1}` is a word of the language",
+        "use another name")
+    add_error(list, "LEC2017", "extra_comma",
+        "nothing comes after this comma",
+        "remove the comma")
+    add_error(list, "LEC2021", "member_needs_call",
+        "`{1}` is a function, it needs ( )",
+        "write ( and the values, then )")
 done()

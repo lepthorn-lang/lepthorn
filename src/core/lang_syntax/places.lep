@@ -13,7 +13,7 @@ shape LinePlace
     spot: Number
 done()
 
-(* A spot is a place where the program can fail. `next` is the next spot
+(* A spot is a place where the program can fail. `next_spot` is the next spot
    on the same line. A compiled program numbers the spots it uses, from
    1; `used` is 0 until then.
    The line of the program is split in three: before, wrong, after. *)
@@ -27,7 +27,7 @@ shape Spot
     before: Text
     wrong: Text
     after: Text
-    next: Number
+    next_spot: Number
     used: Number
 done()
 
@@ -136,14 +136,14 @@ make spot_at(table, place)
         when known.place == place
             done(known)
         done()
-        number = known.next
+        number = known.next_spot
     done()
     ensure source = table.source
     ensure part = wrong_part(source, place)
     ensure first = line_first(source, part.first)
     ensure shown = skip_spaces_tabs(source, first, part.first)
     ensure last = skip_to_line_end(source, part.after, text::length(source))
-    ensure spot = Spot(number = ring::size(table.spots) + 1, place = place, file = entry.file, line = entry.line, column = column_of(source, part.first), line_first = shown, before = text::slice(source, shown, part.first), wrong = text::slice(source, part.first, part.after), after = text::slice(source, part.after, last), next = entry.spot, used = 0)
+    ensure spot = Spot(number = ring::size(table.spots) + 1, place = place, file = entry.file, line = entry.line, column = column_of(source, part.first), line_first = shown, before = text::slice(source, shown, part.first), wrong = text::slice(source, part.first, part.after), after = text::slice(source, part.after, last), next_spot = entry.spot, used = 0)
     ring::write(table.spots, spot)
     entry.spot = spot.number
     done(spot)

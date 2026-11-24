@@ -47,7 +47,7 @@ make add_runtime_errors(list)
     add_error(list, "LER1019", "program_error", "{1}", "")
 
     (* arrays, shapes, collections, text *)
-    add_error(list, "LER3001", "index_not_number", "an array index must be a dimensionless Number", "use a whole number without a unit as an index")
+    add_error(list, "LER3001", "index_not_number", "an array index must be a whole number without a unit", "use a whole number without a unit as an index")
     add_error(list, "LER3002", "index_out_of_bounds",
         "index {1} is out of bounds for an array of length {2}",
         "indexes start at 0 and stop before length(array)")

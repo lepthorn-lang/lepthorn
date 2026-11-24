@@ -243,6 +243,14 @@ make ctv_check_arglist(arena, decls, sink, funcs, start)
     done()
 done()
 
+(* how many values length and vector take *)
+make ctv_builtin_count(name)
+    when name == "length"
+        done(1)
+    done()
+    done(3)
+done()
+
 make ctv_check_expr(arena, decls, sink, funcs, idx)
     ensure node = arena_get(arena, idx)
     when node.kind == "VAR"
@@ -280,6 +288,9 @@ make ctv_check_expr(arena, decls, sink, funcs, idx)
                tell, because a function with an empty body has none too *)
             ensure missing = target.name == ""
             when missing and is_builtin
+                when node.num_value != ctv_builtin_count(node.op)
+                    ctv_error(sink, node.pos, error_line("wrong_argument_count", [node.op]))
+                done()
             otherwise when missing
                 ctv_error(sink, node.pos, error_line("unknown_function", [node.op]))
             otherwise

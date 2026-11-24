@@ -3,20 +3,21 @@
 
 use core::lang_syntax::data_types
 use core::ast::ast
+use core::lang_syntax::expect
 
 make token_kind(tok_buf, cur)
-    when cur_is_empty(tok_buf, cur)
+    when cur.pos >= ring::size(tok_buf)
         done("EOF")
     done()
-    ensure t = cur_current(tok_buf, cur)
+    ensure t = ring::peek(tok_buf, cur.pos)
     done(t.kind)
 done()
 
 make token_value(tok_buf, cur)
-    when cur_is_empty(tok_buf, cur)
+    when cur.pos >= ring::size(tok_buf)
         done("")
     done()
-    ensure t = cur_current(tok_buf, cur)
+    ensure t = ring::peek(tok_buf, cur.pos)
     done(t.value)
 done()
 
@@ -117,9 +118,11 @@ make parse_primary(tok_buf, cur, arena)
         ensure name_place = parse_pos
         when token_kind(tok_buf, cur) == "OP"
             when token_value(tok_buf, cur) == "::"
-                cur_take(tok_buf, cur)
-                ensure member_tok = cur_take(tok_buf, cur)
-                done(at_place(arena, parse_call(tok_buf, cur, arena, val + "::" + member_tok.value), name_place))
+                ensure member = take_member(tok_buf, cur, arena, val)
+                when member == ""
+                    done(arena_add(arena, perr(tok_buf, cur, "")))
+                done()
+                done(at_place(arena, parse_call(tok_buf, cur, arena, member), name_place))
             done()
             when token_value(tok_buf, cur) == "("
                 when looks_like_shape_construct(tok_buf, cur)
@@ -155,17 +158,8 @@ make parse_primary(tok_buf, cur, arena)
             done(parse_array_literal(tok_buf, cur, arena))
         done()
     done()
-    suppose found = "'" + val + "'"
-    when kind == "NEWLINE"
-        found = "the end of the line"
-    otherwise when kind == "EOF"
-        found = "the end of the file"
-    done()
-    node = perr(tok_buf, cur, error_line("expected_value", [found]))
-    when not cur_is_empty(tok_buf, cur)
-        cur_take(tok_buf, cur)
-    done()
-    done(arena_add(arena, node))
+    ensure found = found_words(cur_current(tok_buf, cur))
+    done(problem(tok_buf, cur, arena, error_line("expected_value", [found])))
 done()
 
 (* `~x` (bitwise not) binds tightest; `not` normally sits lower (see
@@ -366,41 +360,32 @@ done()
 
 make parse_call(tok_buf, cur, arena, name)
     cur_take(tok_buf, cur)
-    suppose first_arg = none_idx()
-    suppose prev_arg = none_idx()
-    suppose prev_anode = mk_node("", 0, false, "", 0, 0)
-    suppose argc = 0
-    suppose keep_going = true
+    suppose first = none_idx()
+    suppose last = none_idx()
+    suppose count = 0
+    suppose more = not list_is_empty(tok_buf, cur, ")")
     repeat
-        when keep_going
-            when token_kind(tok_buf, cur) == "OP"
-                when token_value(tok_buf, cur) == ")"
-                    keep_going = false
-                done()
-            done()
-            when keep_going
-                ensure aidx = parse_or(tok_buf, cur, arena)
-                when first_arg == none_idx()
-                    first_arg = aidx
-                otherwise
-                    prev_anode = arena_get(arena, prev_arg)
-                    prev_anode.sibling = aidx
-                done()
-                prev_arg = aidx
-                argc = argc + 1
-                when token_kind(tok_buf, cur) == "OP"
-                    when token_value(tok_buf, cur) == ","
-                        cur_take(tok_buf, cur)
-                    done()
-                done()
-            done()
-        otherwise
+        when not more
             stop
         done()
+        ensure value = parse_or(tok_buf, cur, arena)
+        first = link_after(arena, first, last, value)
+        last = value
+        count = count + 1
+        more = list_goes_on(tok_buf, cur, arena, ")")
     done()
-    cur_take(tok_buf, cur)
-    ensure node = mk_node("CALL", argc, false, name, first_arg, 0)
+    ensure node = mk_node("CALL", count, false, name, first, 0)
     done(arena_add(arena, node))
+done()
+
+(* adds `item` after `last`; the result is the first of the chain *)
+make link_after(arena, first, last, item)
+    when last == none_idx()
+        done(item)
+    done()
+    suppose last_node = arena_get(arena, last)
+    last_node.sibling = item
+    done(first)
 done()
 
 (* shape construction: `Name(field = value, ...)`. Parses into a
@@ -413,82 +398,43 @@ done()
 make parse_shape_construct(tok_buf, cur, arena, shape_name)
     cur_take(tok_buf, cur)
     suppose first = none_idx()
-    suppose prev = none_idx()
-    suppose prev_node = mk_node("", 0, false, "", 0, 0)
-    suppose keep_going = true
+    suppose last = none_idx()
+    suppose more = not list_is_empty(tok_buf, cur, ")")
     repeat
-        when keep_going
-            when token_kind(tok_buf, cur) == "OP"
-                when token_value(tok_buf, cur) == ")"
-                    keep_going = false
-                done()
-            done()
-            when keep_going
-                ensure fname_tok = cur_take(tok_buf, cur)
-                ensure name_place = parse_pos
-                cur_take(tok_buf, cur)
-                ensure vexpr = parse_or(tok_buf, cur, arena)
-                ensure fnode = Node(kind = "FIELD_INIT", num_value = 0, bool_value = false, text_value = "", op = fname_tok.value, params = "", left = vexpr, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = name_place)
-                ensure fidx = arena_add(arena, fnode)
-                when first == none_idx()
-                    first = fidx
-                otherwise
-                    prev_node = arena_get(arena, prev)
-                    prev_node.sibling = fidx
-                done()
-                prev = fidx
-                when token_kind(tok_buf, cur) == "OP"
-                    when token_value(tok_buf, cur) == ","
-                        cur_take(tok_buf, cur)
-                    done()
-                done()
-            done()
-        otherwise
+        when not more
             stop
         done()
+        ensure field = take_name(tok_buf, cur, arena)
+        ensure place = parse_pos
+        take_symbol(tok_buf, cur, arena, "=")
+        ensure value = parse_or(tok_buf, cur, arena)
+        suppose node = mk_node("FIELD_INIT", 0, false, field, value, 0)
+        node.pos = place
+        ensure item = arena_add(arena, node)
+        first = link_after(arena, first, last, item)
+        last = item
+        more = list_goes_on(tok_buf, cur, arena, ")")
     done()
-    cur_take(tok_buf, cur)
-    ensure node = Node(kind = "SHAPE_CONSTRUCT", num_value = 0, bool_value = false, text_value = "", op = shape_name, params = "", left = first, right = 0, sibling = none_idx(), alt = none_idx(), arg2 = 0, pos = parse_pos)
-    done(arena_add(arena, node))
+    ensure built = mk_node("SHAPE_CONSTRUCT", 0, false, shape_name, first, 0)
+    done(arena_add(arena, built))
 done()
 
 make parse_array_literal(tok_buf, cur, arena)
     cur_take(tok_buf, cur)
     suppose first = none_idx()
-    suppose prev = none_idx()
-    suppose prev_node = mk_node("", 0, false, "", 0, 0)
-    suppose keep_going = true
+    suppose last = none_idx()
+    suppose more = not list_is_empty(tok_buf, cur, "]")
     repeat
-        when keep_going
-            when token_kind(tok_buf, cur) == "OP"
-                when token_value(tok_buf, cur) == "]"
-                    keep_going = false
-                done()
-            done()
-            when keep_going
-                ensure vexpr = parse_or(tok_buf, cur, arena)
-                ensure enode = mk_node("ELEM_INIT", 0, false, "", vexpr, 0)
-                ensure eidx = arena_add(arena, enode)
-                when first == none_idx()
-                    first = eidx
-                otherwise
-                    prev_node = arena_get(arena, prev)
-                    prev_node.sibling = eidx
-                done()
-                prev = eidx
-                when token_kind(tok_buf, cur) == "OP"
-                    when token_value(tok_buf, cur) == ","
-                        cur_take(tok_buf, cur)
-                    done()
-                done()
-            done()
-        otherwise
+        when not more
             stop
         done()
+        ensure value = parse_or(tok_buf, cur, arena)
+        ensure item = arena_add(arena, mk_node("ELEM_INIT", 0, false, "", value, 0))
+        first = link_after(arena, first, last, item)
+        last = item
+        more = list_goes_on(tok_buf, cur, arena, "]")
     done()
-    cur_take(tok_buf, cur)
-    ensure node = mk_node("ARRAY_LITERAL", 0, false, "", first, 0)
-    done(arena_add(arena, node))
+    done(arena_add(arena, mk_node("ARRAY_LITERAL", 0, false, "", first, 0)))
 done()
 
 make parse_when_tail(tok_buf, cur, arena)
@@ -733,25 +679,7 @@ done()
 (* an error at the current token; the rest of the line is skipped, so
    one mistake gives one error *)
 make line_error(tok_buf, cur, arena, name)
-    ensure problem = perr(tok_buf, cur, error_line_plain(name))
-    skip_line(tok_buf, cur)
-    done(arena_add(arena, problem))
-done()
-
-(* true at the end of a line, or at the end of the program *)
-make is_line_end(tok_buf, cur)
-    ensure kind = token_kind(tok_buf, cur)
-    done(kind == "NEWLINE" or kind == "EOF" or kind == "LEX_ERROR")
-done()
-
-(* moves to the end of the line *)
-make skip_line(tok_buf, cur)
-    repeat
-        when is_line_end(tok_buf, cur)
-            stop
-        done()
-        cur_take(tok_buf, cur)
-    done()
+    done(problem(tok_buf, cur, arena, error_line_plain(name)))
 done()
 
 (* Between values a space means "next value", so these would be unclear:
@@ -820,6 +748,7 @@ done()
 (* a statement's position is its first token, so an error in it names
    the line it starts on *)
 make parse_statement(tok_buf, cur, arena)
+    line_is_bad = false
     ensure first = cur_current(tok_buf, cur)
     ensure idx = parse_statement_at(tok_buf, cur, arena)
     ensure st = arena_get(arena, idx)
@@ -1124,9 +1053,11 @@ make parse_statement_at(tok_buf, cur, arena)
                never exercised until a namespaced call needed to appear
                on its own line. *)
             when token_value(tok_buf, cur) == "::"
-                cur_take(tok_buf, cur)
-                ensure member_tok = cur_take(tok_buf, cur)
-                ensure call_idx = at_place(arena, parse_call(tok_buf, cur, arena, name_tok.value + "::" + member_tok.value), name_place)
+                ensure member = take_member(tok_buf, cur, arena, name_tok.value)
+                when member == ""
+                    done(arena_add(arena, perr(tok_buf, cur, "")))
+                done()
+                ensure call_idx = at_place(arena, parse_call(tok_buf, cur, arena, member), name_place)
                 node = mk_node("EXPR_STMT", 0, false, "", call_idx, 0)
                 done(arena_add(arena, node))
             done()
@@ -1192,13 +1123,8 @@ make parse_statement_at(tok_buf, cur, arena)
         node = mk_node("ASSIGN_STMT", 0, false, name_tok.value, expr_idx, 0)
         done(arena_add(arena, node))
     done()
-    ensure bad = cur_current(tok_buf, cur)
-    node = perr(tok_buf, cur, error_line("bad_statement_start", [bad.value]))
-    when not cur_is_empty(tok_buf, cur)
-        cur_take(tok_buf, cur)
-    done()
-    skip_line(tok_buf, cur)
-    done(arena_add(arena, node))
+    ensure bad = found_words(cur_current(tok_buf, cur))
+    done(problem(tok_buf, cur, arena, error_line("bad_statement_start", [bad])))
 done()
 
 (* parses statements, chaining them by patching each one's `next`
@@ -1310,44 +1236,36 @@ done()
    same plain comma-accumulator fix as parse_shape above. *)
 
 make parse_make(tok_buf, cur, arena, funcs)
+    line_is_bad = false
     cur_take(tok_buf, cur)
-    ensure name_tok = cur_take(tok_buf, cur)
+    ensure name = take_name(tok_buf, cur, arena)
+    ensure params = parse_params(tok_buf, cur, arena)
     cur_take(tok_buf, cur)
-    suppose joined = ""
-    suppose pcount = 0
-    suppose keep_going = true
+    ensure body = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
+    cur_take(tok_buf, cur)
+    ring::write(funcs, FuncDef(name = name, params = params, body = body))
+done()
+
+(* (a, b) after the name of a function, as "a,b" *)
+make parse_params(tok_buf, cur, arena)
+    suppose params = ""
+    suppose more = take_symbol(tok_buf, cur, arena, "(")
+    when more
+        more = not list_is_empty(tok_buf, cur, ")")
+    done()
     repeat
-        when keep_going
-            when token_kind(tok_buf, cur) == "OP"
-                when token_value(tok_buf, cur) == ")"
-                    keep_going = false
-                done()
-            done()
-            when keep_going
-                when token_kind(tok_buf, cur) == "IDENT"
-                    ensure ptok = cur_take(tok_buf, cur)
-                    when pcount == 0
-                        joined = ptok.value
-                    otherwise
-                        joined = joined + "," + ptok.value
-                    done()
-                    pcount = pcount + 1
-                done()
-                when token_kind(tok_buf, cur) == "OP"
-                    when token_value(tok_buf, cur) == ","
-                        cur_take(tok_buf, cur)
-                    done()
-                done()
-            done()
-        otherwise
+        when not more
             stop
         done()
+        ensure name = take_name(tok_buf, cur, arena)
+        when params == ""
+            params = name
+        otherwise
+            params = params + "," + name
+        done()
+        more = list_goes_on(tok_buf, cur, arena, ")")
     done()
-    cur_take(tok_buf, cur)
-    cur_take(tok_buf, cur)
-    ensure body_idx = parse_block(tok_buf, cur, arena, "DONE_EMPTY", "DONE_EMPTY")
-    cur_take(tok_buf, cur)
-    ring::write(funcs, FuncDef(name = name_tok.value, params = joined, body = body_idx))
+    done(params)
 done()
 
 (* top level: chains statements the same way parse_block does, but

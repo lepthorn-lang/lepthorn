@@ -29,7 +29,7 @@ shape IState
     arena: Number
     funcs: Number
     shapes: Number
-    shared: Number
+    shared_vars: Number
     units: Number
     normal: Number
     stop_sig: Number
@@ -130,9 +130,9 @@ make env_get(st, env, name)
     when i >= 0
         done(var_value(ring::peek(env, i)))
     done()
-    ensure j = env_find(st.shared, name)
+    ensure j = env_find(st.shared_vars, name)
     when j >= 0
-        done(var_value(ring::peek(st.shared, j)))
+        done(var_value(ring::peek(st.shared_vars, j)))
     done()
     go_to_node(st, st.statement)
     ifail(run_block("run_undefined_variable", [name]))
@@ -146,9 +146,9 @@ make env_assign(st, env, name, value)
         v.value = value
         done(true)
     done()
-    ensure j = env_find(st.shared, name)
+    ensure j = env_find(st.shared_vars, name)
     when j >= 0
-        suppose sv = ring::peek(st.shared, j)
+        suppose sv = ring::peek(st.shared_vars, j)
         sv.value = value
         done(true)
     done()
@@ -199,6 +199,12 @@ make tarray_cell(base, idxv)
         ifail(run_block("not_an_array", [sys::kind(base)]))
     done()
     when sys::kind(idxv) != "Number"
+        ifail(run_block_plain("index_not_number"))
+    done()
+    when sys::has_unit(idxv)
+        ifail(run_block_plain("index_not_number"))
+    done()
+    when idxv % 1 != 0
         ifail(run_block_plain("index_not_number"))
     done()
     ensure cells = base.cells
@@ -834,6 +840,9 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::warn"
         done(sys::warn(a1))
     done()
+    when op == "sys::has_unit"
+        done(sys::has_unit(a1))
+    done()
     when op == "sys::stop_with"
         done(sys::stop_with(a1))
     done()
@@ -940,7 +949,7 @@ make exec_stmt(st, env, node)
         done(st.normal)
     done()
     when k == "SHARED_ENSURE_STMT" or k == "SHARED_SUPPOSE_STMT"
-        env_declare(st.shared, node.op, eval_node(st, env, node.left))
+        env_declare(st.shared_vars, node.op, eval_node(st, env, node.left))
         done(st.normal)
     done()
     when k == "SHOW_STMT"
@@ -1326,7 +1335,7 @@ make report_parse_errors(arena, source)
 done()
 
 make new_state(arena, funcs, shapes, source)
-    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0, places = build_place_table(source), statement = no_node(), limit = 10000))
+    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared_vars = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0, places = build_place_table(source), statement = no_node(), limit = 10000))
 done()
 
 (* lex -> parse -> CTV -> run *)
