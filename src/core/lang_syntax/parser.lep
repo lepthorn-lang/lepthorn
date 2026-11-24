@@ -91,6 +91,9 @@ make parse_primary(tok_buf, cur, arena)
     when kind == "NUMBER"
         ensure t = cur_take(tok_buf, cur)
         ensure dp = digit_prefix_len(t.value)
+        when dp > 290
+            done(problem_before(tok_buf, cur, arena, error_line_plain("number_too_long")))
+        done()
         ensure num_part = text::slice(t.value, 0, dp)
         ensure unit_part = text::slice(t.value, dp, text::length(t.value))
         node = mk_node("NUM", text::to_number(num_part), false, unit_part, 0, 0)

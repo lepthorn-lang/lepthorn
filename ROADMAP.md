@@ -96,7 +96,8 @@ Every language decision is checked against these seven rules:
 37. A number with a part is an error where a whole number is needed
     (`text::char_at`, `text::slice`, `text::from_code`, `ring::create`,
     `ring::peek`, `repeat`). `**` with no real value is an error, not
-    `nan`.
+    `nan`, a result that is too large is an error, not `inf`, and a
+    negative count for `repeat` is an error.
 
 ## Remaining work
 

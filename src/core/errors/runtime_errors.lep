@@ -54,6 +54,12 @@ make add_runtime_errors(list)
     add_error(list, "LER1022", "power_of_zero",
         "`**`: 0 has no negative power",
         "check the number for 0 first")
+    add_error(list, "LER1023", "number_too_large",
+        "the result is too large for a number",
+        "use smaller numbers, or another unit")
+    add_error(list, "LER1024", "repeat_negative",
+        "`repeat`: the count must be 0 or more, got {1}",
+        "use a whole number that is 0 or more")
 
     (* arrays, shapes, collections, text *)
     add_error(list, "LER3001", "index_not_number", "an array index must be a whole number without a unit", "use a whole number without a unit as an index")

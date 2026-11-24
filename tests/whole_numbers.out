@@ -48,5 +48,46 @@ build/test/whole/power_zero.lep:4:8  LER1022
     show 0 »**« (0 - 1)
     why: `**`: 0 has no negative power
     fix: check the number for 0 first
+repeat_negative 1
+build/test/whole/repeat_negative.lep:4:1  LER1024
+    »repeat« 0 - 3
+    why: `repeat`: the count must be 0 or more, got -3
+    fix: use a whole number that is 0 or more
+repeat_zero 0
+7
+too_large_power 1
+build/test/whole/too_large_power.lep:4:9  LER1023
+    show 10 »**« 400
+    why: the result is too large for a number
+    fix: use smaller numbers, or another unit
+too_large_times 1
+build/test/whole/too_large_times.lep:4:16  LER1023
+    show 10 ** 200 »*« 10 ** 200
+    why: the result is too large for a number
+    fix: use smaller numbers, or another unit
+too_large_plus 1
+build/test/whole/too_large_plus.lep:4:22  LER1023
+    show 1.5 * 10 ** 308 »+« 1.5 * 10 ** 308
+    why: the result is too large for a number
+    fix: use smaller numbers, or another unit
+too_large_unit 1
+build/test/whole/too_large_unit.lep:4:17  LER1023
+    show 10m ** 200 »*« 10m ** 200
+    why: the result is too large for a number
+    fix: use smaller numbers, or another unit
+too_small_below 0
+0
+divide_large 1
+build/test/whole/divide_large.lep:4:16  LER1023
+    show 10 ** 200 »/« (1 / 10 ** 200)
+    why: the result is too large for a number
+    fix: use smaller numbers, or another unit
+velocity_no_time 1
+build/test/whole/velocity_no_time.lep:4:6  LER1001
+    show »motion::velocity«(5m, 0s)
+    why: Division by zero
+    fix: check the divisor before dividing
+largest 0
+1e+308
 still_fine 0
 2 -8 0.5 5

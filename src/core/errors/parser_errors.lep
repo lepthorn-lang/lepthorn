@@ -29,6 +29,9 @@ make add_parser_errors(list)
     add_error(list, "LEC2009", "show_spaced_call",
         "this could be a call, or two values",
         "write f(3) with no space before the bracket")
+    add_error(list, "LEC2028", "number_too_long",
+        "this number has too many digits",
+        "use a smaller number, or another unit")
     add_error(list, "LEC2010", "missing_symbol",
         "expected {1}, found {2}",
         "write it here")

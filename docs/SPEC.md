@@ -274,7 +274,13 @@ A negative number with a power that is not whole (`(0 - 8) ** 0.5`)
 stops it with `LER1021`, and 0 with a negative power with `LER1022`.
 
 Where a whole number is needed, as in `text::char_at(t, i)` or
-`repeat n`, a number with a part stops the program with `LER1020`.
+`repeat n`, a number with a part stops the program with `LER1020`. A
+negative count for `repeat` stops it with `LER1024`; `repeat 0` runs its
+body zero times.
+
+A number is never infinite and never `nan`. A result that is too large,
+such as `10 ** 400`, stops the program with `LER1023`. A number written
+with more than 290 digits is an error before running (`LEC2028`).
 
 How units are printed is described in [DATATYPES.md](DATATYPES.md).
 

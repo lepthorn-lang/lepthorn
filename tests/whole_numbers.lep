@@ -1,4 +1,5 @@
-(* a number with a part, where a whole number is needed, is an error *)
+(* a number with a part, where a whole number is needed, is an error; so
+   is a result that is not a number, or too large for one *)
 ensure compiler = sys::getenv("LEPTHORNC")
 when compiler == ""
     sys::fail("LEPTHORNC is not set - run this through lepthornc test")
@@ -34,4 +35,14 @@ try(compiler, "repeat", "repeat 2.5" + text::from_code(10) + "    show 1" + text
 try(compiler, "large", "show ring::peek(r, 10 ** 300)")
 try(compiler, "power_part", "show (0 - 8) ** 0.5")
 try(compiler, "power_zero", "show 0 ** (0 - 1)")
+try(compiler, "repeat_negative", "repeat 0 - 3" + text::from_code(10) + "    show 1" + text::from_code(10) + "done()")
+try(compiler, "repeat_zero", "repeat 0" + text::from_code(10) + "    show 1" + text::from_code(10) + "done()" + text::from_code(10) + "show 7")
+try(compiler, "too_large_power", "show 10 ** 400")
+try(compiler, "too_large_times", "show 10 ** 200 * 10 ** 200")
+try(compiler, "too_large_plus", "show 1.5 * 10 ** 308 + 1.5 * 10 ** 308")
+try(compiler, "too_large_unit", "show 10m ** 200 * 10m ** 200")
+try(compiler, "too_small_below", "show 1 / 10 ** 300 / 10 ** 300")
+try(compiler, "divide_large", "show 10 ** 200 / (1 / 10 ** 200)")
+try(compiler, "velocity_no_time", "show motion::velocity(5m, 0s)")
+try(compiler, "largest", "show 10 ** 308")
 try(compiler, "still_fine", "show 4 ** 0.5 (0 - 2) ** 3 2 ** (0 - 1) ring::peek(r, 6 / 3 - 2)")
