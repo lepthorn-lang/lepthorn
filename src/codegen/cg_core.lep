@@ -37,9 +37,83 @@ shape CgCtx
     unit_table: Number
     in_main: Boolean
     main_ret: Text
+    places: Number
+    place_now: Number
+    place_kept: Number
+done()
+
+(* The program is now at `place`. An error while running is shown there:
+   @lep.place holds the file (upper half) and the line. It is written
+   only just before a call, because only a call can fail. *)
+make cg_place(ctx, place)
+    ensure entry = line_place(ctx.places, place)
+    ctx.place_now = entry.file * 4294967296 + entry.line
+done()
+
+(* after a label or a call of a function of the program, it is not known
+   what @lep.place holds *)
+make cg_place_lost(ctx)
+    ctx.place_kept = 0
+done()
+
+(* true for "call ..." and for "%t1 = call ..." *)
+make is_call_line(line)
+    ensure n = text::length(line)
+    when text::char_at(line, 0) == "c"
+        done(true)
+    done()
+    suppose i = 1
+    repeat
+        when i + 2 >= n
+            done(false)
+        done()
+        when text::char_at(line, i) == "="
+            done(text::char_at(line, i + 2) == "c")
+        done()
+        i = i + 1
+    done()
+done()
+
+(* A call that takes its place as its last value and writes it only when
+   it fails, so the fast way costs nothing. `call` is the text up to
+   that value. *)
+make cg_emit_fast(ctx, call)
+    ensure line = call + ", i64 " + text::from_number(ctx.place_now) + ")"
+    when ctx.place_kept != ctx.place_now
+        cg_place_lost(ctx)
+    done()
+    cg_emit_line(ctx, line)
+done()
+
+(* the operators that have a fast way for numbers *)
+make cg_is_fast(name)
+    when name == "@lep_add" or name == "@lep_sub"
+        done(true)
+    done()
+    when name == "@lep_mul" or name == "@lep_div"
+        done(true)
+    done()
+    when name == "@lep_lt" or name == "@lep_gt"
+        done(true)
+    done()
+    done(name == "@lep_le" or name == "@lep_ge")
+done()
+
+make cg_keep_place(ctx, line)
+    when ctx.place_now != ctx.place_kept
+        when is_call_line(line)
+            ctx.place_kept = ctx.place_now
+            ctx.cur = ctx.cur + "  store i64 " + text::from_number(ctx.place_now) + ", ptr @lep.place" + text::from_code(10)
+        done()
+    done()
 done()
 
 make cg_emit(ctx, line)
+    cg_keep_place(ctx, line)
+    cg_emit_line(ctx, line)
+done()
+
+make cg_emit_line(ctx, line)
     ctx.cur = ctx.cur + "  " + line + text::from_code(10)
     when text::length(ctx.cur) > 4000
         ring::write(ctx.chunks, ctx.cur)
@@ -48,6 +122,7 @@ make cg_emit(ctx, line)
 done()
 
 make cg_label(ctx, name)
+    cg_place_lost(ctx)
     ctx.cur = ctx.cur + name + ":" + text::from_code(10)
     ctx.terminated = false
 done()
@@ -72,7 +147,9 @@ done()
 
 make cg_fail(ctx, msg)
     ctx.failed = true
-    show msg
+    ensure entry = find_error_code(code_of(msg))
+    ensure first = entry.code + "  while making the program" + text::from_code(10)
+    sys::warn(first + why_and_fix(without_code(msg), entry.help))
 done()
 
 (* a function-level alloca, hoisted into the entry block so a loop never

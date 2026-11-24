@@ -35,6 +35,8 @@ shape IState
     stop_sig: Number
     next_sig: Number
     depth: Number
+    places: Number
+    now: Number
 done()
 
 shape Sig
@@ -91,7 +93,7 @@ done()
 
 (* stops the program the way a runtime error in compiled code does *)
 make ifail(msg)
-    sys::error(msg)
+    stop_with_error(msg)
 done()
 
 (* -- environments: a ring of Var, one per distinct name; redeclaring a
@@ -131,7 +133,7 @@ make env_get(st, env, name)
     when j >= 0
         done(var_value(ring::peek(st.shared, j)))
     done()
-    ifail(error_line("run_undefined_variable", [name]))
+    ifail(run_block("run_undefined_variable", [name]))
     done(0)
 done()
 
@@ -148,7 +150,7 @@ make env_assign(st, env, name, value)
         sv.value = value
         done(true)
     done()
-    ifail(error_line("run_assign_undeclared", [name]))
+    ifail(run_block("run_assign_undeclared", [name]))
 done()
 
 (* -- target shapes and arrays -- *)
@@ -170,7 +172,7 @@ done()
 
 make tshape_field(st, base, fname)
     when sys::kind(base) != "TShape"
-        ifail(error_line("not_a_shape", [fname, sys::kind(base)]))
+        ifail(run_block("not_a_shape", [fname, sys::kind(base)]))
     done()
     ensure fields = base.fields
     ensure n = ring::size(fields)
@@ -185,21 +187,21 @@ make tshape_field(st, base, fname)
         done()
         i = i + 1
     done()
-    ifail(error_line("no_such_field", [base.sname, fname]))
+    ifail(run_block("no_such_field", [base.sname, fname]))
     done(0)
 done()
 
 make tarray_cell(base, idxv)
     when sys::kind(base) != "TArray"
-        ifail(error_line("not_an_array", [sys::kind(base)]))
+        ifail(run_block("not_an_array", [sys::kind(base)]))
     done()
     when sys::kind(idxv) != "Number"
-        ifail(error_line_plain("index_not_number"))
+        ifail(run_block_plain("index_not_number"))
     done()
     ensure cells = base.cells
     ensure n = ring::size(cells)
     when idxv < 0 or idxv >= n
-        ifail(error_line("index_out_of_bounds", [text::from_number(idxv), text::from_number(n)]))
+        ifail(run_block("index_out_of_bounds", [text::from_number(idxv), text::from_number(n)]))
     done()
     done(ring::peek(cells, idxv))
 done()
@@ -207,7 +209,7 @@ done()
 make construct_shape(st, env, node)
     ensure si = shape_def(st, node.op)
     when si < 0
-        ifail(error_line("run_unknown_shape", [node.op]))
+        ifail(run_block("run_unknown_shape", [node.op]))
     done()
     ensure sd = ring::peek(st.shapes, si)
     ensure fields = ring::create(sd.field_count + 1)
@@ -219,7 +221,7 @@ make construct_shape(st, env, node)
         ensure fname = param_at(sd.field_names, j)
         ensure finit = find_field_init(st.arena, node.left, fname)
         when finit == none_idx()
-            ifail(error_line("run_shape_missing_field", [node.op, fname]))
+            ifail(run_block("run_shape_missing_field", [node.op, fname]))
         done()
         ensure finode = arena_get(st.arena, finit)
         ring::write(fields, TField(name = fname, value = eval_node(st, env, finode.left)))
@@ -292,7 +294,7 @@ make values_equal(st, a, b)
     ensure kb = sys::kind(b)
     when ka == "TShape" and kb == "TShape"
         when a.sname != b.sname
-            ifail(error_line("equal_shapes_differ", [a.sname, b.sname]))
+            ifail(run_block("equal_shapes_differ", [a.sname, b.sname]))
         done()
         ensure fa = a.fields
         ensure fb = b.fields
@@ -310,7 +312,7 @@ make values_equal(st, a, b)
         done(true)
     done()
     when ka == "TShape" or kb == "TShape" or ka == "TArray" or kb == "TArray"
-        ifail(error_line("equal_kinds_differ", [kind_name(a), kind_name(b)]))
+        ifail(run_block("equal_kinds_differ", [kind_name(a), kind_name(b)]))
     done()
     done(a == b)
 done()
@@ -364,7 +366,7 @@ make eval_node(st, env, idx)
     when k == "NUM"
         ensure ue = lookup_unit(st.units, node.op)
         when node.op != "" and ue.suffix == ""
-            ifail(error_line("unknown_unit", [node.op]))
+            ifail(run_block("unknown_unit", [node.op]))
         done()
         done(make_quantity(node.num_value * ue.to_si, ue.dimension))
     done()
@@ -393,7 +395,7 @@ make eval_node(st, env, idx)
     when k == "CALL"
         ensure csig = eval_call(st, env, node)
         when csig.kind != "RETURN"
-            ifail(error_line("no_return_value", [node.op]))
+            ifail(run_block("no_return_value", [node.op]))
         done()
         done(sig_value(csig))
     done()
@@ -407,7 +409,7 @@ make eval_node(st, env, idx)
     when k == "BINOP"
         done(eval_binop(st, env, node))
     done()
-    ifail(error_line("unsupported_kind", ["expression kind", k]))
+    ifail(run_block("unsupported_kind", ["expression kind", k]))
     done(0)
 done()
 
@@ -472,7 +474,7 @@ make eval_binop(st, env, node)
     when op == ">>"
         done(l >> r)
     done()
-    ifail(error_line("unsupported_kind", ["operator", op]))
+    ifail(run_block("unsupported_kind", ["operator", op]))
     done(0)
 done()
 
@@ -488,7 +490,7 @@ make eval_call(st, env, node)
         when op == "length"
             ensure larr = eval_node(st, env, node.left)
             when sys::kind(larr) != "TArray"
-                ifail(error_line("length_not_array", [sys::kind(larr)]))
+                ifail(run_block("length_not_array", [sys::kind(larr)]))
             done()
             done(Sig(kind = "RETURN", value = ring::size(larr.cells)))
         done()
@@ -500,7 +502,7 @@ make eval_call(st, env, node)
             ensure vz = eval_node(st, env, vnode2.sibling)
             done(Sig(kind = "RETURN", value = vector(vx, vy, vz)))
         done()
-        ifail(error_line("run_unknown_function", [op]))
+        ifail(run_block("run_unknown_function", [op]))
     done()
     done(call_function(st, env, ring::peek(st.funcs, fi), node.left))
 done()
@@ -524,7 +526,7 @@ make call_function(st, env, f, arg_start)
     ensure pc = param_count(f.params)
     ensure argc = chain_len(st.arena, arg_start)
     when pc != argc
-        ifail(error_line("run_argument_count", [f.name, text::from_number(pc), text::from_number(argc)]))
+        ifail(run_block("run_argument_count", [f.name, text::from_number(pc), text::from_number(argc)]))
     done()
     ensure fenv = ring::create(pc + count_decls(st.arena, f.body) + 2)
     suppose aidx = arg_start
@@ -540,9 +542,11 @@ make call_function(st, env, f, arg_start)
     done()
     st.depth = st.depth + 1
     when st.depth > 10000
-        ifail(error_line("recursion_too_deep", [f.name]))
+        ifail(run_block("recursion_too_deep", [f.name]))
     done()
+    ensure caller = st.now
     ensure sig = exec_block(st, fenv, f.body)
+    use_place(st, caller)
     st.depth = st.depth - 1
     when sig.kind == "RETURN"
         done(sig)
@@ -610,10 +614,10 @@ make eval_builtin(st, env, node)
     ensure ar = cg_builtin_arity(op)
     ensure argc = chain_len(st.arena, node.left)
     when ar < 0
-        ifail(error_line("unknown_namespace_call", [op]))
+        ifail(run_block("unknown_namespace_call", [op]))
     done()
     when ar != argc
-        ifail(error_line("run_argument_count", [op, text::from_number(ar), text::from_number(argc)]))
+        ifail(run_block("run_argument_count", [op, text::from_number(ar), text::from_number(argc)]))
     done()
     suppose a1 = 0
     suppose a2 = 0
@@ -837,11 +841,38 @@ make builtin_apply_sys(op, a1, a2)
     when op == "sys::setenv"
         done(sys::setenv(a1, a2))
     done()
-    ifail(error_line("unknown_namespace_call", [op]))
+    ifail(run_block("unknown_namespace_call", [op]))
     done(0)
 done()
 
 (* -- statements -- *)
+
+(* the program is now at `place`; errors while running are shown there *)
+make go_to_place(st, place)
+    ensure entry = line_place(st.places, place)
+    ensure now = st.now
+    when entry.first != now.first
+        use_place(st, entry)
+    done()
+done()
+
+make use_place(st, entry)
+    st.now = entry
+    run_place = place_words(st.places, entry)
+    sys::at_place(run_place)
+done()
+
+make leave_place()
+    run_place = ""
+    sys::at_place("")
+done()
+
+(* a condition, with errors shown at its own line *)
+make eval_condition(st, env, idx)
+    ensure node = arena_get(st.arena, idx)
+    go_to_place(st, node.pos)
+    done(eval_node(st, env, idx))
+done()
 
 make exec_block(st, env, start)
     suppose idx = start
@@ -850,6 +881,7 @@ make exec_block(st, env, start)
             stop
         done()
         ensure node = arena_get(st.arena, idx)
+        go_to_place(st, node.pos)
         ensure sig = exec_stmt(st, env, node)
         when sig.kind != "NORMAL"
             done(sig)
@@ -918,7 +950,7 @@ make exec_stmt(st, env, node)
         done(st.normal)
     done()
     when k == "WHEN_STMT"
-        when eval_node(st, env, node.left)
+        when eval_condition(st, env, node.left)
             done(exec_block(st, env, node.right))
         done()
         when node.alt != none_idx()
@@ -940,7 +972,7 @@ make exec_stmt(st, env, node)
             when usig.kind == "STOP" or usig.kind == "RETURN"
                 done(loop_exit(st, usig))
             done()
-            when eval_node(st, env, node.left)
+            when eval_condition(st, env, node.left)
                 done(st.normal)
             done()
         done()
@@ -1044,7 +1076,7 @@ make exec_stmt2(st, env, node)
         done()
         done(st.normal)
     done()
-    ifail(error_line("unsupported_kind", ["statement kind", k]))
+    ifail(run_block("unsupported_kind", ["statement kind", k]))
     done(st.normal)
 done()
 
@@ -1054,11 +1086,11 @@ make choose_check(value, label)
     ensure kv = kind_name(value)
     ensure kl = kind_name(label)
     when kv != kl
-        ifail(error_line("choose_label_kind", [kv, kl]))
+        ifail(run_block("choose_label_kind", [kv, kl]))
     done()
     when kv == "Number"
         when unit_text(value) != unit_text(label)
-            ifail(error_line("choose_label_unit", [text::format(label), text::format(value)]))
+            ifail(run_block("choose_label_unit", [text::format(label), text::format(value)]))
         done()
     done()
 done()
@@ -1232,8 +1264,8 @@ make report_parse_errors(arena, source)
     done()
 done()
 
-make new_state(arena, funcs, shapes)
-    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0))
+make new_state(arena, funcs, shapes, source)
+    done(IState(arena = arena, funcs = funcs, shapes = shapes, shared = ring::create(ring::size(arena) + 2), units = build_unit_table(), normal = Sig(kind = "NORMAL", value = 0), stop_sig = Sig(kind = "STOP", value = 0), next_sig = Sig(kind = "NEXT", value = 0), depth = 0, places = build_place_table(source), now = LinePlace(first = 0 - 1, file = 0, line = 0, words = "")))
 done()
 
 (* lex -> parse -> CTV -> run *)
@@ -1245,19 +1277,22 @@ make run_program(source)
     ensure funcs = ring::create(cap)
     ensure shapes = ring::create(cap)
     ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
-    when has_parse_error(arena)
+    when has_parse_error(arena) or error_count > 0
         report_parse_errors(arena, source)
+        print_error_count()
         done(false)
     done()
     ensure ctv_sink = ring::create(cap)
     ctv_check_program(arena, first, funcs, shapes, ctv_sink)
     when not ring::is_empty(ctv_sink)
         report_ctv_errors(ctv_sink, source)
+        print_error_count()
         done(false)
     done()
-    ensure st = new_state(arena, funcs, shapes)
+    ensure st = new_state(arena, funcs, shapes, source)
     ensure top = ring::create(count_decls(arena, first) + 2)
     exec_block(st, top, first)
+    leave_place()
     done(true)
 done()
 
@@ -1269,7 +1304,7 @@ make eval_source(source)
     ensure funcs = ring::create(1)
     ensure shapes = ring::create(1)
     ensure root = parse_or(tok_buf, cur, arena)
-    ensure st = new_state(arena, funcs, shapes)
+    ensure st = new_state(arena, funcs, shapes, source)
     done(eval_node(st, ring::create(1), root))
 done()
 
@@ -1282,14 +1317,16 @@ make validate_compiler_source(source)
     ensure funcs = ring::create(cap)
     ensure shapes = ring::create(cap)
     ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
-    when has_parse_error(arena)
+    when has_parse_error(arena) or error_count > 0
         report_parse_errors(arena, source)
+        print_error_count()
         done(false)
     done()
     ensure ctv_sink = ring::create(cap)
     ctv_check_program(arena, first, funcs, shapes, ctv_sink)
     when not ring::is_empty(ctv_sink)
         report_ctv_errors(ctv_sink, source)
+        print_error_count()
         done(false)
     done()
     done(true)

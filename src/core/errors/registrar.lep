@@ -18,7 +18,8 @@
        lexer_errors.lep     LEC1xxx    codegen_errors.lep   LEC7xxx
        parser_errors.lep    LEC2xxx    runtime_errors.lep   LER1xxx-LER5xxx
        checker_errors.lep   LEC30xx    realtime_errors.lep  LER6xxx
-       unit_errors.lep      LEC31xx, LER2xxx
+       unit_errors.lep      LEC31xx, LER2xxx    use_errors.lep       LEC4xxx
+       manifest_errors.lep  LEC5xxx             tool_errors.lep      LEC6xxx
 
    A code or a name used twice stops the compiler, so every error stays
    unique. *)
@@ -95,9 +96,21 @@ make build_error_table()
     done(list)
 done()
 
+(* the list is made once, the first time it is needed *)
+shared suppose error_table = 0
+shared suppose error_table_made = false
+
+make all_errors()
+    when not error_table_made
+        error_table = build_error_table()
+        error_table_made = true
+    done()
+    done(error_table)
+done()
+
 (* the error with this name; a wrong name is a bug in the compiler *)
 make find_error(name)
-    ensure list = build_error_table()
+    ensure list = all_errors()
     ensure at = error_index(list, "name", name)
     when at < 0
         sys::fail("no error named " + name + " in src/core/errors/")
@@ -107,7 +120,7 @@ done()
 
 (* the error with this code, or an entry with an empty code *)
 make find_error_code(code)
-    ensure list = build_error_table()
+    ensure list = all_errors()
     ensure at = error_index(list, "code", code)
     when at < 0
         done(ErrorEntry(code = "", name = "", message = "", help = ""))

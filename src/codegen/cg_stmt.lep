@@ -114,15 +114,41 @@ make cg_block(ctx, arena, start)
             stop
         done()
         ensure node = arena_get(arena, idx)
+        cg_place(ctx, node.pos)
         cg_stmt(ctx, arena, node)
         idx = node.sibling
     done()
 done()
 
+(* true when a value is surely true or false, so a condition need not
+   ask: a comparison, and, or, not, true, false *)
+make is_boolean_value(node)
+    when node.kind == "BOOL"
+        done(true)
+    done()
+    when node.kind == "UNARY"
+        done(node.op == "not")
+    done()
+    when node.kind != "BINOP"
+        done(false)
+    done()
+    when node.op == "and" or node.op == "or"
+        done(true)
+    done()
+    done(is_compare_operator(node.op))
+done()
+
 make cg_cond(ctx, arena, expr_idx, which)
+    ensure condition = arena_get(arena, expr_idx)
+    cg_place(ctx, condition.pos)
     ensure cv = cg_expr(ctx, arena, expr_idx)
+    when is_boolean_value(condition)
+        ensure direct = cg_tmp(ctx)
+        cg_emit(ctx, direct + " = icmp eq i64 " + cv + ", 7")
+        done(direct)
+    done()
     ensure ci = cg_tmp(ctx)
-    cg_emit(ctx, ci + " = call i32 @lep_cond(i64 " + cv + ", i32 " + which + ")")
+    cg_emit_fast(ctx, ci + " = call i32 @lep_cond(i64 " + cv + ", i32 " + which)
     ensure cb = cg_tmp(ctx)
     cg_emit(ctx, cb + " = icmp ne i32 " + ci + ", 0")
     done(cb)

@@ -1,0 +1,116 @@
+(* places.lep - which file and line a place in the program's text is.
+
+   The text of a program can come from many files. A table with one
+   entry per line is made once, so finding a place is quick. *)
+
+(* one line: where it starts in the text, its file, its number there *)
+shape LinePlace
+    first: Number
+    file: Number
+    line: Number
+    words: Text
+done()
+
+(* lines: every LinePlace, in order. files: the file names. *)
+shape PlaceTable
+    lines: Number
+    files: Number
+done()
+
+make build_place_table(source)
+    ensure new_line = text::from_code(10)
+    ensure n = text::length(source)
+    ensure lines = ring::create(n + 2)
+    ensure files = ring::create(10001)
+    ring::write(files, "")
+    ensure table = PlaceTable(lines = lines, files = files)
+    suppose file = 0
+    suppose line = 1
+    suppose start = 0
+    suppose i = 0
+    repeat
+        when i > n
+            stop
+        done()
+        suppose at_end = i == n
+        when not at_end
+            at_end = text::char_at(source, i) == new_line
+        done()
+        when at_end
+            when src_is_marker(source, start)
+                ensure where = src_marker_where(source, start, 1)
+                ensure colon = last_colon(where)
+                file = file_number(files, text::slice(where, 0, colon))
+                line = text::to_number(text::slice(where, colon + 1, text::length(where))) - 1
+            done()
+            ring::write(lines, LinePlace(first = start, file = file, line = line, words = ""))
+            line = line + 1
+            start = i + 1
+        done()
+        i = i + 1
+    done()
+    done(table)
+done()
+
+make last_colon(words)
+    suppose i = text::length(words) - 1
+    repeat
+        when i <= 0
+            stop
+        done()
+        when text::char_at(words, i) == ":"
+            stop
+        done()
+        i = i - 1
+    done()
+    done(i)
+done()
+
+(* the number of a file name in the list; a new name is added *)
+make file_number(files, name)
+    suppose i = 0
+    repeat
+        when i >= ring::size(files)
+            stop
+        done()
+        when ring::peek(files, i) == name
+            done(i)
+        done()
+        i = i + 1
+    done()
+    ring::write(files, name)
+    done(i)
+done()
+
+(* the line that holds `place`: halves the list until one is left *)
+make line_place(table, place)
+    suppose low = 0
+    suppose high = ring::size(table.lines) - 1
+    repeat
+        when low >= high
+            stop
+        done()
+        ensure half = (low + high + 1) >> 1
+        ensure entry = ring::peek(table.lines, half)
+        when entry.first <= place
+            low = half
+        otherwise
+            high = half - 1
+        done()
+    done()
+    done(ring::peek(table.lines, low))
+done()
+
+(* "main.lep:3", or "line 3" when the file has no name *)
+make place_words(table, entry)
+    when entry.words == ""
+        ensure name = ring::peek(table.files, entry.file)
+        suppose words = "line " + text::from_number(entry.line)
+        when name != ""
+            words = name + ":" + text::from_number(entry.line)
+        done()
+        suppose changed = entry
+        changed.words = words
+    done()
+    done(entry.words)
+done()

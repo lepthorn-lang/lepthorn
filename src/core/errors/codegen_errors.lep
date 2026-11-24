@@ -3,48 +3,48 @@
 
 make add_codegen_errors(list)
     add_error(list, "LEC7001", "unsupported_operator",
-        "codegen error: unsupported operator '{1}'",
-        "This operator cannot be compiled yet.")
+        "unsupported operator '{1}'",
+        "this operator cannot be compiled yet")
     add_error(list, "LEC7002", "unknown_builtin",
-        "codegen error: unknown builtin '{1}'",
-        "Check the name of the built-in function.")
+        "unknown builtin '{1}'",
+        "check the name of the built-in function")
     add_error(list, "LEC7003", "codegen_unknown_function",
-        "codegen error: call to undefined function '{1}'",
-        "Write the function with make.")
+        "call to undefined function '{1}'",
+        "write the function with make")
     add_error(list, "LEC7004", "builtin_argument_count",
-        "codegen error: {1} expects {2} argument(s), got {3}",
-        "Give the built-in function the right number of arguments.")
+        "{1} expects {2} argument(s), got {3}",
+        "give the built-in function the right number of arguments")
     add_error(list, "LEC7005", "function_argument_count",
-        "codegen error: {1} expects {2} argument(s), got {3}",
-        "Give the function the right number of arguments.")
+        "{1} expects {2} argument(s), got {3}",
+        "give the function the right number of arguments")
     add_error(list, "LEC7006", "no_shape_has_field",
-        "codegen error: no shape declares a field named '{1}'",
-        "Check the field name.")
+        "no shape declares a field named '{1}'",
+        "check the field name")
     add_error(list, "LEC7007", "codegen_unknown_shape",
-        "codegen error: unknown shape '{1}'",
-        "Declare the shape with shape Name ... done().")
+        "unknown shape '{1}'",
+        "declare the shape with shape Name ... done()")
     add_error(list, "LEC7008", "shape_has_no_field",
-        "codegen error: shape '{1}' has no field '{2}'",
-        "Check the field name.")
+        "shape '{1}' has no field '{2}'",
+        "check the field name")
     add_error(list, "LEC7009", "codegen_undefined_variable",
-        "codegen error: undefined variable '{1}'",
-        "Declare it first.")
+        "undefined variable '{1}'",
+        "declare it first")
     add_error(list, "LEC7010", "codegen_assign_undeclared",
-        "codegen error: assignment to undeclared variable '{1}'",
-        "Declare it with suppose first.")
+        "assignment to undeclared variable '{1}'",
+        "declare it with suppose first")
     add_error(list, "LEC7011", "codegen_shape_missing_field",
-        "codegen error: shape '{1}' construction is missing field '{2}'",
-        "Give every field when building a shape.")
+        "shape '{1}' construction is missing field '{2}'",
+        "give every field when building a shape")
     add_error(list, "LEC7012", "unsupported_expression",
-        "codegen error: unsupported expression kind '{1}'",
-        "This is a bug in the compiler; please report it.")
+        "unsupported expression kind '{1}'",
+        "this is a bug in the compiler; please report it")
     add_error(list, "LEC7013", "unsupported_statement",
-        "codegen error: unsupported statement kind '{1}'",
-        "This is a bug in the compiler; please report it.")
+        "unsupported statement kind '{1}'",
+        "this is a bug in the compiler; please report it")
     add_error(list, "LEC7014", "codegen_stop_outside_loop",
-        "codegen error: stop/next used outside a loop",
-        "Use stop and next inside a loop.")
+        "stop/next used outside a loop",
+        "use stop and next inside a loop")
     add_error(list, "LEC7015", "codegen_unknown_unit",
-        "codegen error: unknown unit suffix '{1}'",
-        "Use a unit from the unit table.")
+        "unknown unit suffix '{1}'",
+        "use a unit from the unit table")
 done()

@@ -156,6 +156,7 @@ make cg_reset_fn(ctx)
     ctx.terminated = false
     ctx.break_label = ""
     ctx.continue_label = ""
+    cg_place_lost(ctx)
 done()
 
 (* true when a later `make` reuses this name - the host keeps the last
@@ -206,7 +207,13 @@ make cg_function(ctx, arena, f, out)
     suppose head = "define internal i64 @lf." + f.name + "(" + sig + ") {" + nl + "entry:" + nl + ctx.allocas + pstores
     head = head + "  %dep0 = load i64, ptr @lep_depth" + nl + "  %dep1 = add i64 %dep0, 1" + nl + "  store i64 %dep1, ptr @lep_depth" + nl
     head = head + "  %depx = icmp sgt i64 %dep1, 10000" + nl + "  br i1 %depx, label %depfail, label %body" + nl
-    head = head + "depfail:" + nl + "  %depn = ptrtoint ptr @.fn." + f.name + " to i64" + nl + "  call void @lep_depth_fail(i64 %depn)" + nl + "  unreachable" + nl
+    (* the place of the function itself *)
+    when f.body != none_idx()
+        ensure first_statement = arena_get(arena, f.body)
+        cg_place(ctx, first_statement.pos)
+    done()
+    ensure at = text::from_number(ctx.place_now)
+    head = head + "depfail:" + nl + "  store i64 " + at + ", ptr @lep.place" + nl + "  %depn = ptrtoint ptr @.fn." + f.name + " to i64" + nl + "  call void @lep_depth_fail(i64 %depn)" + nl + "  unreachable" + nl
     file::write(out, head)
     cg_flush_body(ctx, out)
     file::write(out, "}" + nl + nl)
@@ -279,6 +286,27 @@ make codegen_library(source, ll_path, lib)
     done(codegen_module(source, ll_path, lib))
 done()
 
+(* the names of the program's files, for errors while running *)
+make cg_file_names(ctx)
+    ensure places = ctx.places
+    ensure files = places.files
+    suppose table = ""
+    suppose i = 0
+    repeat
+        when i >= ring::size(files)
+            stop
+        done()
+        ensure name = "@.file" + text::from_number(i)
+        cg_cstr_global(ctx, name, ring::peek(files, i))
+        when i > 0
+            table = table + ", "
+        done()
+        table = table + "ptr " + name
+        i = i + 1
+    done()
+    cg_global(ctx, "@lep.files = internal constant [" + text::from_number(i) + " x ptr] [" + table + "]")
+done()
+
 make codegen_module(source, ll_path, lib)
     ensure tok_buf = lex_all(source)
     ensure cur = Cursor(pos = 0)
@@ -287,17 +315,19 @@ make codegen_module(source, ll_path, lib)
     ensure funcs = ring::create(cap)
     ensure shapes = ring::create(cap)
     ensure first = parse_program(tok_buf, cur, arena, funcs, shapes)
-    when has_parse_error(arena)
+    when has_parse_error(arena) or error_count > 0
         report_parse_errors(arena, source)
+        print_error_count()
         done(false)
     done()
     ensure ctv_sink = ring::create(cap)
     ctv_check_program(arena, first, funcs, shapes, ctv_sink)
     when not ring::is_empty(ctv_sink)
         report_ctv_errors(ctv_sink, source)
+        print_error_count()
         done(false)
     done()
-    ensure ctx = CgCtx(counter = 0, cur = "", chunks = ring::create(cap + 1000), gcur = "", gchunks = ring::create(cap + 1000), allocas = "", terminated = false, break_label = "", continue_label = "", failed = false, fids = ring::create(cap + 100), shapes = shapes, funcs = funcs, locals = ring::create(cap + 100), shared_names = ring::create(cap + 100), unit_table = build_unit_table(), in_main = false, main_ret = "ret i32 0")
+    ensure ctx = CgCtx(counter = 0, cur = "", chunks = ring::create(cap + 1000), gcur = "", gchunks = ring::create(cap + 1000), allocas = "", terminated = false, break_label = "", continue_label = "", failed = false, fids = ring::create(cap + 100), shapes = shapes, funcs = funcs, locals = ring::create(cap + 100), shared_names = ring::create(cap + 100), unit_table = build_unit_table(), in_main = false, main_ret = "ret i32 0", places = build_place_table(source), place_now = 0, place_kept = 0)
     cg_build_fids(ctx)
     cg_scan_shared(ctx, arena, first)
     ensure nfuncs = ring::size(funcs)
@@ -312,7 +342,7 @@ make codegen_module(source, ll_path, lib)
     done()
     ensure out = file::open(ll_path, "w")
     when file::error() != 0
-        show "lepthornc: cannot write " + ll_path
+        sys::warn(error_block("cannot_write", [ll_path], "lepthornc"))
         done(false)
     done()
     file::write(out, cg_rt_header())
@@ -344,6 +374,7 @@ make codegen_module(source, ll_path, lib)
     done()
     cg_main(ctx, arena, first, out, lib)
     cg_shape_tables(ctx)
+    cg_file_names(ctx)
     cg_rt_all(ctx)
     cg_flush_globals(ctx, out)
     file::close(out)

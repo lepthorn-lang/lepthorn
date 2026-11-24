@@ -60,15 +60,25 @@ make cg_expr(ctx, arena, idx)
         done(ur)
     done()
     when k == "BINOP"
-        ensure fname = cg_binop_fn(node.op)
+        suppose fname = cg_binop_fn(node.op)
         when fname == ""
             cg_fail(ctx, error_line("unsupported_operator", [node.op]))
             done("10")
         done()
+        when node.op == "+"
+            when is_text_value(arena, node)
+                fname = "@lep.add_slow"
+            done()
+        done()
         ensure lv = cg_expr(ctx, arena, node.left)
         ensure rv = cg_expr(ctx, arena, node.right)
         ensure br = cg_tmp(ctx)
-        cg_emit(ctx, br + " = call i64 " + fname + "(i64 " + lv + ", i64 " + rv + ")")
+        ensure call = br + " = call i64 " + fname + "(i64 " + lv + ", i64 " + rv
+        when cg_is_fast(fname)
+            cg_emit_fast(ctx, call)
+        otherwise
+            cg_emit(ctx, call + ")")
+        done()
         done(br)
     done()
     cg_fail(ctx, error_line("unsupported_expression", [k]))
@@ -102,6 +112,21 @@ make cg_field_id(ctx, name)
 done()
 
 (* comma-joined "i64 a, i64 b" argument list, evaluated left to right *)
+(* true when a value is surely Text: a text, or + with a text in it.
+   Adding to it never needs the fast way for numbers. *)
+make is_text_value(arena, node)
+    when node.kind == "TEXT"
+        done(true)
+    done()
+    when node.kind != "BINOP" or node.op != "+"
+        done(false)
+    done()
+    when is_text_value(arena, arena_get(arena, node.left))
+        done(true)
+    done()
+    done(is_text_value(arena, arena_get(arena, node.right)))
+done()
+
 make cg_args(ctx, arena, start)
     suppose outs = ""
     suppose aidx = start
@@ -133,6 +158,22 @@ make cg_chain_len(arena, start)
         cidx = cnode.sibling
     done()
     done(n)
+done()
+
+(* true when a function's last statement is done(value): it can never
+   end without a value *)
+make always_gives_value(arena, start)
+    suppose idx = start
+    suppose kind = ""
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure node = arena_get(arena, idx)
+        kind = node.kind
+        idx = node.sibling
+    done()
+    done(kind == "RETURN_STMT")
 done()
 
 (* need_value: a user function that falls off its end yields "no value";
@@ -181,14 +222,19 @@ make cg_call(ctx, arena, node, need_value)
     done()
     ensure uargs = cg_args(ctx, arena, node.left)
     ensure ures = cg_tmp(ctx)
-    cg_emit(ctx, ures + " = call i64 @lf." + op + "(" + uargs + ")")
+    cg_emit_line(ctx, ures + " = call i64 @lf." + op + "(" + uargs + ")")
+    (* the function was elsewhere; the program is back here *)
+    cg_place_lost(ctx)
     when not need_value
+        done(ures)
+    done()
+    when always_gives_value(arena, f.body)
         done(ures)
     done()
     ensure fnv = cg_tmp(ctx)
     cg_emit(ctx, fnv + " = ptrtoint ptr @.fn." + op + " to i64")
     ensure checked = cg_tmp(ctx)
-    cg_emit(ctx, checked + " = call i64 @lep_need_value(i64 " + ures + ", i64 " + fnv + ")")
+    cg_emit_fast(ctx, checked + " = call i64 @lep_need_value(i64 " + ures + ", i64 " + fnv)
     done(checked)
 done()
 

@@ -2,6 +2,7 @@
 
 use core::errors
 use core::lang_syntax::source_errors
+use core::lang_syntax::places
 
 (* The lexer turns source text into tokens, using the text::
    primitives.

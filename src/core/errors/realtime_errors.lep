@@ -3,12 +3,12 @@
 
 make add_realtime_errors(list)
     add_error(list, "LER6001", "deadline_missed",
-        "Deadline Missed - took {1}s, budget {2}s",
-        "The block took longer than its deadline.")
+        "the block took {1}s, its deadline is {2}s",
+        "make the block faster, or give it a longer deadline")
     add_error(list, "LER6002", "timeout_expired",
-        "Timeout Expired",
-        "The wait did not end before the timeout.")
+        "the wait did not end in time",
+        "check what the wait is waiting for, or give it more time")
     add_error(list, "LER6003", "timeout_expired_after",
-        "Timeout Expired - waited {1}s",
-        "The wait did not end before the timeout.")
+        "the wait did not end in time, waited {1}s",
+        "check what the wait is waiting for, or give it more time")
 done()

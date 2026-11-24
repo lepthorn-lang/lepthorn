@@ -818,7 +818,7 @@ done()
    src/core/errors/. *)
 make drv_cmd_explain()
     when sys::arg_count() < 3
-        ensure list = build_error_table()
+        ensure list = all_errors()
         suppose i = 0
         repeat
             when i >= ring::size(list.items)
