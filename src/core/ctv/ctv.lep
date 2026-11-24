@@ -6,6 +6,7 @@ use core::ast::ast
 use core::errors
 use core::units
 use core::ctv::checker
+use core::ctv::names
 
 shape DeclInfo
     name: Text
@@ -537,7 +538,7 @@ make ctv_check_tasks(arena, decls, shared_decls, sink, funcs, start, in_loop)
     done()
 done()
 
-make ctv_check_program(arena, program_start, funcs, sink)
+make ctv_check_program(arena, program_start, funcs, shapes, sink)
     ensure cap = ring::size(arena) + 1
     ensure top_decls = ring::create(cap)
     ensure shared_decls = ring::create(cap)
@@ -582,6 +583,8 @@ make ctv_check_program(arena, program_start, funcs, sink)
     done()
     (* units: 2kg + 3m is found here, before the program runs *)
     dim_check_program(arena, program_start, funcs, sink)
+    (* units, shapes and built-in functions that do not exist *)
+    check_names(arena, shapes, sink)
 done()
 
 make report_ctv_errors(sink, source)

@@ -1,0 +1,119 @@
+(* names.lep - checks the names that only have one right spelling, before
+   the program runs: units (25kg), shapes and their fields, and built-in
+   functions (text::length). Every node of the program is looked at once. *)
+
+make check_names(arena, shapes, sink)
+    ensure units = build_unit_table()
+    ensure n = ring::size(arena)
+    suppose i = 0
+    repeat
+        when i >= n
+            stop
+        done()
+        ensure node = ring::peek(arena, i)
+        when node.kind == "NUM"
+            check_unit_name(units, sink, node)
+        otherwise when node.kind == "SHAPE_CONSTRUCT"
+            check_shape_names(arena, shapes, sink, node)
+        otherwise when node.kind == "CALL"
+            check_builtin_name(arena, sink, node)
+        done()
+        i = i + 1
+    done()
+done()
+
+make check_unit_name(units, sink, node)
+    when node.op != ""
+        ensure unit = lookup_unit(units, node.op)
+        when unit.suffix == ""
+            ctv_error(sink, node.pos, error_line("no_such_unit", [node.op]))
+        done()
+    done()
+done()
+
+(* text::length and the like: the name and how many values it takes *)
+make check_builtin_name(arena, sink, node)
+    when op_is_namespaced(node.op)
+        ensure wanted = cg_builtin_arity(node.op)
+        when wanted < 0
+            ctv_error(sink, node.pos, error_line("no_such_builtin", [node.op]))
+        otherwise when wanted != node.num_value
+            ensure want = text::from_number(wanted)
+            ensure got = text::from_number(node.num_value)
+            ctv_error(sink, node.pos, error_line("builtin_wrong_count", [node.op, want, got]))
+        done()
+    done()
+done()
+
+(* the place of a shape in the list, or -1 *)
+make shape_index(shapes, name)
+    suppose i = ring::size(shapes) - 1
+    repeat
+        when i < 0
+            stop
+        done()
+        ensure s = ring::peek(shapes, i)
+        when s.name == name
+            done(i)
+        done()
+        i = i - 1
+    done()
+    done(0 - 1)
+done()
+
+make check_shape_names(arena, shapes, sink, node)
+    ensure at = shape_index(shapes, node.op)
+    when at < 0
+        ctv_error(sink, node.pos, error_line("no_such_shape", [node.op]))
+    otherwise
+        ensure s = ring::peek(shapes, at)
+        check_given_fields(arena, sink, node, s)
+        check_missing_fields(arena, sink, node, s)
+    done()
+done()
+
+(* every field that is given must be a field of the shape *)
+make check_given_fields(arena, sink, node, s)
+    suppose idx = node.left
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure field = arena_get(arena, idx)
+        when not name_in_list(s.field_names, field.op)
+            ctv_error(sink, field.pos, error_line("no_such_field_in_shape", [node.op, field.op]))
+        done()
+        idx = field.sibling
+    done()
+done()
+
+(* every field of the shape must be given *)
+make check_missing_fields(arena, sink, node, s)
+    ensure count = param_count(s.field_names)
+    suppose i = 0
+    repeat
+        when i >= count
+            stop
+        done()
+        ensure name = param_at(s.field_names, i)
+        when not gives_field(arena, node.left, name)
+            ctv_error(sink, node.pos, error_line("field_not_given", [node.op, name]))
+        done()
+        i = i + 1
+    done()
+done()
+
+make gives_field(arena, start, name)
+    suppose idx = start
+    repeat
+        when idx == none_idx()
+            stop
+        done()
+        ensure field = arena_get(arena, idx)
+        when field.op == name
+            done(true)
+        done()
+        idx = field.sibling
+    done()
+    done(false)
+done()

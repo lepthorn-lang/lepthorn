@@ -5,50 +5,65 @@
 make add_checker_errors(list)
     add_error(list, "LEC3001", "undeclared_variable",
         "undeclared variable '{1}'",
-        "Declare it first with ensure or suppose.")
+        "declare it first with ensure or suppose")
     add_error(list, "LEC3002", "assign_undeclared",
         "assignment to undeclared variable '{1}'",
-        "Declare it with suppose before giving it a new value.")
+        "declare it with suppose before giving it a new value")
     add_error(list, "LEC3003", "ensure_changed",
         "cannot reassign '{1}' - declared with ensure (immutable)",
-        "Declare it with suppose if it must change.")
+        "declare it with suppose if it must change")
     add_error(list, "LEC3004", "unknown_function",
         "call to undefined function '{1}'",
-        "Write the function with make, or check the spelling.")
+        "write the function with make, or check the spelling")
     add_error(list, "LEC3005", "wrong_argument_count",
         "wrong number of arguments in call to '{1}'",
-        "Give as many arguments as the function has parameters.")
+        "give as many arguments as the function has parameters")
     add_error(list, "LEC3006", "stop_outside_loop",
         "`stop` used outside a loop",
-        "stop leaves a repeat, every or loop_hz loop; use it inside one.")
+        "use it inside repeat, every or loop_hz")
     add_error(list, "LEC3007", "next_outside_loop",
         "`next` used outside a loop",
-        "next goes to the next round of a loop; use it inside one.")
+        "use it inside repeat, every or loop_hz")
     add_error(list, "LEC3008", "shared_without_atomic",
         "'{1}' is a shared suppose value, reassigned inside parallel without atomic",
-        "Change it inside an atomic block.")
+        "change it inside an atomic block")
     add_error(list, "LEC3009", "loop_hz_paren_with_unit",
         "loop_hz(n) takes a plain number of times per second, got {1}; write loop_hz {1} for a frequency with a unit",
-        "Use loop_hz(100) or loop_hz 100Hz.")
+        "use loop_hz(100) or loop_hz 100Hz")
     add_error(list, "LEC3010", "loop_hz_not_positive",
         "loop_hz expects a positive frequency in Hz, got {1}",
-        "The rate must be more than 0.")
+        "the rate must be more than 0")
     add_error(list, "LEC3011", "loop_hz_got_period",
         "loop_hz expects a frequency in Hz, got {1}; for a period use every {1}",
-        "loop_hz takes a rate (100Hz); every takes a period (10ms).")
+        "loop_hz takes a rate (100Hz); every takes a period (10ms)")
     add_error(list, "LEC3012", "loop_hz_plain_number",
         "loop_hz expects a frequency in Hz, got {1}; write loop_hz {1}Hz or loop_hz({1})",
-        "Add the unit Hz.")
+        "add the unit Hz")
     add_error(list, "LEC3013", "loop_hz_not_frequency",
         "loop_hz expects a frequency in Hz, got {1}",
-        "Give a frequency such as 100Hz.")
+        "give a frequency such as 100Hz")
     add_error(list, "LEC3014", "choose_mixed_labels",
         "`choose`: case labels must all be the same kind - {1} is not like the first label",
-        "Use only numbers, only Text, or only true/false in one choose.")
+        "use only numbers, only Text, or only true/false in one choose")
     add_error(list, "LEC3015", "choose_label_twice",
         "`choose`: case {1} appears twice",
-        "Each label may appear once.")
+        "each label may appear once")
+    add_error(list, "LEC3017", "no_such_shape",
+        "there is no shape '{1}'",
+        "declare it with shape, or check the spelling")
+    add_error(list, "LEC3018", "no_such_field_in_shape",
+        "shape '{1}' has no field '{2}'",
+        "check the field name")
+    add_error(list, "LEC3019", "field_not_given",
+        "shape '{1}' needs the field '{2}'",
+        "give every field when building a shape")
+    add_error(list, "LEC3020", "no_such_builtin",
+        "there is no built-in function '{1}'",
+        "check the spelling")
+    add_error(list, "LEC3021", "builtin_wrong_count",
+        "'{1}' takes {2} value(s), got {3}",
+        "give as many values as it takes")
     add_error(list, "LEC3016", "bitwise_with_boolean",
-        "`{1}` needs whole numbers, but one side is true/false; {1} binds looser than comparisons, so write (a {1} b) == c",
-        "Put the bitwise part in parentheses.")
+        "`{1}` needs whole numbers, but one side is true or false",
+        "put the bitwise part in parentheses, as in (a & b) == c")
 done()
