@@ -129,108 +129,80 @@ make is_pair(source, place, n, first, second)
     done(text::char_at(source, place + 1) == second)
 done()
 
-make skip_comment(source, j, n)
-    suppose k = j
+(* Skips a comment. `start` is the place just after its opening mark.
+   `depth` counts how many comments are open: each opening mark adds
+   one, each closing mark takes one away. At 0 the comment has ended,
+   so a comment inside a comment does not end the outer one. *)
+make skip_comment(source, start, n)
+    suppose place = start
     suppose depth = 1
     repeat
         when depth == 0
             stop
         done()
         (* past the end: lex_all turns n + 1 into an error token *)
-        when k >= n
-            src_error(source, j - 2, error_line_plain("unclosed_comment"))
+        when place >= n
+            src_error(source, start - 2, error_line_plain("unclosed_comment"))
             done(n + 1)
         done()
-        ensure c = text::char_at(source, k)
+        ensure c = text::char_at(source, place)
+        suppose step = 1
         when c == "("
-            when k + 1 < n
-                when text::char_at(source, k + 1) == "*"
-                    depth = depth + 1
-                    k = k + 2
-                otherwise
-                    k = k + 1
-                done()
-            otherwise
-                k = k + 1
+            when is_pair(source, place, n, "(", "*")
+                depth = depth + 1
+                step = 2
             done()
         otherwise when c == "*"
-            when k + 1 < n
-                when text::char_at(source, k + 1) == ")"
-                    depth = depth - 1
-                    k = k + 2
-                otherwise
-                    k = k + 1
-                done()
-            otherwise
-                k = k + 1
+            when is_pair(source, place, n, "*", ")")
+                depth = depth - 1
+                step = 2
             done()
-        otherwise
-            k = k + 1
         done()
+        place = place + step
     done()
-    done(k)
+    done(place)
 done()
 
-make skip_trivia(source, i, n)
-    suppose j = i
+(* the place of the next line end, or the end of the source *)
+make skip_to_line_end(source, start, n)
+    suppose place = start
     repeat
-        when j >= n
+        when place >= n
             stop
         done()
-        ensure c = text::char_at(source, j)
-        when c == " "
-            j = j + 1
-        otherwise when c == text::from_code(9)
-            j = j + 1
-        otherwise when c == "("
-            when j + 1 < n
-                when text::char_at(source, j + 1) == "*"
-                    j = skip_comment(source, j + 2, n)
-                otherwise
-                    stop
-                done()
-            otherwise
-                stop
-            done()
-        otherwise when c == "/"
-            (* `//` line comments are a deliberate, real rejection, not
-               an unsupported gap - one sanctioned comment style only
-               (`(* ... *)`, nestable, real depth-tracked in
-               skip_comment above), a real language decision, not a
-               parser limitation. Still advances to end of line (not
-               consuming the newline itself, still a real statement
-               terminator) so a file with several `//` uses reports
-               every one of them in a single pass, matching this
-               project's own "report everything, not just the first"
-               convention (report_parse_errors/report_ctv_errors), and
-               so the rest of the file still lexes instead of the two
-               slashes being read as divide operators followed by
-               garbage tokens. *)
-            when j + 1 < n
-                when text::char_at(source, j + 1) == "/"
-                    src_error(source, j, error_line_plain("line_comment"))
-                    suppose k = j + 2
-                    repeat
-                        when k >= n
-                            stop
-                        otherwise when text::char_at(source, k) == text::from_code(10)
-                            stop
-                        otherwise
-                            k = k + 1
-                        done()
-                    done()
-                    j = k
-                otherwise
-                    stop
-                done()
-            otherwise
-                stop
-            done()
+        when text::char_at(source, place) == text::from_code(10)
+            stop
+        done()
+        place = place + 1
+    done()
+    done(place)
+done()
+
+(* Skips what has no meaning: spaces, tabs and comments. Returns the
+   place of the next thing that matters, or n + 1 after an error. *)
+make skip_trivia(source, start, n)
+    ensure tab = text::from_code(9)
+    suppose place = start
+    repeat
+        when place >= n
+            stop
+        done()
+        ensure c = text::char_at(source, place)
+        when c == " " or c == tab
+            place = place + 1
+        otherwise when is_pair(source, place, n, "(", "*")
+            place = skip_comment(source, place + 2, n)
+        otherwise when is_pair(source, place, n, "*", ")")
+            src_error(source, place, error_line_plain("stray_comment_end"))
+            done(n + 1)
+        otherwise when is_pair(source, place, n, "/", "/")
+            src_error(source, place, error_line_plain("line_comment"))
+            place = skip_to_line_end(source, place, n)
         otherwise
             stop
         done()
     done()
-    done(j)
+    done(place)
 done()
 
 make skip_spaces_tabs(source, i, n)
@@ -363,24 +335,24 @@ make lex_number(source, i, n)
     done(LexResult(next_index = unit_end, kind = "NUMBER", value = word))
 done()
 
-make lex_string(source, i, n)
-    ensure quote_char = text::from_code(34)
-    suppose j = i + 1
+(* Reads a text, from its opening quote to its closing quote. A text
+   may cover several lines. Without a closing quote it is an error. *)
+make lex_string(source, start, n)
+    ensure quote = text::from_code(34)
+    suppose place = start + 1
     repeat
-        when j >= n
-            stop
-        otherwise when text::char_at(source, j) != quote_char
-            j = j + 1
-        otherwise
+        when place >= n
+            src_error(source, start, error_line_plain("unclosed_text"))
+            done(LexResult(next_index = n + 1, kind = "STRING", value = quote + quote))
+        done()
+        when text::char_at(source, place) == quote
             stop
         done()
+        place = place + 1
     done()
-    suppose closing = j
-    when closing < n
-        closing = closing + 1
-    done()
-    ensure word = text::slice(source, i, closing)
-    done(LexResult(next_index = closing, kind = "STRING", value = word))
+    ensure after = place + 1
+    ensure word = text::slice(source, start, after)
+    done(LexResult(next_index = after, kind = "STRING", value = word))
 done()
 
 make lex_operator(source, i, n)

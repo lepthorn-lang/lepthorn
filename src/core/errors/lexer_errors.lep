@@ -3,9 +3,15 @@
 
 make add_lexer_errors(list)
     add_error(list, "LEC1001", "unclosed_comment",
-        "unterminated comment",
-        "Close every (* with a matching *).")
+        "this comment is never closed",
+        "close it with *)")
     add_error(list, "LEC1002", "line_comment",
-        "'//' line comments are not supported - use (* ... *) instead",
-        "Write comments as (* ... *).")
+        "`//` is not a comment in Lepthorn",
+        "write the comment as (* ... *)")
+    add_error(list, "LEC1003", "unclosed_text",
+        "this text is never closed",
+        "close it with a double quote")
+    add_error(list, "LEC1004", "stray_comment_end",
+        "no comment is open here",
+        "remove the *), or open the comment with (*")
 done()
